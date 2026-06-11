@@ -111,11 +111,27 @@ function renderReviewStars(rating, interactive = false, onSelect = null) {
   );
 }
 
+const MOCK_GOOGLE_ACCOUNTS = [
+  { name: 'Alice Gamer', email: 'alice.gamer@gmail.com', role: 'Alice', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=80&h=80&q=80' },
+  { name: 'Charlie Tracker', email: 'charlie.tracker@gmail.com', role: 'Charlie', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&h=80&q=80' },
+  { name: 'Dave Player', email: 'dave.play@gmail.com', role: 'Dave', avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=80&h=80&q=80' },
+  { name: 'Admin AVN', email: 'admin.avn@gmail.com', role: 'Admin', avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=80&h=80&q=80' }
+];
+
 export default function App() {
   // --- CORE STATE ---
   const [currentUser, setCurrentUser] = useState(() => {
-    return localStorage.getItem('avn_current_user_v7') || 'Alice';
+    return localStorage.getItem('avn_current_user_v7') || 'Guest';
   });
+
+  // --- GOOGLE SIGN-IN SIMULATION STATE ---
+  const [isGoogleLoginOpen, setIsGoogleLoginOpen] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
+
+  // --- SCRAPER BOT STATE ---
+  const [isScraping, setIsScraping] = useState(false);
+  const [scraperLogs, setScraperLogs] = useState([]);
 
   const [officialGames, setOfficialGames] = useState(() => {
     const saved = localStorage.getItem('avn_official_games_v7');
@@ -332,6 +348,9 @@ export default function App() {
       if (!e.target.closest('.library-tag-filter-container')) {
         setShowTagFilterLibrary(false);
       }
+      if (!e.target.closest('.user-profile-container')) {
+        setIsUserDropdownOpen(false);
+      }
     };
     document.addEventListener('click', handleOutsideClick);
     return () => document.removeEventListener('click', handleOutsideClick);
@@ -344,6 +363,20 @@ export default function App() {
     }
     return reports.filter((r) => r.type === 'update' && r.status === 'pending');
   }, [reports, currentUser]);
+
+  const googleUser = useMemo(() => {
+    if (isGuest) return null;
+    const found = MOCK_GOOGLE_ACCOUNTS.find(acc => acc.role === currentUser || acc.email === currentUser);
+    if (found) return found;
+    const username = currentUser.split('@')[0];
+    const capitalized = username.charAt(0).toUpperCase() + username.slice(1);
+    return {
+      name: capitalized,
+      email: currentUser,
+      role: currentUser,
+      avatar: ''
+    };
+  }, [currentUser, isGuest]);
 
   const allUniqueGenres = useMemo(() => {
     const genres = new Set();
@@ -427,6 +460,68 @@ export default function App() {
   }, [officialGames, adminCatalogSearch]);
 
   // --- ACTIONS HANDLERS ---
+  const handleRunScraper = () => {
+    if (isScraping) return;
+    setIsScraping(true);
+    setScraperLogs([]);
+    
+    const logsList = [
+      `[${new Date().toLocaleTimeString()}] [INFO] เริ่มต้นระบบบอทดึงข้อมูลอัตโนมัติ (Scraper Bot v1.2)...`,
+      `[${new Date().toLocaleTimeString()}] [SCAN] เริ่มสแกนบอร์ดเกมยอดนิยม F95Zone.to...`,
+      `[${new Date().toLocaleTimeString()}] [FOUND] พบกระทู้ยอดนิยม: "Love Season" (Waveminds) - กำลังตรวจสอบข้อมูลหลัก...`,
+      `[${new Date().toLocaleTimeString()}] [DB_CHECK] ค้นหาในแคตตาล็อกระบบหลัก: ไม่พบเกม "Love Season"... บันทึกเตรียมยื่นข้อเสนอใหม่`,
+      `[${new Date().toLocaleTimeString()}] [SCAN] สแกนการอัปเดตเวอร์ชันเกมบน SteamDB และ Patreon...`,
+      `[${new Date().toLocaleTimeString()}] [FOUND] พบเวอร์ชันใหม่: "Being a DIK" (Dr PinkCake) -> v1.0.0 (ในระบบหลักเป็น v0.9.0)`,
+      `[${new Date().toLocaleTimeString()}] [DB_CHECK] บันทึกข้อเสนอการอัปเดต Being a DIK เป็น v1.0.0 เข้าสู่ระบบจัดคิวแอดมิน`,
+      `[${new Date().toLocaleTimeString()}] [SUCCESS] ดึงข้อมูลเสร็จสิ้นเรียบร้อย! ค้นพบข้อมูลใหม่ 2 รายการ ยื่นเข้าสู่กล่องข้อความของแอดมินสำเร็จ`
+    ];
+
+    let currentStep = 0;
+    const interval = setInterval(() => {
+      if (currentStep < logsList.length) {
+        setScraperLogs((prev) => [...prev, logsList[currentStep]]);
+        currentStep++;
+      } else {
+        clearInterval(interval);
+        setIsScraping(false);
+        
+        // Inject reports
+        const newReports = [
+          {
+            id: 'rep-scraper-new-' + Date.now(),
+            username: 'Scraper Bot',
+            type: 'new',
+            gameTitle: 'Love Season',
+            developer: 'Waveminds',
+            reportedVersion: 'v1.0.0',
+            description: 'บอทดึงข้อมูลอัตโนมัติพบเกม "Love Season" กำลังเป็นที่นิยมสูงบน F95Zone และ Patreon ข้อมูลพร้อมแอดมินตรวจอนุมัติเข้าระบบแคตตาล็อกหลัก',
+            status: 'pending',
+            timestamp: getIsoTimestamp(),
+            overview: 'A story about a former sports star who is forced to start from scratch. Move to a new city, meet different people, and navigate romantic and professional pathways.',
+            coverUrl: '',
+            tags: ['Drama', 'Sports', 'Romance', 'Slice of Life'],
+            screenshots: []
+          },
+          {
+            id: 'rep-scraper-update-' + Date.now(),
+            username: 'Scraper Bot',
+            type: 'update',
+            gameId: 'being-a-dik',
+            gameTitle: 'Being a DIK',
+            currentVersion: '0.9.0',
+            reportedVersion: '1.0.0',
+            description: 'บอทสแกนเนอร์ระบบหลักตรวจพบการปล่อยตัวเวอร์ชัน 1.0.0 (Official Release) บนช่องทาง Steam และ Patreon ของ Dr PinkCake เรียบร้อยแล้ว',
+            status: 'pending',
+            timestamp: getIsoTimestamp()
+          }
+        ];
+        
+        setReports((prev) => [...newReports, ...prev]);
+        setToastMessage('บอทดึงข้อมูลสำเร็จ! เพิ่มรายงานใหม่ 2 รายการลงในกล่องข้อความแล้ว');
+      }
+    }, 600);
+  };
+
   const handleUserChange = (newUser) => {
     setCurrentUser(newUser);
     if (newUser === 'Guest') {
@@ -1085,18 +1180,16 @@ export default function App() {
               🌐 แคตตาล็อก
             </button>
 
-            {!isGuest && (
-              <button
-                onClick={() => handleTabChange('local')}
-                className={`text-sm px-4 py-2.5 rounded-xl font-bold transition-all h-11 flex items-center gap-1.5 cursor-pointer ${
-                  activeTab === 'local'
-                    ? 'bg-blue-600/15 text-blue-400 border border-blue-500/30'
-                    : 'text-slate-400 hover:text-slate-200 border border-transparent'
-              }`}
-              >
-                📚 คลังของฉัน
-              </button>
-            )}
+            <button
+              onClick={() => handleTabChange('local')}
+              className={`text-sm px-4 py-2.5 rounded-xl font-bold transition-all h-11 flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'local'
+                  ? 'bg-blue-600/15 text-blue-400 border border-blue-500/30'
+                  : 'text-slate-400 hover:text-slate-200 border border-transparent'
+            }`}
+            >
+              📚 คลังของฉัน
+            </button>
 
             {isAdmin && (
               <button
@@ -1183,19 +1276,86 @@ export default function App() {
               )}
             </div>
 
-            {/* Role Switcher */}
+            {/* Google Sign-in or User Dropdown Profile */}
             <div className="flex items-center">
-              <select
-                value={currentUser}
-                onChange={(e) => handleUserChange(e.target.value)}
-                className="glass-input h-11 px-3 text-xs font-black rounded-xl text-slate-100 bg-slate-900 border border-slate-800 cursor-pointer focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="Alice">Alice (สมาชิก)</option>
-                <option value="Charlie">Charlie (สมาชิก)</option>
-                <option value="Dave">Dave (สมาชิก)</option>
-                <option value="Admin">Admin (แอดมิน)</option>
-                <option value="Guest">Guest (ผู้เยี่ยมชม)</option>
-              </select>
+              {isGuest ? (
+                <button
+                  onClick={() => setIsGoogleLoginOpen(true)}
+                  className="flex items-center gap-3 bg-white hover:bg-slate-50 text-slate-900 text-xs font-black h-11 px-4 rounded-xl transition-all shadow-md focus:outline-none border border-slate-200 cursor-pointer animate-fade-in"
+                >
+                  <svg className="w-4.5 h-4.5" viewBox="0 0 24 24">
+                    <path
+                      fill="#4285F4"
+                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                    />
+                  </svg>
+                  <span>ลงชื่อเข้าใช้ด้วย Google</span>
+                </button>
+              ) : (
+                <div className="relative user-profile-container">
+                  <button
+                    onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
+                    className="flex items-center gap-2.5 p-1.5 pr-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-full transition-all focus:outline-none cursor-pointer"
+                  >
+                    {googleUser?.avatar ? (
+                      <img src={googleUser.avatar} alt={googleUser.name} className="w-8 h-8 rounded-full object-cover border border-white/5" />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-xs font-black text-white uppercase border border-white/5">
+                        {googleUser?.name ? googleUser.name.charAt(0) : 'G'}
+                      </div>
+                    )}
+                    <span className="hidden sm:inline text-xs font-bold text-slate-200">
+                      {googleUser?.name}
+                    </span>
+                    <span className="text-slate-500 text-[10px]">▼</span>
+                  </button>
+
+                  {isUserDropdownOpen && (
+                    <div className="absolute right-0 mt-2.5 w-64 glass-panel border border-slate-800 rounded-2xl shadow-2xl z-50 p-4 animate-fade-in-up">
+                      <div className="flex flex-col items-center text-center pb-3.5 border-b border-slate-900 mb-3">
+                        {googleUser?.avatar ? (
+                          <img src={googleUser.avatar} alt={googleUser.name} className="w-14 h-14 rounded-full object-cover mb-2 border-2 border-blue-500/20 shadow-lg" />
+                        ) : (
+                          <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-lg font-black text-white uppercase mb-2">
+                            {googleUser?.name ? googleUser.name.charAt(0) : 'G'}
+                          </div>
+                        )}
+                        <div className="font-extrabold text-sm text-slate-100">{googleUser?.name}</div>
+                        <div className="text-xs text-slate-400 mt-0.5 truncate w-full">{googleUser?.email}</div>
+                        <span className={`mt-2 px-2.5 py-0.5 text-[10px] font-bold rounded-full border ${
+                          isAdmin 
+                            ? 'text-rose-400 border-rose-500/20 bg-rose-500/10' 
+                            : 'text-blue-400 border-blue-500/20 bg-blue-500/10'
+                        }`}>
+                          {isAdmin ? '🛡️ ผู้ดูแลระบบ' : '👥 สมาชิก'}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setIsUserDropdownOpen(false);
+                          handleUserChange('Guest');
+                          setToastMessage('ออกจากระบบบัญชี Google สำเร็จ');
+                        }}
+                        className="w-full h-10 flex items-center justify-center gap-2 bg-rose-600/10 hover:bg-rose-600/25 border border-rose-500/20 hover:border-rose-500/40 text-rose-400 text-xs font-bold rounded-xl cursor-pointer transition-all"
+                      >
+                        🚪 ออกจากระบบ
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
           </div>
@@ -1299,14 +1459,19 @@ export default function App() {
                 </div>
               </div>
 
-              {!isGuest && (
-                <button
-                  onClick={openSuggestNew}
-                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-5 h-11 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-blue-500/25 active:scale-95 text-sm cursor-pointer w-full md:w-auto justify-center"
-                >
-                  ➕ เสนอแนะเกมใหม่
-                </button>
-              )}
+              <button
+                onClick={() => {
+                  if (isGuest) {
+                    setIsGoogleLoginOpen(true);
+                    setToastMessage('กรุณาลงชื่อเข้าใช้ด้วย Google เพื่อเสนอแนะเกมใหม่');
+                  } else {
+                    openSuggestNew();
+                  }
+                }}
+                className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-5 h-11 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-blue-500/25 active:scale-95 text-sm cursor-pointer w-full md:w-auto justify-center animate-fade-in"
+              >
+                ➕ เสนอแนะเกมใหม่
+              </button>
             </div>
 
             {/* Genre Filter Pills */}
@@ -1385,22 +1550,30 @@ export default function App() {
                           </div>
 
                           {/* Action Button */}
-                          {!isGuest && (
-                            <div className="mt-1" onClick={(e) => e.stopPropagation()}>
-                              {isInLib ? (
-                                <div className="w-full h-9 bg-emerald-500/10 border border-emerald-500/25 rounded-xl flex items-center justify-center gap-1.5 text-xs text-emerald-450 font-black">
-                                  <span>✔️ ในคลัง: {libraryItem.status}</span>
-                                </div>
-                              ) : (
-                                <button
-                                  onClick={() => handleAddToLibrary(game)}
-                                  className="w-full h-9 bg-blue-600/10 hover:bg-blue-600 hover:text-white border border-blue-500/25 rounded-xl flex items-center justify-center text-xs text-blue-400 font-bold transition-all cursor-pointer"
-                                >
-                                  ➕ เพิ่มเกมเข้าคลัง
-                                </button>
-                              )}
-                            </div>
-                          )}
+                          <div className="mt-1" onClick={(e) => e.stopPropagation()}>
+                            {isGuest ? (
+                              <button
+                                onClick={() => {
+                                  setIsGoogleLoginOpen(true);
+                                  setToastMessage('กรุณาลงชื่อเข้าใช้ด้วย Google เพื่อเพิ่มเกมเข้าคลัง');
+                                }}
+                                className="w-full h-9 bg-blue-600/10 hover:bg-blue-600 hover:text-white border border-blue-500/25 rounded-xl flex items-center justify-center text-xs text-blue-400 font-bold transition-all cursor-pointer animate-fade-in"
+                              >
+                                ➕ เพิ่มเกมเข้าคลัง
+                              </button>
+                            ) : isInLib ? (
+                              <div className="w-full h-9 bg-emerald-500/10 border border-emerald-500/25 rounded-xl flex items-center justify-center gap-1.5 text-xs text-emerald-450 font-black animate-fade-in">
+                                <span>✔️ ในคลัง: {libraryItem.status}</span>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => handleAddToLibrary(game)}
+                                className="w-full h-9 bg-blue-600/10 hover:bg-blue-600 hover:text-white border border-blue-500/25 rounded-xl flex items-center justify-center text-xs text-blue-400 font-bold transition-all cursor-pointer animate-fade-in"
+                              >
+                                ➕ เพิ่มเกมเข้าคลัง
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
@@ -1412,8 +1585,50 @@ export default function App() {
         )}
 
         {/* MY LIBRARY (Compact Layout & Card Grid) */}
-        {activeTab === 'local' && !isGuest && (
-          <div className="max-w-4xl mx-auto w-full animate-fade-in-up flex flex-col gap-6">
+        {activeTab === 'local' && (
+          isGuest ? (
+            <div className="max-w-md mx-auto w-full animate-fade-in-up py-16 px-6 glass-panel rounded-3xl border border-white/5 flex flex-col items-center text-center gap-6 shadow-2xl relative overflow-hidden backdrop-blur-2xl my-8">
+              {/* Decorative background aura */}
+              <div className="absolute -top-20 -left-20 w-40 h-40 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+              <div className="absolute -bottom-20 -right-20 w-40 h-40 bg-purple-500/10 rounded-full blur-3xl pointer-events-none"></div>
+              
+              <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-blue-600/20 to-purple-600/20 border border-blue-500/30 flex items-center justify-center text-4xl shadow-inner animate-pulse">
+                🔒
+              </div>
+              <div>
+                <h2 className="text-xl font-black text-slate-100 mb-2">เข้าสู่คลังส่วนตัวของคุณ</h2>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  กรุณาลงชื่อเข้าใช้ด้วยบัญชี Google เพื่อเปิดใช้งานพื้นที่บันทึกคลังประวัติเกมส่วนตัว การให้คะแนน และการบันทึกโน้ตย่อของคุณ
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsGoogleLoginOpen(true)}
+                className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-50 text-slate-900 text-sm font-extrabold h-12 px-6 rounded-2xl transition-all shadow-lg focus:outline-none border border-slate-200 cursor-pointer"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24">
+                  <path
+                    fill="#4285F4"
+                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                  />
+                </svg>
+                <span>ลงชื่อเข้าใช้ด้วย Google เพื่อเปิดสิทธิ์</span>
+              </button>
+            </div>
+          ) : (
+            <div className="max-w-4xl mx-auto w-full animate-fade-in-up flex flex-col gap-6">
             
             {/* User Library Stats Dashboard */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -1724,8 +1939,9 @@ export default function App() {
               )}
             </div>
 
-          </div>
-        )}
+              </div>
+            )
+          )}
 
         {/* ADMIN TAB */}
         {activeTab === 'admin' && isAdmin && (
@@ -1761,32 +1977,34 @@ export default function App() {
             {/* Announcement Ticker and Admin actions */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Ticker settings */}
-              <div className="lg:col-span-2 glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
+              <div className="glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
                 <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
                   📢 การจัดการแถบวิ่งประกาศ
                 </h3>
-                <div className="flex flex-col gap-3.5">
-                  <div>
-                    <label className="text-xs text-slate-400 font-bold block mb-1">ข้อความประกาศวิ่ง</label>
-                    <input
-                      type="text"
-                      value={tempTickerMessage}
-                      onChange={(e) => setTempTickerMessage(e.target.value)}
-                      className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
-                      placeholder="พิมพ์หัวข้อหรือคำเตือนวิ่งประกาศ..."
-                    />
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      id="show-ticker"
-                      checked={tempShowTicker}
-                      onChange={(e) => setTempShowTicker(e.target.checked)}
-                      className="w-5 h-5 accent-blue-500 rounded border border-slate-700 bg-slate-900 cursor-pointer"
-                    />
-                    <label htmlFor="show-ticker" className="text-sm font-semibold text-slate-355 cursor-pointer">
-                      เปิดใช้งานแถบประกาศบนเว็บไซต์
-                    </label>
+                <div className="flex flex-col gap-3.5 flex-1 justify-between">
+                  <div className="flex flex-col gap-3.5">
+                    <div>
+                      <label className="text-xs text-slate-400 font-bold block mb-1">ข้อความประกาศวิ่ง</label>
+                      <input
+                        type="text"
+                        value={tempTickerMessage}
+                        onChange={(e) => setTempTickerMessage(e.target.value)}
+                        className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                        placeholder="พิมพ์หัวข้อหรือคำเตือนวิ่งประกาศ..."
+                      />
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        id="show-ticker"
+                        checked={tempShowTicker}
+                        onChange={(e) => setTempShowTicker(e.target.checked)}
+                        className="w-5 h-5 accent-blue-500 rounded border border-slate-700 bg-slate-900 cursor-pointer"
+                      />
+                      <label htmlFor="show-ticker" className="text-sm font-semibold text-slate-355 cursor-pointer">
+                        เปิดใช้งานแถบประกาศบนเว็บไซต์
+                      </label>
+                    </div>
                   </div>
                   <button
                     onClick={() => {
@@ -1800,6 +2018,8 @@ export default function App() {
                   </button>
                 </div>
               </div>
+              
+              {/* Website settings */}
               <div className="glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
                 <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
                   ⚙️ ตั้งค่าระบบเว็บไซต์
@@ -1871,6 +2091,50 @@ export default function App() {
                       </div>
                     </div>
                   )}
+                </div>
+              </div>
+
+              {/* Scraper bot card */}
+              <div className="glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
+                <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
+                  🤖 บอทดึงข้อมูลอัตโนมัติ (Scraper Bot)
+                </h3>
+                <div className="flex flex-col gap-3 flex-1 justify-between">
+                  <p className="text-[11px] text-slate-400 leading-normal">
+                    ตรวจสอบความเคลื่อนไหวล่าสุดจาก F95Zone, Gamestorylog และ SteamDB บอทจะค้นพบข้อมูลเวอร์ชันใหม่และเกมยอดนิยมเพื่อนำเสนอเข้าแผงความคืบหน้าของแอดมิน
+                  </p>
+                  
+                  {/* Terminal Display */}
+                  <div className="bg-slate-950/80 border border-slate-900 rounded-xl p-3 h-28 overflow-y-auto font-mono text-[10px] text-emerald-400 flex flex-col gap-1 select-none scrollbar-thin">
+                    {scraperLogs.length === 0 ? (
+                      <span className="text-slate-600 italic">พร้อมสแกน... กดเพื่อสั่งบอทสเกรปข้อมูล</span>
+                    ) : (
+                      scraperLogs.map((log, idx) => (
+                        <div key={idx} className="leading-normal whitespace-pre-wrap">{log}</div>
+                      ))
+                    )}
+                  </div>
+
+                  <button
+                    onClick={handleRunScraper}
+                    disabled={isScraping}
+                    className={`h-10 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                      isScraping
+                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700/50'
+                        : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/15'
+                    }`}
+                  >
+                    {isScraping ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-slate-500 border-t-transparent rounded-full animate-spin"></div>
+                        <span>กำลังดึงข้อมูลจำลอง...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>⚡ เริ่มต้นดึงข้อมูลยอดนิยม</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
             </div>
@@ -3614,6 +3878,132 @@ export default function App() {
               </div>
 
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* SIMULATED GOOGLE LOGIN MODAL */}
+      {isGoogleLoginOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <div 
+            className="w-full max-w-md bg-white text-slate-800 rounded-3xl overflow-hidden shadow-2xl border border-slate-200 animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header: Google Branded logo & title */}
+            <div className="p-6 pb-4 flex flex-col items-center border-b border-slate-100">
+              <svg className="w-10 h-10 mb-3" viewBox="0 0 24 24">
+                <path
+                  fill="#4285F4"
+                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                />
+              </svg>
+              <h2 className="text-xl font-extrabold text-slate-900">ลงชื่อเข้าใช้ด้วย Google</h2>
+              <p className="text-xs text-slate-500 mt-1">เพื่อดำเนินการต่อยัง {webTitle}</p>
+            </div>
+
+            {/* Content area: Account Selector */}
+            <div className="p-6 flex flex-col gap-4">
+              {isLoggingIn ? (
+                <div className="py-12 flex flex-col items-center justify-center gap-4">
+                  <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                  <span className="text-sm font-semibold text-slate-600">กำลังเชื่อมโยงบัญชี Google...</span>
+                </div>
+              ) : (
+                <>
+                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    เลือกบัญชีผู้ใช้จำลอง
+                  </div>
+                  
+                  <div className="flex flex-col gap-2 max-h-60 overflow-y-auto pr-1">
+                    {MOCK_GOOGLE_ACCOUNTS.map((acc) => (
+                      <button
+                        key={acc.email}
+                        type="button"
+                        onClick={() => {
+                          setIsLoggingIn(true);
+                          setTimeout(() => {
+                            setCurrentUser(acc.role);
+                            setIsLoggingIn(false);
+                            setIsGoogleLoginOpen(false);
+                            setToastMessage(`ลงชื่อเข้าใช้ในฐานะ ${acc.name} สำเร็จ!`);
+                          }, 800);
+                        }}
+                        className="flex items-center gap-3.5 p-3 rounded-2xl border border-slate-100 hover:border-blue-500/20 hover:bg-blue-50/20 text-left cursor-pointer transition-all group animate-fade-in"
+                      >
+                        <img src={acc.avatar} alt={acc.name} className="w-9 h-9 rounded-full object-cover border border-slate-100 group-hover:scale-105 transition-transform" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-bold text-slate-800 group-hover:text-blue-600 transition-colors">
+                            {acc.name}
+                          </div>
+                          <div className="text-xs text-slate-500 truncate">{acc.email}</div>
+                        </div>
+                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                          acc.role === 'Admin' 
+                            ? 'text-rose-600 bg-rose-50' 
+                            : 'text-blue-600 bg-blue-50'
+                        }`}>
+                          {acc.role === 'Admin' ? 'แอดมิน' : 'สมาชิก'}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="border-t border-slate-100 my-2"></div>
+
+                  {/* Use another account button */}
+                  <div className="flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const email = prompt('ระบุอีเมล Google ที่คุณต้องการเข้าใช้:');
+                        if (email && email.trim() !== '') {
+                          if (!email.includes('@') || !email.includes('.')) {
+                            alert('กรุณากรอกรูปแบบอีเมลให้ถูกต้อง');
+                            return;
+                          }
+                          setIsLoggingIn(true);
+                          setTimeout(() => {
+                            setCurrentUser(email.trim());
+                            setIsLoggingIn(false);
+                            setIsGoogleLoginOpen(false);
+                            setToastMessage(`ลงชื่อเข้าใช้ด้วยบัญชี "${email.trim()}" สำเร็จ!`);
+                          }, 800);
+                        }
+                      }}
+                      className="flex items-center gap-3.5 p-3 rounded-2xl border border-dashed border-slate-200 hover:border-slate-350 hover:bg-slate-50 text-left cursor-pointer transition-all text-slate-600 text-sm font-bold"
+                    >
+                      <span className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-lg text-slate-500">
+                        👤
+                      </span>
+                      <span>ใช้บัญชี Google อื่นๆ</span>
+                    </button>
+                  </div>
+
+                  <div className="mt-4 flex justify-between items-center">
+                    <button
+                      type="button"
+                      onClick={() => setIsGoogleLoginOpen(false)}
+                      className="text-xs font-bold text-slate-500 hover:text-slate-800 px-4 py-2 rounded-xl transition-colors cursor-pointer"
+                    >
+                      ยกเลิก
+                    </button>
+                    <span className="text-[10px] text-slate-400">ระบบเข้าสู่ระบบจำลองสำหรับการทดสอบ</span>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
