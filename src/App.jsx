@@ -1,0 +1,3630 @@
+import { useState, useEffect, useMemo } from 'react';
+import { initialOfficialGames, initialMockUsers, initialMockUserLibraries, initialReports } from './data/mockGames';
+
+// --- HELPER FUNCTIONS OUTSIDE COMPONENT ---
+function generateId() {
+  return 'id-' + Math.random().toString(36).substring(2, 11);
+}
+
+function getIsoTimestamp() {
+  return new Date().toISOString();
+}
+
+function getInitials(title) {
+  if (!title) return 'AVN';
+  return title
+    .split(' ')
+    .map((w) => w[0])
+    .join('')
+    .slice(0, 3)
+    .toUpperCase();
+}
+
+function formatThaiDate(isoString) {
+  if (!isoString) return '';
+  try {
+    const date = new Date(isoString);
+    return date.toLocaleDateString('th-TH', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch {
+    return isoString;
+  }
+}
+
+const STATUS_CATEGORIES = [
+  'วางแผนจะเล่น',
+  'กำลังเล่น',
+  'เล่นถึงล่าสุด',
+  'จบแล้ว',
+  'เกมโดนทิ้ง'
+];
+
+const STATUS_COLORS = {
+  'วางแผนจะเล่น': 'text-slate-400 border-slate-500/20 bg-slate-500/10',
+  'กำลังเล่น': 'text-emerald-400 border-emerald-500/20 bg-emerald-500/10',
+  'เล่นถึงล่าสุด': 'text-amber-400 border-amber-500/20 bg-amber-500/10',
+  'จบแล้ว': 'text-blue-400 border-blue-500/20 bg-blue-500/10',
+  'เกมโดนทิ้ง': 'text-rose-400 border-rose-500/20 bg-rose-500/10'
+};
+
+function normalizeStatus(status) {
+  switch (status) {
+    case 'Playing':
+      return 'กำลังเล่น';
+    case 'Completed':
+      return 'จบแล้ว';
+    case 'Plan to Play':
+    case 'Plan to play':
+      return 'วางแผนจะเล่น';
+    case 'On Hold':
+      return 'เล่นถึงล่าสุด';
+    case 'Dropped':
+      return 'เกมโดนทิ้ง';
+    default:
+      if (STATUS_CATEGORIES.includes(status)) {
+        return status;
+      }
+      return 'วางแผนจะเล่น';
+  }
+}
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = (error) => reject(error);
+    reader.readAsDataURL(file);
+  });
+}
+
+const OFFICIAL_SCREENSHOT_PLACEHOLDERS = [
+  'https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=800&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1511512578047-dfb367046420?q=80&w=800&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?q=80&w=800&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=800&auto=format&fit=crop'
+];
+
+// UI Star Renderer
+function renderReviewStars(rating, interactive = false, onSelect = null) {
+  const rounded = Math.round(rating);
+  return (
+    <div className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          type="button"
+          disabled={!interactive}
+          onClick={() => onSelect && onSelect(star)}
+          className={`${interactive ? 'cursor-pointer hover:scale-125 transition-transform duration-150' : ''} focus:outline-none`}
+        >
+          <span className={`text-base ${star <= rounded ? 'text-amber-400' : 'text-slate-700'}`}>
+            ★
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export default function App() {
+  // --- CORE STATE ---
+  const [currentUser, setCurrentUser] = useState(() => {
+    return localStorage.getItem('avn_current_user_v7') || 'Alice';
+  });
+
+  const [officialGames, setOfficialGames] = useState(() => {
+    const saved = localStorage.getItem('avn_official_games_v7');
+    return saved ? JSON.parse(saved) : initialOfficialGames;
+  });
+
+  const [userLibraries, setUserLibraries] = useState(() => {
+    const saved = localStorage.getItem('avn_user_libraries_v7');
+    const parsed = saved ? JSON.parse(saved) : initialMockUserLibraries;
+    
+    // Normalize status strings to Thai and ensure fields are initialized
+    const normalized = {};
+    Object.keys(parsed).forEach((user) => {
+      normalized[user] = parsed[user].map((item) => ({
+        ...item,
+        status: normalizeStatus(item.status),
+        screenshots: item.screenshots || []
+      }));
+    });
+    return normalized;
+  });
+
+  const [reports, setReports] = useState(() => {
+    const saved = localStorage.getItem('avn_reports_v7');
+    return saved ? JSON.parse(saved) : initialReports;
+  });
+
+  const [tickerMessage, setTickerMessage] = useState(() => {
+    return localStorage.getItem('avn_ticker_message_v7') || 'ยินดีต้อนรับสู่ AVN Game Tracker v7 Engine! ติดตาม ค้นหา และอัปเดตประวัติการเล่นเกมส่วนตัวของคุณได้แล้ววันนี้';
+  });
+
+  const [showTicker, setShowTicker] = useState(() => {
+    const saved = localStorage.getItem('avn_show_ticker_v7');
+    return saved ? JSON.parse(saved) : true;
+  });
+
+  // --- WEBSITE SETTINGS STATES ---
+  const [webTitle, setWebTitle] = useState(() => {
+    return localStorage.getItem('avn_web_title_v8') || 'AVN Game Tracker';
+  });
+
+  const [webLogo, setWebLogo] = useState(() => {
+    return localStorage.getItem('avn_web_logo_v8') || 'AVN';
+  });
+
+  const [webLogoType, setWebLogoType] = useState(() => {
+    return localStorage.getItem('avn_web_logo_type_v8') || 'text';
+  });
+
+  // --- UI STATE ---
+  const [activeTab, setActiveTab] = useState('online'); // 'online', 'local', 'admin'
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Tag Filter states
+  const [selectedCatalogTags, setSelectedCatalogTags] = useState([]);
+  const [catalogTagSearch, setCatalogTagSearch] = useState('');
+  const [showTagFilterCatalog, setShowTagFilterCatalog] = useState(false);
+
+  const [selectedLibraryTags, setSelectedLibraryTags] = useState([]);
+  const [libraryTagSearch, setLibraryTagSearch] = useState('');
+  const [showTagFilterLibrary, setShowTagFilterLibrary] = useState(false);
+
+  const [adminCatalogSearch, setAdminCatalogSearch] = useState('');
+  const [selectedGenre, setSelectedGenre] = useState('All');
+  const [libraryStatusFilter, setLibraryStatusFilter] = useState('All');
+  const [adminReportTab, setAdminReportTab] = useState('update'); // 'update', 'error', 'new'
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+
+  // --- MODALS STATE ---
+  const [selectedGameDetail, setSelectedGameDetail] = useState(null);
+  const [activeScreenshotPreview, setActiveScreenshotPreview] = useState(null);
+  const [activeScreenshotIndex, setActiveScreenshotIndex] = useState(0);
+  const [isSuggestingNew, setIsSuggestingNew] = useState(false);
+  const [isReportingGame, setIsReportingGame] = useState(null);
+  const [editingLocalItem, setEditingLocalItem] = useState(null);
+  const [isAddingCustom, setIsAddingCustom] = useState(false);
+
+  // Admin Modals
+  const [adminAddGameOpen, setAdminAddGameOpen] = useState(false);
+  const [adminEditGameOpen, setAdminEditGameOpen] = useState(false);
+  const [activeApprovingReport, setActiveApprovingReport] = useState(null);
+
+  // --- FORM STATES ---
+  // Local detailed edit modal fields
+  const [localStatus, setLocalStatus] = useState('วางแผนจะเล่น');
+  const [localPlayTime, setLocalPlayTime] = useState(0);
+  const [localRating, setLocalRating] = useState(0);
+  const [localNotes, setLocalNotes] = useState('');
+  const [localTitle, setLocalTitle] = useState('');
+  const [localDeveloper, setLocalDeveloper] = useState('');
+  const [localVersion, setLocalVersion] = useState('');
+  const [localCoverUrl, setLocalCoverUrl] = useState('');
+  const [localOverview, setLocalOverview] = useState('');
+  const [localTags, setLocalTags] = useState('');
+  const [localPatreonUrl, setLocalPatreonUrl] = useState('');
+  const [localBuyUrl, setLocalBuyUrl] = useState('');
+  const [localSocialUrl, setLocalSocialUrl] = useState('');
+  const [localScreenshots, setLocalScreenshots] = useState([]);
+
+  // Custom library item fields
+  const [customTitle, setCustomTitle] = useState('');
+  const [customDeveloper, setCustomDeveloper] = useState('');
+  const [customVersion, setCustomVersion] = useState('');
+  const [customOverview, setCustomOverview] = useState('');
+  const [customCoverUrl, setCustomCoverUrl] = useState('');
+  const [customTags, setCustomTags] = useState('');
+  const [customPatreonUrl, setCustomPatreonUrl] = useState('');
+  const [customBuyUrl, setCustomBuyUrl] = useState('');
+  const [customSocialUrl, setCustomSocialUrl] = useState('');
+  const [customScreenshots, setCustomScreenshots] = useState([]);
+
+  // Report submission fields
+  const [reportType, setReportType] = useState('update');
+  const [reportReportedVersion, setReportReportedVersion] = useState('');
+  const [reportDescription, setReportDescription] = useState('');
+  const [reportTags, setReportTags] = useState('');
+  const [reportUrls, setReportUrls] = useState('');
+  const [reportErrorStatus, setReportErrorStatus] = useState('ข้อมูลล้าสมัย');
+
+  // Community suggestions fields
+  const [suggestTitle, setSuggestTitle] = useState('');
+  const [suggestDeveloper, setSuggestDeveloper] = useState('');
+  const [suggestVersion, setSuggestVersion] = useState('');
+  const [suggestCoverUrl, setSuggestCoverUrl] = useState('');
+  const [suggestOverview, setSuggestOverview] = useState('');
+  const [suggestTags, setSuggestTags] = useState('');
+  const [suggestScreenshots, setSuggestScreenshots] = useState([]);
+  const [suggestPatreonUrl, setSuggestPatreonUrl] = useState('');
+  const [suggestBuyUrl, setSuggestBuyUrl] = useState('');
+  const [suggestSocialUrl, setSuggestSocialUrl] = useState('');
+
+  // Admin Catalog Modal form fields
+  const [adminFormMode, setAdminFormMode] = useState('add'); // 'add' or 'edit'
+  const [adminFormGameId, setAdminFormGameId] = useState(null);
+  const [adminTitle, setAdminTitle] = useState('');
+  const [adminDeveloper, setAdminDeveloper] = useState('');
+  const [adminVersion, setAdminVersion] = useState('');
+  const [adminOverview, setAdminOverview] = useState('');
+  const [adminCoverUrl, setAdminCoverUrl] = useState('');
+  const [adminPatreonUrl, setAdminPatreonUrl] = useState('');
+  const [adminBuyUrl, setAdminBuyUrl] = useState('');
+  const [adminSocialUrl, setAdminSocialUrl] = useState('');
+  const [adminTags, setAdminTags] = useState('');
+  const [adminRating, setAdminRating] = useState(5.0);
+  const [adminScreenshots, setAdminScreenshots] = useState([]);
+
+  // Admin announcement ticker temp fields
+  const [tempTickerMessage, setTempTickerMessage] = useState(tickerMessage);
+  const [tempShowTicker, setTempShowTicker] = useState(showTicker);
+
+  // --- USER ROLE DERIVATIONS ---
+  const isAdmin = currentUser === 'Admin';
+  const isGuest = currentUser === 'Guest';
+
+  // --- SYNC STATE TO STORAGE ---
+  useEffect(() => {
+    localStorage.setItem('avn_current_user_v7', currentUser);
+  }, [currentUser]);
+
+  useEffect(() => {
+    localStorage.setItem('avn_official_games_v7', JSON.stringify(officialGames));
+  }, [officialGames]);
+
+  useEffect(() => {
+    localStorage.setItem('avn_user_libraries_v7', JSON.stringify(userLibraries));
+  }, [userLibraries]);
+
+  useEffect(() => {
+    localStorage.setItem('avn_reports_v7', JSON.stringify(reports));
+  }, [reports]);
+
+  useEffect(() => {
+    localStorage.setItem('avn_ticker_message_v7', tickerMessage);
+  }, [tickerMessage]);
+
+  useEffect(() => {
+    localStorage.setItem('avn_show_ticker_v7', JSON.stringify(showTicker));
+  }, [showTicker]);
+
+  useEffect(() => {
+    localStorage.setItem('avn_web_title_v8', webTitle);
+  }, [webTitle]);
+
+  useEffect(() => {
+    localStorage.setItem('avn_web_logo_v8', webLogo);
+  }, [webLogo]);
+
+  useEffect(() => {
+    localStorage.setItem('avn_web_logo_type_v8', webLogoType);
+  }, [webLogoType]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setActiveScreenshotIndex(0);
+  }, [selectedGameDetail]);
+
+  useEffect(() => {
+    if (toastMessage) {
+      const timer = setTimeout(() => setToastMessage(''), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toastMessage]);
+
+  // Dropdowns click outside listeners
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (!e.target.closest('.bell-btn-container')) {
+        setShowNotifications(false);
+      }
+      if (!e.target.closest('.catalog-tag-filter-container')) {
+        setShowTagFilterCatalog(false);
+      }
+      if (!e.target.closest('.library-tag-filter-container')) {
+        setShowTagFilterLibrary(false);
+      }
+    };
+    document.addEventListener('click', handleOutsideClick);
+    return () => document.removeEventListener('click', handleOutsideClick);
+  }, []);
+
+  // --- DERIVED MEMOIZED VALUES ---
+  const notifications = useMemo(() => {
+    if (currentUser === 'Admin') {
+      return reports.filter((r) => r.status === 'pending');
+    }
+    return reports.filter((r) => r.type === 'update' && r.status === 'pending');
+  }, [reports, currentUser]);
+
+  const allUniqueGenres = useMemo(() => {
+    const genres = new Set();
+    officialGames.forEach((g) => {
+      if (g.tags) {
+        g.tags.forEach((tag) => genres.add(tag));
+      }
+    });
+    return ['All', ...Array.from(genres)];
+  }, [officialGames]);
+
+  const allUniqueCatalogTags = useMemo(() => {
+    const tags = new Set();
+    officialGames.forEach((g) => {
+      if (g.tags) {
+        g.tags.forEach((tag) => tags.add(tag));
+      }
+    });
+    return Array.from(tags).sort();
+  }, [officialGames]);
+
+  const currentLibraryList = useMemo(() => {
+    return userLibraries[currentUser] || [];
+  }, [userLibraries, currentUser]);
+
+  const allUniqueLibraryTags = useMemo(() => {
+    const tags = new Set();
+    currentLibraryList.forEach((item) => {
+      if (item.tags) {
+        item.tags.forEach((tag) => tags.add(tag));
+      }
+    });
+    return Array.from(tags).sort();
+  }, [currentLibraryList]);
+
+  const filteredCatalog = useMemo(() => {
+    return officialGames.filter((g) => {
+      const matchSearch =
+        g.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        g.developer.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchTag =
+        selectedCatalogTags.length === 0 ||
+        selectedCatalogTags.every(tag => g.tags.some(t => t.toLowerCase() === tag.toLowerCase()));
+      const matchGenre = selectedGenre === 'All' || g.tags.includes(selectedGenre);
+      return matchSearch && matchTag && matchGenre;
+    });
+  }, [officialGames, searchQuery, selectedCatalogTags, selectedGenre]);
+
+  // Calculate compact stats for Library Dashboard
+  const libraryStats = useMemo(() => {
+    const list = currentLibraryList;
+    const planToPlay = list.filter(item => item.status === 'วางแผนจะเล่น').length;
+    const playing = list.filter(item => item.status === 'กำลังเล่น').length;
+    const completed = list.filter(item => item.status === 'จบแล้ว').length;
+    const totalPlayTime = list.reduce((sum, item) => sum + (parseFloat(item.playTime) || 0), 0);
+    return { planToPlay, playing, completed, totalPlayTime };
+  }, [currentLibraryList]);
+
+  const filteredLibrary = useMemo(() => {
+    return currentLibraryList.filter((item) => {
+      const matchSearch =
+        item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.developer.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchTag =
+        selectedLibraryTags.length === 0 ||
+        (item.tags && selectedLibraryTags.every(tag => item.tags.some(t => t.toLowerCase() === tag.toLowerCase())));
+      const matchStatus = libraryStatusFilter === 'All' || item.status === libraryStatusFilter;
+      return matchSearch && matchTag && matchStatus;
+    });
+  }, [currentLibraryList, searchQuery, selectedLibraryTags, libraryStatusFilter]);
+
+  const pendingUpdates = useMemo(() => reports.filter((r) => r.status === 'pending' && r.type === 'update'), [reports]);
+  const pendingErrors = useMemo(() => reports.filter((r) => r.status === 'pending' && r.type === 'error'), [reports]);
+  const pendingNews = useMemo(() => reports.filter((r) => r.status === 'pending' && r.type === 'new'), [reports]);
+
+  const adminFilteredCatalog = useMemo(() => {
+    return officialGames.filter((g) =>
+      g.title.toLowerCase().includes(adminCatalogSearch.toLowerCase()) ||
+      g.developer.toLowerCase().includes(adminCatalogSearch.toLowerCase())
+    );
+  }, [officialGames, adminCatalogSearch]);
+
+  // --- ACTIONS HANDLERS ---
+  const handleUserChange = (newUser) => {
+    setCurrentUser(newUser);
+    if (newUser === 'Guest') {
+      setActiveTab('online');
+    } else if (newUser !== 'Admin' && activeTab === 'admin') {
+      setActiveTab('online');
+    }
+  };
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    setSearchQuery('');
+    setSelectedCatalogTags([]);
+    setSelectedLibraryTags([]);
+    setCatalogTagSearch('');
+    setLibraryTagSearch('');
+    if (tab === 'admin') {
+      setTempTickerMessage(tickerMessage);
+      setTempShowTicker(showTicker);
+    }
+  };
+
+  const handleAddToLibrary = (game, customStatus = 'วางแผนจะเล่น') => {
+    if (isGuest) return;
+    const currentLib = userLibraries[currentUser] || [];
+    if (currentLib.some((item) => item.gameId === game.id)) {
+      setToastMessage('เกมนี้อยู่ในคลังของคุณแล้ว');
+      return;
+    }
+
+    const newItem = {
+      gameId: game.id,
+      status: customStatus,
+      playTime: 0,
+      rating: 0,
+      notes: '',
+      lastUpdated: getIsoTimestamp(),
+      isCustom: false,
+      title: game.title,
+      developer: game.developer,
+      version: game.version,
+      coverUrl: game.coverUrl,
+      overview: game.overview,
+      tags: game.tags,
+      patreonUrl: game.patreonUrl || '',
+      buyUrl: game.buyUrl || '',
+      socialUrl: game.socialUrl || '',
+      screenshots: game.screenshots || []
+    };
+
+    setUserLibraries({
+      ...userLibraries,
+      [currentUser]: [...currentLib, newItem]
+    });
+    setToastMessage(`เพิ่ม "${game.title}" เข้าคลังสำเร็จ!`);
+  };
+
+  const handleDeleteLibraryItem = (gameId) => {
+    const currentLib = userLibraries[currentUser] || [];
+    setUserLibraries({
+      ...userLibraries,
+      [currentUser]: currentLib.filter((item) => item.gameId !== gameId)
+    });
+    setToastMessage('ลบเกมออกจากคลังส่วนตัวแล้ว');
+  };
+
+  const handleDeleteOfficialGame = (gameId) => {
+    if (window.confirm('คุณแน่ใจหรือไม่ที่จะลบเกมนี้ออกจากระบบหลัก? ข้อมูลประวัติการเล่นของผู้ใช้จะยังคงอยู่ แต่อ้างอิงจะหายไป')) {
+      setOfficialGames(officialGames.filter((g) => g.id !== gameId));
+      setToastMessage('ลบเกมออกจากแคตตาล็อกระบบแล้ว');
+    }
+  };
+
+  const handleIgnoreReport = (reportId) => {
+    setReports(reports.map((r) => (r.id === reportId ? { ...r, status: 'ignored' } : r)));
+    setToastMessage('ปฏิเสธ/ละเว้น รายงานแล้ว');
+  };
+
+  // Inline library row modifications
+  const handleUpdateItemStatus = (gameId, newStatus) => {
+    setUserLibraries((prev) => {
+      const updated = { ...prev };
+      if (updated[currentUser]) {
+        updated[currentUser] = updated[currentUser].map((item) =>
+          item.gameId === gameId
+            ? { ...item, status: newStatus, lastUpdated: getIsoTimestamp() }
+            : item
+        );
+      }
+      return updated;
+    });
+    setToastMessage('อัปเดตสถานะเกมแล้ว');
+  };
+
+  const handleUpdateItemNotes = (gameId, newNotes) => {
+    setUserLibraries((prev) => {
+      const updated = { ...prev };
+      if (updated[currentUser]) {
+        updated[currentUser] = updated[currentUser].map((item) =>
+          item.gameId === gameId
+            ? { ...item, notes: newNotes, lastUpdated: getIsoTimestamp() }
+            : item
+        );
+      }
+      return updated;
+    });
+  };
+
+  const handleUpdateItemPlayTime = (gameId, newPlayTime) => {
+    const hours = parseFloat(newPlayTime) || 0;
+    setUserLibraries((prev) => {
+      const updated = { ...prev };
+      if (updated[currentUser]) {
+        updated[currentUser] = updated[currentUser].map((item) =>
+          item.gameId === gameId
+            ? { ...item, playTime: hours, lastUpdated: getIsoTimestamp() }
+            : item
+        );
+      }
+      return updated;
+    });
+  };
+
+  const handleUpdateItemRating = (gameId, newRating) => {
+    setUserLibraries((prev) => {
+      const updated = { ...prev };
+      if (updated[currentUser]) {
+        updated[currentUser] = updated[currentUser].map((item) =>
+          item.gameId === gameId
+            ? { ...item, rating: newRating, lastUpdated: getIsoTimestamp() }
+            : item
+        );
+      }
+      return updated;
+    });
+    setToastMessage('อัปเดตคะแนนรีวิวเรียบร้อย');
+  };
+
+  // Detailed local edit modal initialization
+  const openEditLocalItem = (item) => {
+    setEditingLocalItem(item);
+    setLocalStatus(item.status || 'วางแผนจะเล่น');
+    setLocalPlayTime(item.playTime || 0);
+    setLocalRating(item.rating || 0);
+    setLocalNotes(item.notes || '');
+    setLocalTitle(item.title || '');
+    setLocalDeveloper(item.developer || '');
+    setLocalVersion(item.version || '');
+    setLocalCoverUrl(item.coverUrl || '');
+    setLocalOverview(item.overview || '');
+    setLocalTags(item.tags ? item.tags.join(', ') : '');
+    setLocalPatreonUrl(item.patreonUrl || '');
+    setLocalBuyUrl(item.buyUrl || '');
+    setLocalSocialUrl(item.socialUrl || '');
+    setLocalScreenshots(item.screenshots || []);
+  };
+
+  const openSuggestNew = () => {
+    setSuggestTitle('');
+    setSuggestDeveloper('');
+    setSuggestVersion('');
+    setSuggestCoverUrl('');
+    setSuggestOverview('');
+    setSuggestTags('');
+    setSuggestScreenshots([]);
+    setSuggestPatreonUrl('');
+    setSuggestBuyUrl('');
+    setSuggestSocialUrl('');
+    setIsSuggestingNew(true);
+  };
+
+  const openReportGame = (game) => {
+    setReportType('update');
+    setReportReportedVersion('');
+    setReportDescription('');
+    setReportTags('');
+    setReportUrls('');
+    setReportErrorStatus('ข้อมูลล้าสมัย');
+    setIsReportingGame(game);
+  };
+
+  const openAddCustom = () => {
+    setCustomTitle('');
+    setCustomDeveloper('');
+    setCustomVersion('');
+    setCustomOverview('');
+    setCustomCoverUrl('');
+    setCustomTags('');
+    setCustomPatreonUrl('');
+    setCustomBuyUrl('');
+    setCustomSocialUrl('');
+    setCustomScreenshots([]);
+    setIsAddingCustom(true);
+  };
+
+  // Form submission saving handlers
+  const handleSaveLocalEdit = (e) => {
+    e.preventDefault();
+    if (!editingLocalItem) return;
+
+    const updatedLib = currentLibraryList.map((item) => {
+      if (item.gameId === editingLocalItem.gameId) {
+        const isCustom = item.isCustom;
+        return {
+          ...item,
+          status: localStatus,
+          playTime: parseFloat(localPlayTime) || 0,
+          rating: isCustom ? localRating : item.rating, // rating locked for official in modal
+          notes: localNotes,
+          lastUpdated: getIsoTimestamp(),
+          title: isCustom ? localTitle : item.title,
+          developer: isCustom ? localDeveloper : item.developer,
+          version: isCustom ? localVersion : item.version,
+          coverUrl: isCustom ? localCoverUrl : item.coverUrl,
+          overview: isCustom ? localOverview : item.overview,
+          tags: isCustom ? localTags.split(',').map((t) => t.trim()).filter(Boolean) : item.tags,
+          patreonUrl: isCustom ? localPatreonUrl : item.patreonUrl,
+          buyUrl: isCustom ? localBuyUrl : item.buyUrl,
+          socialUrl: isCustom ? localSocialUrl : item.socialUrl,
+          screenshots: isCustom ? localScreenshots : item.screenshots
+        };
+      }
+      return item;
+    });
+
+    setUserLibraries({
+      ...userLibraries,
+      [currentUser]: updatedLib
+    });
+
+    setEditingLocalItem(null);
+    setToastMessage('บันทึกรายละเอียดประวัติการเล่นแล้ว!');
+  };
+
+  // Base64 Cover File Upload (Custom Game)
+  const handleCoverUpload = async (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      try {
+        const base64 = await readFileAsBase64(file);
+        setLocalCoverUrl(base64);
+        setToastMessage('อัปโหลดรูปปกสำเร็จ!');
+      } catch (err) {
+        console.error(err);
+        alert('เกิดข้อผิดพลาดในการแปลงไฟล์รูปภาพ');
+      }
+    }
+  };
+
+  const handleCustomCoverUpload = async (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      try {
+        const base64 = await readFileAsBase64(file);
+        setCustomCoverUrl(base64);
+        setToastMessage('อัปโหลดรูปปกสำเร็จ!');
+      } catch (err) {
+        console.error(err);
+        alert('เกิดข้อผิดพลาดในการแปลงไฟล์รูปภาพ');
+      }
+    }
+  };
+
+  // Base64 Screenshots Upload (Custom Game)
+  const handleScreenshotUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length > 0) {
+      const remainingSlots = 4 - localScreenshots.length;
+      const filesToProcess = files.slice(0, remainingSlots);
+      
+      try {
+        const promises = filesToProcess.map(file => readFileAsBase64(file));
+        const base64s = await Promise.all(promises);
+        setLocalScreenshots(prev => [...prev, ...base64s].slice(0, 4));
+        setToastMessage(`อัปโหลดภาพตัวอย่างเพิ่ม ${base64s.length} รูป!`);
+      } catch (err) {
+        console.error(err);
+        alert('เกิดข้อผิดพลาดในการอัปโหลดรูปภาพ');
+      }
+    }
+  };
+
+  const handleCustomScreenshotUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length > 0) {
+      const remainingSlots = 4 - customScreenshots.length;
+      const filesToProcess = files.slice(0, remainingSlots);
+      
+      try {
+        const promises = filesToProcess.map(file => readFileAsBase64(file));
+        const base64s = await Promise.all(promises);
+        setCustomScreenshots(prev => [...prev, ...base64s].slice(0, 4));
+        setToastMessage(`อัปโหลดภาพตัวอย่างเพิ่ม ${base64s.length} รูป!`);
+      } catch (err) {
+        console.error(err);
+        alert('เกิดข้อผิดพลาดในการอัปโหลดรูปภาพ');
+      }
+    }
+  };
+
+  const handleSaveCustomGame = (e) => {
+    e.preventDefault();
+    if (!customTitle.trim() || !customDeveloper.trim() || !customVersion.trim()) {
+      alert('กรุณากรอกฟิลด์สำคัญให้ครบถ้วน (ชื่อเกม, ผู้พัฒนา, เวอร์ชัน)');
+      return;
+    }
+
+    const newItem = {
+      gameId: 'custom-' + Date.now(),
+      status: 'วางแผนจะเล่น',
+      playTime: 0,
+      rating: 0,
+      notes: '',
+      lastUpdated: getIsoTimestamp(),
+      isCustom: true,
+      title: customTitle,
+      developer: customDeveloper,
+      version: customVersion,
+      coverUrl: customCoverUrl,
+      overview: customOverview || 'ผู้ใช้เพิ่มเกมนี้ด้วยตนเองนอกระบบแคตตาล็อกหลัก',
+      tags: customTags.split(',').map((t) => t.trim()).filter(Boolean),
+      patreonUrl: customPatreonUrl || '',
+      buyUrl: customBuyUrl || '',
+      socialUrl: customSocialUrl || '',
+      screenshots: customScreenshots
+    };
+
+    setUserLibraries({
+      ...userLibraries,
+      [currentUser]: [...currentLibraryList, newItem]
+    });
+
+    setIsAddingCustom(false);
+    setToastMessage('เพิ่มเกมกำหนดเองเรียบร้อยแล้ว!');
+  };
+
+  const handleSaveReport = (e) => {
+    e.preventDefault();
+    if (reportType === 'update' && !reportReportedVersion) {
+      alert('กรุณากรอกเวอร์ชันใหม่ที่แนะนำ');
+      return;
+    }
+    if (!reportDescription.trim()) {
+      alert('กรุณากรอกคำอธิบายเพิ่มเติมเพื่อส่งรายงาน');
+      return;
+    }
+
+    const newReport = {
+      id: generateId(),
+      username: currentUser,
+      type: reportType,
+      gameId: isReportingGame.gameId || isReportingGame.id,
+      gameTitle: isReportingGame.title,
+      developer: isReportingGame.developer,
+      currentVersion: isReportingGame.version,
+      reportedVersion: reportType === 'update' ? reportReportedVersion : (reportReportedVersion || isReportingGame.version),
+      description: reportDescription,
+      status: 'pending',
+      timestamp: getIsoTimestamp(),
+      reportTags: reportType === 'error' ? reportTags : undefined,
+      reportUrls: reportType === 'error' ? reportUrls : undefined,
+      errorStatus: reportType === 'error' ? reportErrorStatus : undefined
+    };
+
+    setReports([newReport, ...reports]);
+    setIsReportingGame(null);
+    setToastMessage('ส่งรายงานเรียบร้อยแล้ว แอดมินจะตรวจสอบเร็วๆ นี้');
+  };
+
+  const handleSaveSuggestion = (e) => {
+    e.preventDefault();
+    if (!suggestTitle.trim() || !suggestDeveloper.trim() || !suggestVersion.trim()) {
+      alert('กรุณากรอกข้อมูลที่สำคัญให้ครบถ้วน');
+      return;
+    }
+
+    const newReport = {
+      id: generateId(),
+      username: currentUser,
+      type: 'new',
+      gameTitle: suggestTitle,
+      developer: suggestDeveloper,
+      reportedVersion: suggestVersion,
+      coverUrl: suggestCoverUrl,
+      overview: suggestOverview || 'เสนอแนะโดยสมาชิกคอมมูนิตี้',
+      tags: suggestTags.split(',').map((t) => t.trim()).filter(Boolean),
+      status: 'pending',
+      timestamp: getIsoTimestamp(),
+      description: 'ขอเพิ่มเกมใหม่เข้าระบบแคตตาล็อกหลัก',
+      patreonUrl: suggestPatreonUrl || '',
+      buyUrl: suggestBuyUrl || '',
+      socialUrl: suggestSocialUrl || '',
+      screenshots: suggestScreenshots || []
+    };
+
+    setReports([newReport, ...reports]);
+    setIsSuggestingNew(false);
+    setToastMessage('ส่งข้อเสนอแนะสำเร็จ! อยู่ในระหว่างรอตรวจรับเข้าแคตตาล็อกหลัก');
+  };
+
+  // --- ADMIN FUNCTIONALITIES ---
+  const handleResetAdminForm = () => {
+    setAdminFormGameId(null);
+    setAdminTitle('');
+    setAdminDeveloper('');
+    setAdminVersion('');
+    setAdminOverview('');
+    setAdminCoverUrl('');
+    setAdminPatreonUrl('');
+    setAdminBuyUrl('');
+    setAdminSocialUrl('');
+    setAdminTags('');
+    setAdminRating(5.0);
+    setAdminScreenshots([]);
+    setActiveApprovingReport(null);
+  };
+
+  const handleSelectGameForEdit = (game) => {
+    setAdminFormMode('edit');
+    setAdminFormGameId(game.id);
+    setAdminTitle(game.title || '');
+    setAdminDeveloper(game.developer || '');
+    setAdminVersion(game.version || '');
+    setAdminOverview(game.overview || '');
+    setAdminCoverUrl(game.coverUrl || '');
+    setAdminPatreonUrl(game.patreonUrl || '');
+    setAdminBuyUrl(game.buyUrl || '');
+    setAdminSocialUrl(game.socialUrl || '');
+    setAdminTags(game.tags ? game.tags.join(', ') : '');
+    setAdminRating(game.rating || 5.0);
+    setAdminScreenshots(game.screenshots || []);
+    setActiveApprovingReport(null);
+  };
+
+  const handleApproveReport = (report) => {
+    setActiveApprovingReport(report);
+    if (report.type === 'new') {
+      setAdminFormMode('add');
+      setAdminTitle(report.gameTitle || '');
+      setAdminDeveloper(report.developer || '');
+      setAdminVersion(report.reportedVersion || '');
+      setAdminOverview(report.overview || report.description || '');
+      setAdminCoverUrl(report.coverUrl || '');
+      setAdminTags(report.tags ? report.tags.join(', ') : (report.reportTags || ''));
+      setAdminPatreonUrl(report.patreonUrl || '');
+      setAdminBuyUrl(report.buyUrl || '');
+      setAdminSocialUrl(report.socialUrl || '');
+      setAdminRating(5.0);
+      setAdminScreenshots(report.screenshots || []);
+      setAdminAddGameOpen(true);
+    } else {
+      // Find original game for update / error
+      const target = officialGames.find(g => g.id === report.gameId);
+      if (target) {
+        setAdminFormMode('edit');
+        setAdminFormGameId(target.id);
+        setAdminTitle(target.title || '');
+        setAdminDeveloper(target.developer || '');
+        setAdminVersion(report.reportedVersion || target.version);
+        setAdminOverview(target.overview || '');
+        setAdminCoverUrl(target.coverUrl || '');
+        setAdminPatreonUrl(report.reportUrls || target.patreonUrl || '');
+        setAdminBuyUrl(target.buyUrl || '');
+        setAdminSocialUrl(target.socialUrl || '');
+        setAdminTags(report.reportTags || (target.tags ? target.tags.join(', ') : ''));
+        setAdminRating(target.rating || 5.0);
+        setAdminScreenshots(target.screenshots || []);
+        setAdminEditGameOpen(true);
+      } else {
+        alert('ไม่พบเกมหลักอ้างอิงในแคตตาล็อกเพื่ออนุมัติการแก้ไข');
+        setActiveApprovingReport(null);
+      }
+    }
+  };
+
+  const handleRejectReport = (reportId) => {
+    setReports((prev) => prev.map((r) => (r.id === reportId ? { ...r, status: 'rejected' } : r)));
+    setToastMessage('ปฏิเสธคำร้องเรียนนี้แล้ว');
+  };
+
+  const handleAdminCoverUpload = async (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      try {
+        const base64 = await readFileAsBase64(file);
+        setAdminCoverUrl(base64);
+        setToastMessage('อัปโหลดรูปปกของระบบสำเร็จ!');
+      } catch (err) {
+        console.error(err);
+        alert('เกิดข้อผิดพลาดในการอัปโหลดรูปปก');
+      }
+    }
+  };
+
+  const handleAdminScreenshotUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length > 0) {
+      const remainingSlots = 4 - adminScreenshots.length;
+      const filesToProcess = files.slice(0, remainingSlots);
+      
+      try {
+        const promises = filesToProcess.map(file => readFileAsBase64(file));
+        const base64s = await Promise.all(promises);
+        setAdminScreenshots(prev => [...prev, ...base64s].slice(0, 4));
+        setToastMessage(`อัปโหลดรูปภาพตัวอย่างหลักสำเร็จ!`);
+      } catch (err) {
+        console.error(err);
+        alert('เกิดข้อผิดพลาดในการอัปโหลดรูปภาพ');
+      }
+    }
+  };
+
+  const handleSaveAdminForm = (e) => {
+    e.preventDefault();
+    if (!adminTitle.trim() || !adminDeveloper.trim() || !adminVersion.trim()) {
+      alert('กรุณากรอกฟิลด์สำคัญให้ครบถ้วน (ชื่อเกม, ผู้พัฒนา, เวอร์ชัน)');
+      return;
+    }
+
+    const tagsArray = adminTags
+      ? adminTags.split(',').map((t) => t.trim()).filter(Boolean)
+      : [];
+
+    if (adminFormMode === 'edit') {
+      // Edit mode
+      setOfficialGames((prev) =>
+        prev.map((g) =>
+          g.id === adminFormGameId
+            ? {
+                ...g,
+                title: adminTitle,
+                developer: adminDeveloper,
+                version: adminVersion,
+                overview: adminOverview,
+                coverUrl: adminCoverUrl,
+                patreonUrl: adminPatreonUrl,
+                buyUrl: adminBuyUrl,
+                socialUrl: adminSocialUrl,
+                tags: tagsArray,
+                rating: parseFloat(adminRating) || g.rating,
+                screenshots: adminScreenshots
+              }
+            : g
+        )
+      );
+
+      // Sync changes with user libraries
+      setUserLibraries((prev) => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach((user) => {
+          updated[user] = updated[user].map((item) => {
+            if (item.gameId === adminFormGameId && !item.isCustom) {
+              return {
+                ...item,
+                title: adminTitle,
+                developer: adminDeveloper,
+                version: adminVersion,
+                coverUrl: adminCoverUrl,
+                overview: adminOverview,
+                tags: tagsArray,
+                patreonUrl: adminPatreonUrl,
+                buyUrl: adminBuyUrl,
+                socialUrl: adminSocialUrl,
+                screenshots: adminScreenshots
+              };
+            }
+            return item;
+          });
+        });
+        return updated;
+      });
+
+      setToastMessage(`แก้ไขข้อมูลเกมหลัก "${adminTitle}" เรียบร้อยแล้ว`);
+      setAdminEditGameOpen(false);
+    } else {
+      // Add mode
+      const slug = adminTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') || `game-${Date.now()}`;
+      
+      const newGame = {
+        id: slug,
+        title: adminTitle,
+        developer: adminDeveloper,
+        version: adminVersion,
+        overview: adminOverview || 'เรื่องย่ออย่างเป็นทางการยังไม่มีข้อมูลในระบบ',
+        tags: tagsArray,
+        rating: parseFloat(adminRating) || 5.0,
+        coverUrl: adminCoverUrl,
+        patreonUrl: adminPatreonUrl,
+        buyUrl: adminBuyUrl,
+        socialUrl: adminSocialUrl,
+        screenshots: adminScreenshots
+      };
+
+      setOfficialGames((prev) => [newGame, ...prev]);
+      setToastMessage(`เพิ่มเกม "${adminTitle}" เข้าระบบแคตตาล็อกเรียบร้อย`);
+      setAdminAddGameOpen(false);
+    }
+
+    // Set approved status on reports if approved from inbox
+    if (activeApprovingReport) {
+      setReports((prev) =>
+        prev.map((r) => (r.id === activeApprovingReport.id ? { ...r, status: 'approved' } : r))
+      );
+      setActiveApprovingReport(null);
+    }
+
+    handleResetAdminForm();
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-955 text-slate-200 flex flex-col font-sans selection:bg-blue-650/30 selection:text-blue-300">
+      
+      {/* ANNOUNCEMENT ticker (Solid layout) */}
+      {showTicker && tickerMessage && (
+        <div className="w-full bg-[#131b2e] border-b border-slate-900 py-3.5 text-sm flex items-center relative overflow-hidden shrink-0 z-40">
+          <span className="font-extrabold shrink-0 bg-blue-600 px-3 py-1 rounded-full ml-4 text-xs text-white shadow shadow-blue-500/20 uppercase tracking-wider">
+            ประกาศวิ่ง
+          </span>
+          <div className="marquee-container flex-1">
+            <div className="marquee-content text-blue-200 text-base font-semibold">
+              {tickerMessage}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* HEADER */}
+      <header className="glass-panel border-b border-slate-900 py-3.5 px-4 md:px-6 sticky top-0 z-30 shrink-0">
+        <div className="max-w-[1400px] mx-auto flex items-center justify-between gap-4">
+          
+          {/* Logo & Title Settings */}
+          <div className="flex items-center gap-3">
+            {webLogoType === 'image' && webLogo ? (
+              <img src={webLogo} alt="Logo" className="w-10 h-10 rounded-xl object-cover shadow shadow-blue-500/30 border border-white/10" />
+            ) : (
+              <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center font-extrabold text-white shadow shadow-blue-500/30 text-lg">
+                {webLogo || 'AVN'}
+              </div>
+            )}
+            <div className="hidden md:block">
+              <h1 className="text-lg font-extrabold tracking-tight text-slate-100 leading-tight">{webTitle}</h1>
+              <span className="text-[10px] text-blue-400 font-bold uppercase tracking-wider">v8 Engine</span>
+            </div>
+          </div>
+
+          {/* Navigation Tabs */}
+          <nav className="flex items-center gap-1 sm:gap-2">
+            <button
+              onClick={() => handleTabChange('online')}
+              className={`text-sm px-4 py-2.5 rounded-xl font-bold transition-all h-11 flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'online'
+                  ? 'bg-blue-600/15 text-blue-400 border border-blue-500/30'
+                  : 'text-slate-400 hover:text-slate-200 border border-transparent'
+              }`}
+            >
+              🌐 แคตตาล็อก
+            </button>
+
+            {!isGuest && (
+              <button
+                onClick={() => handleTabChange('local')}
+                className={`text-sm px-4 py-2.5 rounded-xl font-bold transition-all h-11 flex items-center gap-1.5 cursor-pointer ${
+                  activeTab === 'local'
+                    ? 'bg-blue-600/15 text-blue-400 border border-blue-500/30'
+                    : 'text-slate-400 hover:text-slate-200 border border-transparent'
+              }`}
+              >
+                📚 คลังของฉัน
+              </button>
+            )}
+
+            {isAdmin && (
+              <button
+                onClick={() => handleTabChange('admin')}
+                className={`text-sm px-4 py-2.5 rounded-xl font-bold transition-all h-11 flex items-center gap-1.5 cursor-pointer ${
+                  activeTab === 'admin'
+                    ? 'bg-blue-600/15 text-blue-400 border border-blue-500/30'
+                    : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                }`}
+              >
+                🛡️ แอดมิน
+              </button>
+            )}
+          </nav>
+
+          {/* Right Controls */}
+          <div className="flex items-center gap-3">
+            
+            {/* Notification Bell */}
+            <div className="relative bell-btn-container">
+              <button
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="w-11 h-11 rounded-xl border border-slate-800 hover:border-slate-700 bg-slate-900/40 flex items-center justify-center relative transition-all cursor-pointer"
+              >
+                <span className="text-xl">🔔</span>
+                {notifications.length > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[20px] h-[20px] rounded-full bg-red-600 text-white text-[10px] font-black flex items-center justify-center px-1 animate-pulse">
+                    {notifications.length}
+                  </span>
+                )}
+              </button>
+
+              {showNotifications && (
+                <div className="absolute right-0 mt-3 w-80 glass-panel border border-slate-805 rounded-2xl shadow-2xl z-50 p-4 animate-fade-in-up">
+                  <div className="flex items-center justify-between pb-2.5 border-b border-slate-800 mb-2.5">
+                    <span className="text-xs font-bold text-slate-350 flex items-center gap-1.5">
+                      🔔 การแจ้งเตือนอัปเดต ({notifications.length})
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1">
+                    {notifications.length === 0 ? (
+                      <div className="text-center py-8 text-slate-500 text-xs font-medium">
+                        ไม่มีการแจ้งเตือนรอดำเนินการ
+                      </div>
+                    ) : (
+                      notifications.map((notif) => (
+                        <div
+                          key={notif.id}
+                          onClick={() => {
+                            if (currentUser === 'Admin') {
+                              handleTabChange('admin');
+                              setAdminReportTab(notif.type);
+                            } else {
+                              const target = officialGames.find((g) => g.id === notif.gameId);
+                              if (target) {
+                                setSelectedGameDetail(target);
+                              }
+                            }
+                            setShowNotifications(false);
+                          }}
+                          className="p-3 bg-slate-950 border border-slate-900 text-xs text-slate-300 hover:bg-slate-900/30 cursor-pointer transition-colors"
+                        >
+                          <div>
+                            {notif.type === 'new' ? (
+                              <span>เสนอแนะเกมใหม่: <span className="font-extrabold text-blue-400">{notif.gameTitle}</span></span>
+                            ) : notif.type === 'error' ? (
+                              <span>แจ้งข้อมูลผิดพลาด: <span className="font-extrabold text-amber-400">{notif.gameTitle}</span></span>
+                            ) : (
+                              <span>พบเวอร์ชันใหม่สำหรับ <span className="font-extrabold text-blue-400">{notif.gameTitle}</span></span>
+                            )}
+                          </div>
+                          <div className="mt-1 flex justify-between items-center text-[10px]">
+                            {notif.type === 'update' && (
+                              <span className="text-slate-400">v{notif.currentVersion} ➔ <span className="text-emerald-455 font-bold">v{notif.reportedVersion}</span></span>
+                            )}
+                            <span className="text-slate-500 block text-right w-full">{formatThaiDate(notif.timestamp)}</span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Role Switcher */}
+            <div className="flex items-center">
+              <select
+                value={currentUser}
+                onChange={(e) => handleUserChange(e.target.value)}
+                className="glass-input h-11 px-3 text-xs font-black rounded-xl text-slate-100 bg-slate-900 border border-slate-800 cursor-pointer focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="Alice">Alice (สมาชิก)</option>
+                <option value="Charlie">Charlie (สมาชิก)</option>
+                <option value="Dave">Dave (สมาชิก)</option>
+                <option value="Admin">Admin (แอดมิน)</option>
+                <option value="Guest">Guest (ผู้เยี่ยมชม)</option>
+              </select>
+            </div>
+
+          </div>
+        </div>
+      </header>
+
+      {/* MAIN CONTAINER */}
+      <main className="flex-grow p-4 md:p-6 max-w-[1400px] mx-auto w-full">
+        
+        {/* OFFICIAL CATALOG */}
+        {activeTab === 'online' && (
+          <div className="flex flex-col gap-6 animate-fade-in-up">
+            
+            {/* Search Input Panels */}
+            <div className="flex flex-col md:flex-row gap-4 items-stretch justify-between w-full">
+              <div className="flex flex-col sm:flex-row gap-4 flex-1">
+                <div className="relative flex-1">
+                  <span className="absolute inset-y-0 left-4 flex items-center text-slate-500">🔍</span>
+                  <input
+                    type="text"
+                    placeholder="ค้นหาชื่อเกม หรือผู้พัฒนา..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="glass-input w-full h-11 pl-11 pr-4 text-sm rounded-xl focus:outline-none"
+                  />
+                </div>
+                
+                {/* Catalog Tag Filter Button & Dropdown */}
+                <div className="relative w-full sm:w-64 catalog-tag-filter-container">
+                  <button
+                    type="button"
+                    onClick={() => setShowTagFilterCatalog(!showTagFilterCatalog)}
+                    className={`glass-input w-full h-11 px-4 text-sm rounded-xl flex items-center justify-between cursor-pointer transition-colors ${
+                      selectedCatalogTags.length > 0 ? 'border-blue-500 text-blue-400 bg-blue-500/5' : 'text-slate-400'
+                    }`}
+                  >
+                    <span className="truncate">
+                      {selectedCatalogTags.length > 0 ? `ตัวกรองแท็ก (${selectedCatalogTags.length})` : '🔍 เลือกแท็กแนวเกม...'}
+                    </span>
+                    <span className="text-xs">▼</span>
+                  </button>
+                  
+                  {showTagFilterCatalog && (
+                    <div className="absolute left-0 mt-2 w-72 glass-panel border border-slate-805 rounded-2xl shadow-2xl z-50 p-4 animate-fade-in-up">
+                      <input
+                        type="text"
+                        placeholder="พิมพ์ค้นหาแท็ก..."
+                        value={catalogTagSearch}
+                        onChange={(e) => setCatalogTagSearch(e.target.value)}
+                        className="glass-input w-full h-8 px-2.5 text-xs rounded-lg mb-3"
+                      />
+                      
+                      <div className="max-h-48 overflow-y-auto flex flex-col gap-2 pr-1 scrollbar-thin">
+                        {allUniqueCatalogTags
+                          .filter(tag => tag.toLowerCase().includes(catalogTagSearch.toLowerCase()))
+                          .map(tag => {
+                            const isChecked = selectedCatalogTags.includes(tag);
+                            return (
+                              <label key={tag} className="flex items-center gap-2.5 text-xs text-slate-300 hover:text-slate-100 cursor-pointer py-0.5">
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => {
+                                    if (isChecked) {
+                                      setSelectedCatalogTags(selectedCatalogTags.filter(t => t !== tag));
+                                    } else {
+                                      setSelectedCatalogTags([...selectedCatalogTags, tag]);
+                                    }
+                                  }}
+                                  className="w-4 h-4 accent-blue-500 rounded border-slate-700 bg-slate-900 cursor-pointer"
+                                />
+                                <span className="font-medium">#{tag}</span>
+                              </label>
+                            );
+                          })}
+                        {allUniqueCatalogTags.filter(tag => tag.toLowerCase().includes(catalogTagSearch.toLowerCase())).length === 0 && (
+                          <div className="text-center text-slate-550 py-3 text-xs italic">ไม่พบชื่อแท็กนี้</div>
+                        )}
+                      </div>
+                      
+                      <div className="mt-3.5 pt-2 border-t border-slate-900/60 flex justify-between gap-2">
+                        {selectedCatalogTags.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedCatalogTags([])}
+                            className="text-[10px] font-bold text-red-400 hover:underline cursor-pointer"
+                          >
+                            ล้างทั้งหมด
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setShowTagFilterCatalog(false)}
+                          className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-white text-[10px] font-bold px-3 py-1 rounded-md ml-auto cursor-pointer"
+                        >
+                          ปิด
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {!isGuest && (
+                <button
+                  onClick={openSuggestNew}
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-5 h-11 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-blue-500/25 active:scale-95 text-sm cursor-pointer w-full md:w-auto justify-center"
+                >
+                  ➕ เสนอแนะเกมใหม่
+                </button>
+              )}
+            </div>
+
+            {/* Genre Filter Pills */}
+            <div className="flex flex-col gap-2 border-b border-slate-900 pb-3">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">หมวดหมู่ด่วน:</span>
+              <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin">
+                {allUniqueGenres.map((genre) => (
+                  <button
+                    key={genre}
+                    onClick={() => setSelectedGenre(genre)}
+                    className={`px-4 py-2 text-xs font-bold rounded-full border transition-all shrink-0 cursor-pointer ${
+                      selectedGenre === genre
+                        ? 'bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-500/20'
+                        : 'bg-slate-900/40 border-slate-850 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                    }`}
+                  >
+                    {genre === 'All' ? 'ทั้งหมด' : genre}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Catalog Grid */}
+            <div>
+              <div className="flex justify-between items-center mb-4">
+                <span className="text-xs font-extrabold text-slate-500">พบทั้งหมด {filteredCatalog.length} รายการ</span>
+              </div>
+
+              {filteredCatalog.length === 0 ? (
+                <div className="text-center py-24 glass-panel rounded-3xl border border-slate-900">
+                  <span className="text-5xl block mb-3">🔍</span>
+                  <p className="text-slate-450 font-bold text-base">ไม่พบเกมตามเงื่อนไขที่คุณค้นหา</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                  {filteredCatalog.map((game) => {
+                    const libraryItem = currentLibraryList.find((item) => item.gameId === game.id);
+                    const isInLib = !!libraryItem;
+
+                    return (
+                      <div
+                        key={game.id}
+                        onClick={() => setSelectedGameDetail(game)}
+                        className="glass-card-minimal rounded-3xl overflow-hidden flex flex-col cursor-pointer group relative"
+                      >
+                        {/* Cover Image */}
+                        <div className="aspect-[3/4] w-full overflow-hidden relative custom-placeholder">
+                          {game.coverUrl ? (
+                            <img
+                              src={game.coverUrl}
+                              alt={game.title}
+                              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center font-black text-slate-600 text-2xl">
+                              {getInitials(game.title)}
+                            </div>
+                          )}
+                          <div className="absolute top-3 right-3 bg-slate-955/90 backdrop-blur border border-white/10 px-2 py-0.5 rounded-lg text-xs font-extrabold text-blue-400">
+                            v{game.version}
+                          </div>
+                        </div>
+
+                        {/* Details */}
+                        <div className="p-4.5 flex flex-col flex-1 gap-2.5">
+                          <div>
+                            <h3 className="text-base font-extrabold text-slate-100 truncate group-hover:text-blue-400 transition-colors" title={game.title}>
+                              {game.title}
+                            </h3>
+                            <span className="text-xs text-slate-455 font-semibold block mt-0.5">โดย {game.developer}</span>
+                          </div>
+
+                          <div className="flex items-center justify-between mt-auto pt-2.5 border-t border-slate-900">
+                            {renderReviewStars(game.rating)}
+                            <span className="text-xs font-extrabold text-slate-400">{game.rating.toFixed(1)}</span>
+                          </div>
+
+                          {/* Action Button */}
+                          {!isGuest && (
+                            <div className="mt-1" onClick={(e) => e.stopPropagation()}>
+                              {isInLib ? (
+                                <div className="w-full h-9 bg-emerald-500/10 border border-emerald-500/25 rounded-xl flex items-center justify-center gap-1.5 text-xs text-emerald-450 font-black">
+                                  <span>✔️ ในคลัง: {libraryItem.status}</span>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => handleAddToLibrary(game)}
+                                  className="w-full h-9 bg-blue-600/10 hover:bg-blue-600 hover:text-white border border-blue-500/25 rounded-xl flex items-center justify-center text-xs text-blue-400 font-bold transition-all cursor-pointer"
+                                >
+                                  ➕ เพิ่มเกมเข้าคลัง
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* MY LIBRARY (Compact Layout & Card Grid) */}
+        {activeTab === 'local' && !isGuest && (
+          <div className="max-w-4xl mx-auto w-full animate-fade-in-up flex flex-col gap-6">
+            
+            {/* User Library Stats Dashboard */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="glass-panel p-4.5 rounded-2xl flex flex-col items-center justify-center text-center">
+                <span className="text-slate-450 text-xs font-semibold mb-1">วางแผนจะเล่น</span>
+                <span className="text-2xl font-black text-slate-200">{libraryStats.planToPlay}</span>
+              </div>
+              <div className="glass-panel p-4.5 rounded-2xl flex flex-col items-center justify-center text-center">
+                <span className="text-emerald-400 text-xs font-semibold mb-1">กำลังเล่น</span>
+                <span className="text-2xl font-black text-emerald-400">{libraryStats.playing}</span>
+              </div>
+              <div className="glass-panel p-4.5 rounded-2xl flex flex-col items-center justify-center text-center">
+                <span className="text-blue-400 text-xs font-semibold mb-1">จบแล้ว</span>
+                <span className="text-2xl font-black text-blue-400">{libraryStats.completed}</span>
+              </div>
+              <div className="glass-panel p-4.5 rounded-2xl flex flex-col items-center justify-center text-center">
+                <span className="text-amber-400 text-xs font-semibold mb-1">เวลาเล่นสะสม</span>
+                <span className="text-xl font-black text-amber-400">{libraryStats.totalPlayTime.toFixed(1)} ชม.</span>
+              </div>
+            </div>
+
+            {/* Filters panel */}
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col sm:flex-row gap-4 items-stretch justify-between w-full">
+                <div className="flex flex-col sm:flex-row gap-4 flex-1">
+                  <div className="relative flex-1">
+                    <span className="absolute inset-y-0 left-4 flex items-center text-slate-500">🔍</span>
+                    <input
+                      type="text"
+                      placeholder="ค้นหาชื่อเกมในคลังของคุณ..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="glass-input w-full h-11 pl-11 pr-4 text-sm rounded-xl focus:outline-none"
+                    />
+                  </div>
+                  
+                  {/* Library Tag Filter Button & Dropdown */}
+                  <div className="relative w-full sm:w-56 library-tag-filter-container">
+                    <button
+                      type="button"
+                      onClick={() => setShowTagFilterLibrary(!showTagFilterLibrary)}
+                      className={`glass-input w-full h-11 px-4 text-sm rounded-xl flex items-center justify-between cursor-pointer transition-colors ${
+                        selectedLibraryTags.length > 0 ? 'border-blue-500 text-blue-400 bg-blue-500/5' : 'text-slate-400'
+                      }`}
+                    >
+                      <span className="truncate">
+                        {selectedLibraryTags.length > 0 ? `ตัวกรองแท็ก (${selectedLibraryTags.length})` : '🔍 เลือกแท็กแนวเกม...'}
+                      </span>
+                      <span className="text-xs">▼</span>
+                    </button>
+                    
+                    {showTagFilterLibrary && (
+                      <div className="absolute left-0 mt-2 w-72 glass-panel border border-slate-805 rounded-2xl shadow-2xl z-50 p-4 animate-fade-in-up">
+                        <input
+                          type="text"
+                          placeholder="พิมพ์ค้นหาแท็ก..."
+                          value={libraryTagSearch}
+                          onChange={(e) => setLibraryTagSearch(e.target.value)}
+                          className="glass-input w-full h-8 px-2.5 text-xs rounded-lg mb-3"
+                        />
+                        
+                        <div className="max-h-48 overflow-y-auto flex flex-col gap-2 pr-1 scrollbar-thin">
+                          {allUniqueLibraryTags
+                            .filter(tag => tag.toLowerCase().includes(libraryTagSearch.toLowerCase()))
+                            .map(tag => {
+                              const isChecked = selectedLibraryTags.includes(tag);
+                              return (
+                                <label key={tag} className="flex items-center gap-2.5 text-xs text-slate-300 hover:text-slate-100 cursor-pointer py-0.5">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => {
+                                      if (isChecked) {
+                                        setSelectedLibraryTags(selectedLibraryTags.filter(t => t !== tag));
+                                      } else {
+                                        setSelectedLibraryTags([...selectedLibraryTags, tag]);
+                                      }
+                                    }}
+                                    className="w-4 h-4 accent-blue-500 rounded border-slate-700 bg-slate-900 cursor-pointer"
+                                  />
+                                  <span className="font-medium">#{tag}</span>
+                                </label>
+                              );
+                            })}
+                          {allUniqueLibraryTags.filter(tag => tag.toLowerCase().includes(libraryTagSearch.toLowerCase())).length === 0 && (
+                            <div className="text-center text-slate-550 py-3 text-xs italic">ไม่พบชื่อแท็กนี้</div>
+                          )}
+                        </div>
+                        
+                        <div className="mt-3.5 pt-2 border-t border-slate-900/60 flex justify-between gap-2">
+                          {selectedLibraryTags.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedLibraryTags([])}
+                              className="text-[10px] font-bold text-red-400 hover:underline cursor-pointer"
+                            >
+                              ล้างทั้งหมด
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setShowTagFilterLibrary(false)}
+                            className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-white text-[10px] font-bold px-3 py-1 rounded-md ml-auto cursor-pointer"
+                          >
+                            ปิด
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  onClick={openAddCustom}
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-5 h-11 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-blue-500/25 active:scale-95 text-sm cursor-pointer justify-center"
+                >
+                  ➕ เพิ่มเกมกำหนดเอง
+                </button>
+              </div>
+
+              {/* Status Filters */}
+              <div className="flex flex-col gap-2 pb-1.5">
+                <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin">
+                  <button
+                    onClick={() => setLibraryStatusFilter('All')}
+                    className={`px-4 py-2 text-xs font-bold rounded-full border transition-all shrink-0 cursor-pointer ${
+                      libraryStatusFilter === 'All'
+                        ? 'bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-500/20'
+                        : 'bg-slate-900/40 border-slate-850 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                    }`}
+                  >
+                    ทั้งหมด ({currentLibraryList.length})
+                  </button>
+                  {STATUS_CATEGORIES.map((cat) => {
+                    const count = currentLibraryList.filter((item) => item.status === cat).length;
+                    return (
+                      <button
+                        key={cat}
+                        onClick={() => setLibraryStatusFilter(cat)}
+                        className={`px-4 py-2 text-xs font-bold rounded-full border transition-all shrink-0 cursor-pointer ${
+                          libraryStatusFilter === cat
+                            ? 'bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-500/20'
+                            : 'bg-slate-900/40 border-slate-850 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                        }`}
+                      >
+                        {cat} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* My Library Vertical Grid of Cards */}
+            <div>
+              <div className="flex justify-between items-center mb-4">
+                <span className="text-xs font-extrabold text-slate-500">แสดงคลังข้อมูล {filteredLibrary.length} รายการ</span>
+              </div>
+
+              {filteredLibrary.length === 0 ? (
+                <div className="text-center py-20 glass-panel rounded-3xl border border-slate-900">
+                  <span className="text-4xl block mb-2">📚</span>
+                  <p className="text-slate-450 font-bold text-sm">ไม่พบเกมตามเงื่อนไขในคลังส่วนตัวของคุณ</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                  {filteredLibrary.map((item) => {
+                    const origGame = officialGames.find((og) => og.id === item.gameId);
+                    return (
+                      <div
+                        key={item.gameId}
+                        onClick={() => {
+                          setSelectedGameDetail(origGame || {
+                            id: item.gameId,
+                            title: item.title,
+                            developer: item.developer,
+                            version: item.version,
+                            overview: item.overview,
+                            tags: item.tags,
+                            rating: item.rating || 5,
+                            coverUrl: item.coverUrl,
+                            patreonUrl: item.patreonUrl,
+                            buyUrl: item.buyUrl,
+                            socialUrl: item.socialUrl,
+                            screenshots: item.screenshots || []
+                          });
+                        }}
+                        className="glass-card-minimal rounded-3xl overflow-hidden flex flex-col cursor-pointer group relative"
+                      >
+                        {/* Cover Image aspect-[3/4] */}
+                        <div className="aspect-[3/4] w-full overflow-hidden relative custom-placeholder">
+                          {item.coverUrl ? (
+                            <img
+                              src={item.coverUrl}
+                              alt={item.title}
+                              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center font-black text-slate-600 text-2xl">
+                              {getInitials(item.title)}
+                            </div>
+                          )}
+                          
+                          {/* Badges on cover */}
+                          <div className="absolute top-3 right-3 bg-slate-955/90 backdrop-blur border border-white/10 px-2 py-0.5 rounded-lg text-xs font-extrabold text-blue-400">
+                            v{item.version}
+                          </div>
+                          
+                          {item.isCustom && (
+                            <div className="absolute top-3 left-3 bg-amber-500/90 backdrop-blur border border-white/10 px-2 py-0.5 rounded-lg text-[9px] font-black text-white uppercase tracking-wider">
+                              กำหนดเอง
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Card Body */}
+                        <div className="p-4.5 flex flex-col flex-1 gap-2.5">
+                          <div>
+                            <h3 className="text-base font-extrabold text-slate-100 truncate group-hover:text-blue-400 transition-colors" title={item.title}>
+                              {item.title}
+                            </h3>
+                            <span className="text-xs text-slate-455 font-semibold block mt-0.5">โดย {item.developer}</span>
+                          </div>
+
+                          {/* Inline Controls */}
+                          <div className="flex flex-col gap-2 pt-1 border-t border-slate-900/60">
+                            
+                            {/* Status selector */}
+                            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                              <select
+                                value={item.status}
+                                onChange={(e) => handleUpdateItemStatus(item.gameId, e.target.value)}
+                                className={`h-8 px-2.5 text-xs font-bold rounded-lg border cursor-pointer w-full focus:ring-1 focus:ring-blue-500/20 ${
+                                  STATUS_COLORS[item.status] || 'text-slate-400 bg-slate-955 border-slate-900'
+                                }`}
+                              >
+                                {STATUS_CATEGORIES.map((cat) => (
+                                  <option key={cat} value={cat} className="bg-slate-955 text-slate-200">
+                                    {cat}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* Playtime and Star Rating */}
+                            <div className="flex items-center justify-between gap-1.5" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center gap-1.5 text-xs text-slate-455">
+                                <span className="font-bold">เวลา:</span>
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  min="0"
+                                  value={item.playTime || 0}
+                                  onChange={(e) => handleUpdateItemPlayTime(item.gameId, e.target.value)}
+                                  className="glass-input w-12 h-7 text-center rounded-lg text-slate-200 text-xs focus:outline-none"
+                                />
+                                <span className="font-bold">ชม.</span>
+                              </div>
+                              
+                              <div className="flex items-center">
+                                {renderReviewStars(item.rating || 0, true, (rating) => handleUpdateItemRating(item.gameId, rating))}
+                              </div>
+                            </div>
+
+                            {/* Quick Note Input */}
+                            <div className="w-full" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="text"
+                                value={item.notes || ''}
+                                onChange={(e) => handleUpdateItemNotes(item.gameId, e.target.value)}
+                                className="glass-input w-full px-2.5 py-1.5 text-[11px] rounded-lg text-slate-350 placeholder-slate-600 focus:outline-none"
+                                placeholder="พิมพ์โน้ตย่อด่วน..."
+                              />
+                            </div>
+                          </div>
+
+                          {/* Action Buttons (Text only, no emoji icons only) */}
+                          <div className="flex items-center justify-between gap-1 mt-auto pt-2.5 border-t border-slate-900/60" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={() => openEditLocalItem(item)}
+                              className="flex-grow py-1 px-1 text-[11px] font-black rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-850 hover:border-slate-700 text-slate-300 transition-colors cursor-pointer text-center"
+                            >
+                              แก้ไข
+                            </button>
+                            <button
+                              onClick={() => openReportGame(item)}
+                              className="flex-grow py-1 px-1 text-[11px] font-black rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-850 hover:border-slate-700 text-amber-450 transition-colors cursor-pointer text-center"
+                            >
+                              รายงาน
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (confirm('คุณต้องการลบเกมนี้ออกจากคลังประวัติส่วนตัวหรือไม่?')) {
+                                  handleDeleteLibraryItem(item.gameId);
+                                }
+                              }}
+                              className="flex-grow py-1 px-1 text-[11px] font-black rounded-lg bg-red-955/25 border border-red-900/30 hover:bg-red-900/40 hover:border-red-750/50 text-red-400 transition-colors cursor-pointer text-center"
+                            >
+                              ลบเกม
+                            </button>
+                          </div>
+
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+          </div>
+        )}
+
+        {/* ADMIN TAB */}
+        {activeTab === 'admin' && isAdmin && (
+          <div className="flex flex-col gap-6 animate-fade-in-up">
+            
+            {/* System Stats Dashboard */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="glass-panel p-5.5 rounded-2xl flex items-center gap-4.5 border-l-4 border-l-blue-500">
+                <span className="text-3xl bg-blue-500/10 w-12 h-12 rounded-xl flex items-center justify-center">👥</span>
+                <div>
+                  <span className="text-slate-400 text-xs font-bold block mb-0.5">ผู้ใช้งานทั้งหมด</span>
+                  <span className="text-2xl font-black text-slate-100">{initialMockUsers.length}</span>
+                </div>
+              </div>
+              <div className="glass-panel p-5.5 rounded-2xl flex items-center gap-4.5 border-l-4 border-l-emerald-500">
+                <span className="text-3xl bg-emerald-500/10 w-12 h-12 rounded-xl flex items-center justify-center">🎮</span>
+                <div>
+                  <span className="text-slate-400 text-xs font-bold block mb-0.5">เกมทั้งหมดในระบบ</span>
+                  <span className="text-2xl font-black text-slate-100">{officialGames.length}</span>
+                </div>
+              </div>
+              <div className="glass-panel p-5.5 rounded-2xl flex items-center gap-4.5 border-l-4 border-l-amber-500">
+                <span className="text-3xl bg-amber-500/10 w-12 h-12 rounded-xl flex items-center justify-center">🚩</span>
+                <div>
+                  <span className="text-slate-400 text-xs font-bold block mb-0.5">รายงานรออนุมัติ</span>
+                  <span className="text-2xl font-black text-slate-100">
+                    {reports.filter(r => r.status === 'pending').length}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Announcement Ticker and Admin actions */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Ticker settings */}
+              <div className="lg:col-span-2 glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
+                <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
+                  📢 การจัดการแถบวิ่งประกาศ
+                </h3>
+                <div className="flex flex-col gap-3.5">
+                  <div>
+                    <label className="text-xs text-slate-400 font-bold block mb-1">ข้อความประกาศวิ่ง</label>
+                    <input
+                      type="text"
+                      value={tempTickerMessage}
+                      onChange={(e) => setTempTickerMessage(e.target.value)}
+                      className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                      placeholder="พิมพ์หัวข้อหรือคำเตือนวิ่งประกาศ..."
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="show-ticker"
+                      checked={tempShowTicker}
+                      onChange={(e) => setTempShowTicker(e.target.checked)}
+                      className="w-5 h-5 accent-blue-500 rounded border border-slate-700 bg-slate-900 cursor-pointer"
+                    />
+                    <label htmlFor="show-ticker" className="text-sm font-semibold text-slate-355 cursor-pointer">
+                      เปิดใช้งานแถบประกาศบนเว็บไซต์
+                    </label>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setTickerMessage(tempTickerMessage);
+                      setShowTicker(tempShowTicker);
+                      setToastMessage('บันทึกและปรับปรุงแถบประกาศวิ่งสำเร็จ!');
+                    }}
+                    className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold h-10 px-5 rounded-xl cursor-pointer transition-all self-start"
+                  >
+                    💾 บันทึกการเปลี่ยนแปลง
+                  </button>
+                </div>
+              </div>
+              <div className="glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
+                <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
+                  ⚙️ ตั้งค่าระบบเว็บไซต์
+                </h3>
+                <div className="flex flex-col gap-3.5">
+                  <div>
+                    <label className="text-xs text-slate-400 font-bold block mb-1">ชื่อเว็บไซต์</label>
+                    <input
+                      type="text"
+                      value={webTitle}
+                      onChange={(e) => setWebTitle(e.target.value)}
+                      className="glass-input w-full h-10 px-3 text-xs rounded-xl text-slate-200"
+                      placeholder="พิมพ์ชื่อเว็บไซต์..."
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-400 font-bold block mb-1">ประเภทโลโก้</label>
+                    <select
+                      value={webLogoType}
+                      onChange={(e) => setWebLogoType(e.target.value)}
+                      className="glass-input w-full h-10 px-3 text-xs rounded-xl text-slate-200 cursor-pointer"
+                    >
+                      <option value="text">โลโก้ข้อความ</option>
+                      <option value="image">โลโก้รูปภาพ</option>
+                    </select>
+                  </div>
+                  {webLogoType === 'text' ? (
+                    <div>
+                      <label className="text-xs text-slate-400 font-bold block mb-1">ตัวอักษรโลโก้</label>
+                      <input
+                        type="text"
+                        value={webLogo.startsWith('data:image') ? 'AVN' : webLogo}
+                        onChange={(e) => setWebLogo(e.target.value)}
+                        className="glass-input w-full h-10 px-3 text-xs rounded-xl text-slate-200"
+                        placeholder="พิมพ์ตัวอักษรโลโก้..."
+                      />
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="text-xs text-slate-400 font-bold block mb-1">อัปโหลดไฟล์รูปภาพโลโก้</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          id="logo-upload-input"
+                          onChange={async (e) => {
+                            const file = e.target.files[0];
+                            if (file) {
+                              try {
+                                const base64 = await readFileAsBase64(file);
+                                setWebLogo(base64);
+                                setToastMessage('อัปโหลดไฟล์รูปภาพโลโก้สำเร็จ!');
+                              } catch {
+                                setToastMessage('อัปโหลดรูปภาพล้มเหลว');
+                              }
+                            }
+                          }}
+                          className="hidden"
+                        />
+                        <label
+                          htmlFor="logo-upload-input"
+                          className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 text-xs font-bold px-3 py-2 rounded-xl cursor-pointer transition-colors"
+                        >
+                          เลือกรูปภาพ...
+                        </label>
+                        {webLogo && webLogo.startsWith('data:image') && (
+                          <img src={webLogo} alt="Logo preview" className="w-8 h-8 rounded-lg object-cover border border-white/10" />
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Inbox Reports Manager */}
+            <div className="glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
+              <div className="flex justify-between items-center border-b border-slate-900 pb-3">
+                <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
+                  📥 กล่องข้อร้องเรียนและเสนอแนะ ({reports.filter(r => r.status === 'pending').length})
+                </h3>
+
+                <div className="flex items-center gap-2 bg-slate-950 p-1 rounded-xl">
+                  <button
+                    onClick={() => setAdminReportTab('update')}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      adminReportTab === 'update' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    อัปเดตเวอร์ชัน ({pendingUpdates.length})
+                  </button>
+                  <button
+                    onClick={() => setAdminReportTab('error')}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      adminReportTab === 'error' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    ข้อมูลผิดพลาด ({pendingErrors.length})
+                  </button>
+                  <button
+                    onClick={() => setAdminReportTab('new')}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      adminReportTab === 'new' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    เสนอเกมใหม่ ({pendingNews.length})
+                  </button>
+                </div>
+              </div>
+
+              {/* Inbox lists */}
+              <div className="flex flex-col gap-3">
+                {/* 1. UPDATE TAB */}
+                {adminReportTab === 'update' && (
+                  pendingUpdates.length === 0 ? (
+                    <div className="text-center py-10 text-slate-500 text-xs">ไม่มีรายการการร้องเรียนเสนออัปเดต</div>
+                  ) : (
+                    pendingUpdates.map((r) => (
+                      <div key={r.id} className="p-4 bg-slate-900/60 border border-slate-800 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-xs">
+                        <div className="flex-grow">
+                          <div className="flex items-center gap-2">
+                            <span className="font-extrabold text-slate-200 text-sm">{r.gameTitle}</span>
+                            <span className="text-[10px] text-slate-400">จาก v{r.currentVersion} ➔ <span className="text-emerald-455 font-bold">v{r.reportedVersion}</span></span>
+                          </div>
+                          <p className="mt-1 text-slate-400 italic">" {r.description} "</p>
+                          <span className="text-[10px] text-slate-500 block mt-2">รายงานโดย: {r.username} เมื่อ {formatThaiDate(r.timestamp)}</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5 shrink-0 self-end sm:self-center">
+                          <button
+                            onClick={() => handleApproveReport(r)}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-2.5 py-1.5 rounded-lg cursor-pointer transition-all"
+                          >
+                            อนุมัติ
+                          </button>
+                          <button
+                            onClick={() => handleIgnoreReport(r.id)}
+                            className="bg-slate-800 hover:bg-slate-700 text-slate-400 font-bold px-2.5 py-1.5 rounded-lg cursor-pointer transition-all"
+                          >
+                            เพิกเฉย
+                          </button>
+                          <button
+                            onClick={() => handleRejectReport(r.id)}
+                            className="bg-red-950/45 hover:bg-red-900/50 text-red-400 border border-red-900/30 font-bold px-2.5 py-1.5 rounded-lg cursor-pointer transition-all"
+                          >
+                            ปฏิเสธ
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )
+                )}
+
+                {/* 2. ERROR TAB */}
+                {adminReportTab === 'error' && (
+                  pendingErrors.length === 0 ? (
+                    <div className="text-center py-10 text-slate-500 text-xs">ไม่มีรายการร้องเรียนข้อผิดพลาดข้อมูล</div>
+                  ) : (
+                    pendingErrors.map((r) => (
+                      <div key={r.id} className="p-4 bg-slate-900/60 border border-slate-800 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-xs">
+                        <div className="flex-grow">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-extrabold text-slate-200 text-sm">{r.gameTitle}</span>
+                            <span className="bg-red-500/10 text-red-400 font-bold px-1.5 py-0.5 rounded text-[10px] uppercase">
+                              {r.errorStatus || 'ผิดพลาด'}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-slate-400 italic">" {r.description} "</p>
+                          {r.reportUrls && (
+                            <span className="text-[10px] text-blue-400 block mt-1">แหล่งอ้างอิง: <a href={r.reportUrls} target="_blank" rel="noreferrer" className="underline">{r.reportUrls}</a></span>
+                          )}
+                          {r.reportTags && (
+                            <span className="text-[10px] text-slate-400 block mt-1">แท็กที่ควรเพิ่ม: {r.reportTags}</span>
+                          )}
+                          <span className="text-[10px] text-slate-500 block mt-2">รายงานโดย: {r.username} เมื่อ {formatThaiDate(r.timestamp)}</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5 shrink-0 self-end sm:self-center">
+                          <button
+                            onClick={() => handleApproveReport(r)}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-2.5 py-1.5 rounded-lg cursor-pointer transition-all"
+                          >
+                            อนุมัติ
+                          </button>
+                          <button
+                            onClick={() => handleIgnoreReport(r.id)}
+                            className="bg-slate-800 hover:bg-slate-700 text-slate-400 font-bold px-2.5 py-1.5 rounded-lg cursor-pointer transition-all"
+                          >
+                            เพิกเฉย
+                          </button>
+                          <button
+                            onClick={() => handleRejectReport(r.id)}
+                            className="bg-red-955/45 hover:bg-red-900/50 text-red-400 border border-red-900/30 font-bold px-2.5 py-1.5 rounded-lg cursor-pointer transition-all"
+                          >
+                            ปฏิเสธ
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )
+                )}
+
+                {/* 3. NEW TAB */}
+                {adminReportTab === 'new' && (
+                  pendingNews.length === 0 ? (
+                    <div className="text-center py-10 text-slate-500 text-xs">ไม่มีรายการร้องเรียนเสนอเกมใหม่</div>
+                  ) : (
+                    pendingNews.map((r) => (
+                      <div key={r.id} className="p-4 bg-slate-900/60 border border-slate-800 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-xs">
+                        <div className="flex-grow">
+                          <span className="font-extrabold text-slate-200 text-sm">{r.gameTitle}</span>
+                          <span className="text-slate-450 ml-2">โดย {r.developer} (v{r.reportedVersion})</span>
+                          <p className="mt-1 text-slate-450">เรื่องย่อเสนอแนะ: {r.overview}</p>
+                          <span className="text-[10px] text-slate-500 block mt-2">ร้องขอโดย: {r.username} เมื่อ {formatThaiDate(r.timestamp)}</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5 shrink-0 self-end sm:self-center">
+                          <button
+                            onClick={() => handleApproveReport(r)}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-2.5 py-1.5 rounded-lg cursor-pointer transition-all"
+                          >
+                            อนุมัติ
+                          </button>
+                          <button
+                            onClick={() => handleIgnoreReport(r.id)}
+                            className="bg-slate-800 hover:bg-slate-700 text-slate-400 font-bold px-2.5 py-1.5 rounded-lg cursor-pointer transition-all"
+                          >
+                            เพิกเฉย
+                          </button>
+                          <button
+                            onClick={() => handleRejectReport(r.id)}
+                            className="bg-red-955/45 hover:bg-red-900/50 text-red-400 border border-red-900/30 font-bold px-2.5 py-1.5 rounded-lg cursor-pointer transition-all"
+                          >
+                            ปฏิเสธ
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )
+                )}
+              </div>
+            </div>
+
+            {/* Catalog Manager Table */}
+            <div className="glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
+              <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+                <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
+                  🗄️ ตัวจัดการแคตตาล็อกระบบหลัก ({officialGames.length})
+                </h3>
+
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                  <input
+                    type="text"
+                    placeholder="ค้นหาชื่อเกมเพื่อจัดการ..."
+                    value={adminCatalogSearch}
+                    onChange={(e) => setAdminCatalogSearch(e.target.value)}
+                    className="glass-input h-10 px-4 text-xs rounded-xl focus:outline-none w-full sm:w-64"
+                  />
+                  <button
+                    onClick={() => {
+                      handleResetAdminForm();
+                      setAdminFormMode('add');
+                      setAdminAddGameOpen(true);
+                    }}
+                    className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 h-10 rounded-xl flex items-center gap-1.5 text-xs transition-all cursor-pointer shrink-0"
+                  >
+                    ➕ เพิ่มเกมใหม่
+                  </button>
+                </div>
+              </div>
+
+              {/* Table Container */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-900 text-slate-400 font-bold">
+                      <th className="pb-3 pl-2">รูปปก</th>
+                      <th className="pb-3">ชื่อเกม</th>
+                      <th className="pb-3">ผู้พัฒนา</th>
+                      <th className="pb-3">เวอร์ชัน</th>
+                      <th className="pb-3">คะแนนรีวิว</th>
+                      <th className="pb-3 text-right pr-2">การจัดการ</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-900/60">
+                    {adminFilteredCatalog.map((game) => (
+                      <tr key={game.id} className="hover:bg-slate-900/30 transition-colors">
+                        <td className="py-2.5 pl-2">
+                          <div className="w-8 h-10 rounded-lg overflow-hidden custom-placeholder border border-white/5">
+                            {game.coverUrl ? (
+                              <img src={game.coverUrl} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-[8px] font-black text-slate-650">
+                                {getInitials(game.title)}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-2.5 font-bold text-slate-200">{game.title}</td>
+                        <td className="py-2.5 text-slate-400">{game.developer}</td>
+                        <td className="py-2.5 text-blue-400 font-extrabold">v{game.version}</td>
+                        <td className="py-2.5 font-bold text-amber-400">★ {game.rating.toFixed(1)}</td>
+                        <td className="py-2.5 text-right pr-2">
+                          <div className="inline-flex items-center gap-1">
+                            <button
+                              onClick={() => {
+                                handleSelectGameForEdit(game);
+                                setAdminEditGameOpen(true);
+                              }}
+                              className="w-7 h-7 bg-slate-900 hover:bg-slate-800 rounded border border-slate-800 flex items-center justify-center cursor-pointer"
+                              title="แก้ไขเกม"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              onClick={() => handleDeleteOfficialGame(game.id)}
+                              className="w-7 h-7 bg-red-955/25 border border-red-900/30 text-red-400 hover:bg-red-900/40 rounded flex items-center justify-center cursor-pointer"
+                              title="ลบเกม"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+      </main>
+
+      {/* --- ALL POPUP MODALS --- */}
+
+      {/* 1. GAME DETAIL MODAL */}
+      {selectedGameDetail && (
+        <div className="modal-overlay" onClick={() => setSelectedGameDetail(null)}>
+          <div className="modal-content w-full max-w-2xl bg-slate-950/95 border border-slate-850 rounded-3xl p-6 relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            
+            <button
+              onClick={() => setSelectedGameDetail(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-850 w-9 h-9 border border-slate-800 rounded-full flex items-center justify-center cursor-pointer transition-colors"
+            >
+              ✕
+            </button>
+
+            {/* Content layout */}
+            <div className="flex flex-col md:flex-row gap-6">
+              {/* Left Column: Cover & Links */}
+              <div className="w-full md:w-56 shrink-0 flex flex-col gap-4">
+                <div className="aspect-[3/4] w-full rounded-2xl overflow-hidden custom-placeholder border border-white/5 shadow-lg relative">
+                  {selectedGameDetail.coverUrl ? (
+                    <img src={selectedGameDetail.coverUrl} alt={selectedGameDetail.title} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center font-black text-slate-600 text-3xl">
+                      {getInitials(selectedGameDetail.title)}
+                    </div>
+                  )}
+                  <div className="absolute top-2.5 right-2.5 bg-slate-950/85 backdrop-blur px-2 py-0.5 rounded-lg text-xs font-bold text-blue-400">
+                    v{selectedGameDetail.version}
+                  </div>
+                </div>
+
+                {/* External links */}
+                <div className="flex flex-col gap-2">
+                  {selectedGameDetail.patreonUrl && (
+                    <a
+                      href={selectedGameDetail.patreonUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="bg-orange-600 hover:bg-orange-500 text-white font-bold h-10 px-4 rounded-xl flex items-center justify-center gap-1.5 text-xs transition-colors shadow shadow-orange-600/20"
+                    >
+                      <span>🧡 Patreon</span>
+                    </a>
+                  )}
+                  {selectedGameDetail.buyUrl && (
+                    <a
+                      href={selectedGameDetail.buyUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="bg-blue-600 hover:bg-blue-500 text-white font-bold h-10 px-4 rounded-xl flex items-center justify-center gap-1.5 text-xs transition-colors shadow shadow-blue-600/20"
+                    >
+                      <span>🛒 Steam / Buy</span>
+                    </a>
+                  )}
+                  {selectedGameDetail.socialUrl && (
+                    <a
+                      href={selectedGameDetail.socialUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="bg-sky-600 hover:bg-sky-500 text-white font-bold h-10 px-4 rounded-xl flex items-center justify-center gap-1.5 text-xs transition-colors shadow shadow-sky-600/20"
+                    >
+                      <span>🐦 Twitter / Social</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* Right Column: Information details */}
+              <div className="flex-1 flex flex-col gap-4">
+                
+                {/* Status Dropdown next/before Game Title */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {!isGuest && (
+                      <select
+                        value={(() => {
+                          const item = currentLibraryList.find(i => i.gameId === selectedGameDetail.id);
+                          return item ? item.status : 'ยังไม่ได้เพิ่ม';
+                        })()}
+                        onChange={(e) => {
+                          const newStatus = e.target.value;
+                          if (newStatus === 'ยังไม่ได้เพิ่ม') {
+                            handleDeleteLibraryItem(selectedGameDetail.id);
+                          } else {
+                            handleAddToLibrary(selectedGameDetail, newStatus);
+                          }
+                        }}
+                        className={`h-9 px-3 text-xs font-bold rounded-lg border cursor-pointer ${
+                          currentLibraryList.some(i => i.gameId === selectedGameDetail.id)
+                            ? STATUS_COLORS[currentLibraryList.find(i => i.gameId === selectedGameDetail.id).status]
+                            : 'text-slate-400 border-slate-700 bg-slate-900'
+                        }`}
+                      >
+                        <option value="ยังไม่ได้เพิ่ม" className="bg-slate-955 text-slate-400">➕ ยังไม่ได้เพิ่มในคลัง</option>
+                        {STATUS_CATEGORIES.map(cat => (
+                          <option key={cat} value={cat} className="bg-slate-955 text-slate-200">
+                            {cat}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    <h2 className="text-xl md:text-2xl font-black text-slate-100">{selectedGameDetail.title}</h2>
+                  </div>
+                  <span className="text-xs text-slate-455 font-bold">โดย {selectedGameDetail.developer}</span>
+                </div>
+
+                {!isGuest && !isAdmin && !currentLibraryList.some(i => i.gameId === selectedGameDetail.id) && (
+                  <button
+                    onClick={() => handleAddToLibrary(selectedGameDetail, 'วางแผนจะเล่น')}
+                    className="bg-blue-600 hover:bg-blue-500 text-white font-bold h-10 px-4 rounded-xl flex items-center justify-center gap-1.5 text-xs transition-colors shadow-lg shadow-blue-500/20 w-full"
+                  >
+                    ➕ เพิ่มเกมเข้าคลัง
+                  </button>
+                )}
+
+                <div className="flex items-center gap-2">
+                  {renderReviewStars(selectedGameDetail.rating)}
+                  <span className="text-xs font-extrabold text-slate-400">{selectedGameDetail.rating.toFixed(1)}</span>
+                </div>
+
+                {/* Tags */}
+                {selectedGameDetail.tags && selectedGameDetail.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedGameDetail.tags.map((tag) => (
+                      <span key={tag} className="text-[10px] font-bold bg-slate-900 text-blue-400 px-2 py-0.5 rounded-md border border-slate-850">
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Overview */}
+                <div>
+                  <h4 className="text-xs font-bold text-slate-400 mb-1">เรื่องย่ออย่างย่อ:</h4>
+                  <p className="text-xs text-slate-300 leading-relaxed bg-slate-900/40 border border-slate-900 p-3.5 rounded-2xl">
+                    {selectedGameDetail.overview}
+                  </p>
+                </div>
+
+                {/* 3. SCREENSHOT SECTION (Carousel / Slider) */}
+                <div>
+                  <h4 className="text-xs font-bold text-slate-400 mb-2">ภาพตัวอย่างเกม (Screenshots):</h4>
+                  {(() => {
+                    const screenshotsList = (selectedGameDetail.screenshots && selectedGameDetail.screenshots.length > 0)
+                      ? selectedGameDetail.screenshots
+                      : (!selectedGameDetail.id.startsWith('custom-') ? OFFICIAL_SCREENSHOT_PLACEHOLDERS : []);
+
+                    if (screenshotsList.length === 0) {
+                      return (
+                        <div className="text-center py-6 bg-slate-900/25 border border-dashed border-slate-800 rounded-2xl">
+                          <span className="text-slate-500 text-xs block">ไม่มีภาพตัวอย่างเกม (สามารถอัปโหลดได้ในเมนูแก้ไขประวัติ)</span>
+                        </div>
+                      );
+                    }
+
+                    // Safeguard index bounds
+                    const validIndex = activeScreenshotIndex >= screenshotsList.length ? 0 : activeScreenshotIndex;
+                    const currentImg = screenshotsList[validIndex];
+
+                    return (
+                      <div className="flex flex-col gap-2">
+                        {/* Large Image View */}
+                        <div className="aspect-video w-full rounded-2xl overflow-hidden border border-slate-800 relative group bg-slate-950/40">
+                          <img
+                            src={currentImg}
+                            alt="screenshot large"
+                            onClick={() => setActiveScreenshotPreview(currentImg)}
+                            className="w-full h-full object-cover cursor-zoom-in group-hover:scale-[1.01] transition-transform duration-300"
+                          />
+
+                          {/* Left Navigation Arrow */}
+                          {screenshotsList.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveScreenshotIndex((prev) => (prev === 0 ? screenshotsList.length - 1 : prev - 1));
+                              }}
+                              className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-955/80 hover:bg-slate-900 border border-slate-800 text-white font-bold flex items-center justify-center cursor-pointer transition-all hover:scale-105 active:scale-95 z-10"
+                            >
+                              &lt;
+                            </button>
+                          )}
+
+                          {/* Right Navigation Arrow */}
+                          {screenshotsList.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveScreenshotIndex((prev) => (prev === screenshotsList.length - 1 ? 0 : prev + 1));
+                              }}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-955/80 hover:bg-slate-900 border border-slate-800 text-white font-bold flex items-center justify-center cursor-pointer transition-all hover:scale-105 active:scale-95 z-10"
+                            >
+                              &gt;
+                            </button>
+                          )}
+
+                          {/* Counter Badge */}
+                          <div className="absolute bottom-3 right-3 bg-slate-955/90 backdrop-blur px-2.5 py-1 rounded-lg text-[10px] font-bold text-slate-300 border border-white/5">
+                            {validIndex + 1} / {screenshotsList.length}
+                          </div>
+                        </div>
+
+                        {/* Thumbnail Navigation */}
+                        {screenshotsList.length > 1 && (
+                          <div className="flex gap-2 overflow-x-auto py-1 scrollbar-thin">
+                            {screenshotsList.map((src, idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => setActiveScreenshotIndex(idx)}
+                                className={`w-16 sm:w-20 aspect-video rounded-lg overflow-hidden border shrink-0 transition-all ${
+                                  validIndex === idx
+                                    ? 'border-blue-500 scale-95 ring-1 ring-blue-500'
+                                    : 'border-slate-850 opacity-60 hover:opacity-100 hover:scale-95'
+                                }`}
+                              >
+                                <img src={src} className="w-full h-full object-cover" alt="" />
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Action footer */}
+                <div className="mt-4 pt-4 border-t border-slate-900 flex justify-between gap-2">
+                  {!isGuest && (
+                    <button
+                      onClick={() => openReportGame(selectedGameDetail)}
+                      className="bg-slate-900 hover:bg-slate-850 text-amber-500 font-bold border border-slate-800 px-4 h-10 rounded-xl flex items-center gap-1.5 text-xs transition-colors cursor-pointer"
+                    >
+                      🚩 รายงานความไม่ถูกต้อง
+                    </button>
+                  )}
+                  
+                  <button
+                    onClick={() => setSelectedGameDetail(null)}
+                    className="bg-slate-900 hover:bg-slate-850 text-slate-300 border border-slate-850 px-5 h-10 rounded-xl font-bold text-xs cursor-pointer ml-auto"
+                  >
+                    ปิดหน้าต่าง
+                  </button>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* 2. IMAGE PREVIEW OVERLAY */}
+      {activeScreenshotPreview && (
+        <div className="modal-overlay" onClick={() => setActiveScreenshotPreview(null)} style={{ zIndex: 999 }}>
+          <div className="relative max-w-5xl max-h-[85vh] w-full flex items-center justify-center p-2" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={activeScreenshotPreview}
+              alt="Screenshot Preview"
+              className="max-w-full max-h-[80vh] rounded-2xl object-contain border border-slate-800 shadow-2xl"
+            />
+            <button
+              onClick={() => setActiveScreenshotPreview(null)}
+              className="absolute -top-12 right-2 text-white bg-slate-900 border border-slate-800 w-9 h-9 rounded-full flex items-center justify-center font-bold cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 3. EDIT LOCAL GAME MODAL */}
+      {editingLocalItem && (
+        <div className="modal-overlay" onClick={() => setEditingLocalItem(null)}>
+          <div className="modal-content w-full max-w-2xl bg-slate-950/95 border border-slate-855 rounded-3xl p-6 relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            
+            <button
+              onClick={() => setEditingLocalItem(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-855 w-9 h-9 border border-slate-855 rounded-full flex items-center justify-center cursor-pointer"
+            >
+              ✕
+            </button>
+
+            <h2 className="text-lg font-black text-slate-100 mb-4 flex items-center gap-2">
+              ✏️ แก้ไขข้อมูลประวัติและข้อมูลเกมในคลัง
+            </h2>
+
+            <form onSubmit={handleSaveLocalEdit} className="flex flex-col gap-4.5">
+              
+              {/* Two columns wrapper */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                
+                {/* 4. LOCK all fields except Notes and Playtime for official games */}
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">
+                    {!editingLocalItem.isCustom && <span className="mr-1">🔒</span>}
+                    ชื่อเกม
+                  </label>
+                  <input
+                    type="text"
+                    value={localTitle}
+                    onChange={(e) => setLocalTitle(e.target.value)}
+                    disabled={!editingLocalItem.isCustom}
+                    className={`glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200 ${
+                      !editingLocalItem.isCustom ? 'bg-slate-900/60 border-slate-900/80 text-slate-500 cursor-not-allowed' : ''
+                    }`}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">
+                    {!editingLocalItem.isCustom && <span className="mr-1">🔒</span>}
+                    ผู้พัฒนา
+                  </label>
+                  <input
+                    type="text"
+                    value={localDeveloper}
+                    onChange={(e) => setLocalDeveloper(e.target.value)}
+                    disabled={!editingLocalItem.isCustom}
+                    className={`glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200 ${
+                      !editingLocalItem.isCustom ? 'bg-slate-900/60 border-slate-900/80 text-slate-500 cursor-not-allowed' : ''
+                    }`}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">
+                    {!editingLocalItem.isCustom && <span className="mr-1">🔒</span>}
+                    เวอร์ชัน
+                  </label>
+                  <input
+                    type="text"
+                    value={localVersion}
+                    onChange={(e) => setLocalVersion(e.target.value)}
+                    disabled={!editingLocalItem.isCustom}
+                    className={`glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200 ${
+                      !editingLocalItem.isCustom ? 'bg-slate-900/60 border-slate-900/80 text-slate-500 cursor-not-allowed' : ''
+                    }`}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">
+                    สถานะการเล่น
+                  </label>
+                  <select
+                    value={localStatus}
+                    onChange={(e) => setLocalStatus(e.target.value)}
+                    className="glass-input w-full h-11 px-3 text-sm rounded-xl text-slate-200"
+                  >
+                    {STATUS_CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Rating component locked / editable */}
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">
+                    {!editingLocalItem.isCustom && <span className="mr-1">🔒</span>}
+                    คะแนนความพึงพอใจ
+                  </label>
+                  <div className="h-11 flex items-center">
+                    {renderReviewStars(
+                      localRating,
+                      editingLocalItem.isCustom, // interactive only if custom
+                      (newStars) => setLocalRating(newStars)
+                    )}
+                  </div>
+                </div>
+
+                {/* Playtime - always editable */}
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">
+                    เวลาเล่นสะสม (ชั่วโมง)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    value={localPlayTime}
+                    onChange={(e) => setLocalPlayTime(e.target.value)}
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                  />
+                </div>
+              </div>
+
+              {/* Cover Upload base64 conversion */}
+              {editingLocalItem.isCustom ? (
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">อัปโหลดรูปปกปกเกมกำหนดเอง</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      id="cover-upload-local"
+                      onChange={handleCoverUpload}
+                      className="hidden"
+                    />
+                    <label
+                      htmlFor="cover-upload-local"
+                      className="bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer border border-slate-800 transition-colors shrink-0"
+                    >
+                      📤 อัปโหลดรูปปก
+                    </label>
+                    {localCoverUrl && (
+                      <span className="text-[10px] text-emerald-400 font-bold">อัปโหลดไฟล์ภาพปก Base64 สำเร็จ</span>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">🔒 รูปปกเกมหลักของระบบ</label>
+                  <p className="text-[10px] text-slate-500 italic">รูปปกถูกควบคุมโดยฐานข้อมูลระบบหลัก หากพบความผิดพลาดโปรดใช้ปุ่ม รายงานความไม่ถูกต้อง</p>
+                </div>
+              )}
+
+              {/* Overview & Tags (locked / editable) */}
+              <div>
+                <label className="text-xs text-slate-400 font-bold block mb-1">
+                  {!editingLocalItem.isCustom && <span className="mr-1">🔒</span>}
+                  รายละเอียดเรื่องย่อ
+                </label>
+                <textarea
+                  value={localOverview}
+                  onChange={(e) => setLocalOverview(e.target.value)}
+                  disabled={!editingLocalItem.isCustom}
+                  className={`glass-input w-full p-4 text-sm rounded-xl h-20 text-slate-200 ${
+                    !editingLocalItem.isCustom ? 'bg-slate-900/60 border-slate-900/80 text-slate-500 cursor-not-allowed' : ''
+                  }`}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400 font-bold block mb-1">
+                  {!editingLocalItem.isCustom && <span className="mr-1">🔒</span>}
+                  แท็กแนวเกม (คั่นด้วยเครื่องหมายจุลภาค)
+                </label>
+                <input
+                  type="text"
+                  value={localTags}
+                  onChange={(e) => setLocalTags(e.target.value)}
+                  disabled={!editingLocalItem.isCustom}
+                  placeholder="เช่น Action, Comedy, Fantasy"
+                  className={`glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200 ${
+                    !editingLocalItem.isCustom ? 'bg-slate-900/60 border-slate-900/80 text-slate-500 cursor-not-allowed' : ''
+                  }`}
+                />
+              </div>
+
+              {/* Notes - always editable */}
+              <div>
+                <label className="text-xs text-slate-400 font-bold block mb-1">บันทึกส่วนตัว / โน้ตความคืบหน้า</label>
+                <textarea
+                  value={localNotes}
+                  onChange={(e) => setLocalNotes(e.target.value)}
+                  className="glass-input w-full p-4 text-sm rounded-xl h-24 text-slate-200"
+                  placeholder="พิมพ์ข้อความที่ต้องการบันทึก..."
+                />
+              </div>
+
+              {/* Screenshot gallery management for custom game */}
+              {editingLocalItem.isCustom && (
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">
+                    อัปโหลดภาพตัวอย่างเกมกำหนดเอง (อัปโหลดเพิ่มได้สูงสุด 4 รูป)
+                  </label>
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        id="screenshot-upload-local"
+                        multiple
+                        onChange={handleScreenshotUpload}
+                        className="hidden"
+                        disabled={localScreenshots.length >= 4}
+                      />
+                      <label
+                        htmlFor="screenshot-upload-local"
+                        className={`text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer border transition-colors shrink-0 ${
+                          localScreenshots.length >= 4
+                            ? 'bg-slate-900 text-slate-650 border-slate-900 cursor-not-allowed'
+                            : 'bg-slate-900 hover:bg-slate-800 text-slate-200 border-slate-800'
+                        }`}
+                      >
+                        📷 เลือกรูปภาพหน้าจอ
+                      </label>
+                      <span className="text-[10px] text-slate-500">({localScreenshots.length}/4 รูป)</span>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-2.5 mt-1">
+                      {localScreenshots.map((src, index) => (
+                        <div key={index} className="aspect-video border border-slate-850 rounded-xl overflow-hidden relative group">
+                          <img src={src} alt="" className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => setLocalScreenshots(localScreenshots.filter((_, i) => i !== index))}
+                            className="absolute top-1 right-1 w-5 h-5 bg-red-650 text-white rounded-full flex items-center justify-center text-[10px] cursor-pointer hover:bg-red-500"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Locked External links */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="text-[10px] text-slate-400 font-bold block mb-1">
+                    {!editingLocalItem.isCustom && <span className="mr-1">🔒</span>}
+                    Patreon URL
+                  </label>
+                  <input
+                    type="text"
+                    value={localPatreonUrl}
+                    onChange={(e) => setLocalPatreonUrl(e.target.value)}
+                    disabled={!editingLocalItem.isCustom}
+                    className={`glass-input w-full h-9 px-3 text-[11px] rounded-lg text-slate-200 ${
+                      !editingLocalItem.isCustom ? 'bg-slate-900/60 border-slate-900/80 text-slate-500 cursor-not-allowed' : ''
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 font-bold block mb-1">
+                    {!editingLocalItem.isCustom && <span className="mr-1">🔒</span>}
+                    Steam/Buy URL
+                  </label>
+                  <input
+                    type="text"
+                    value={localBuyUrl}
+                    onChange={(e) => setLocalBuyUrl(e.target.value)}
+                    disabled={!editingLocalItem.isCustom}
+                    className={`glass-input w-full h-9 px-3 text-[11px] rounded-lg text-slate-200 ${
+                      !editingLocalItem.isCustom ? 'bg-slate-900/60 border-slate-900/80 text-slate-500 cursor-not-allowed' : ''
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 font-bold block mb-1">
+                    {!editingLocalItem.isCustom && <span className="mr-1">🔒</span>}
+                    Social URL
+                  </label>
+                  <input
+                    type="text"
+                    value={localSocialUrl}
+                    onChange={(e) => setLocalSocialUrl(e.target.value)}
+                    disabled={!editingLocalItem.isCustom}
+                    className={`glass-input w-full h-9 px-3 text-[11px] rounded-lg text-slate-200 ${
+                      !editingLocalItem.isCustom ? 'bg-slate-900/60 border-slate-900/80 text-slate-500 cursor-not-allowed' : ''
+                    }`}
+                  />
+                </div>
+              </div>
+
+              {/* Submit / Cancel footer */}
+              <div className="mt-4 pt-4 border-t border-slate-900 flex justify-end gap-2.5">
+                <button
+                  type="submit"
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold h-10 px-5 rounded-xl text-xs transition-colors cursor-pointer"
+                >
+                  💾 บันทึกประวัติการเล่น
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingLocalItem(null)}
+                  className="bg-slate-900 hover:bg-slate-855 text-slate-350 border border-slate-855 px-5 h-10 rounded-xl font-bold text-xs cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 4. ADD CUSTOM GAME MODAL */}
+      {isAddingCustom && (
+        <div className="modal-overlay" onClick={() => setIsAddingCustom(false)}>
+          <div className="modal-content w-full max-w-2xl bg-slate-950/95 border border-slate-855 rounded-3xl p-6 relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            
+            <button
+              onClick={() => setIsAddingCustom(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-855 w-9 h-9 border border-slate-855 rounded-full flex items-center justify-center cursor-pointer"
+            >
+              ✕
+            </button>
+
+            <h2 className="text-lg font-black text-slate-100 mb-4 flex items-center gap-2">
+              ➕ เพิ่มเกมกำหนดเองภายนอกระบบ (Custom Game)
+            </h2>
+
+            <form onSubmit={handleSaveCustomGame} className="flex flex-col gap-4.5">
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">ชื่อเกม *</label>
+                  <input
+                    type="text"
+                    required
+                    value={customTitle}
+                    onChange={(e) => setCustomTitle(e.target.value)}
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                    placeholder="เช่น My Custom Game Story"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">ผู้พัฒนา *</label>
+                  <input
+                    type="text"
+                    required
+                    value={customDeveloper}
+                    onChange={(e) => setCustomDeveloper(e.target.value)}
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                    placeholder="ระบุชื่อผู้สร้าง/ทีมงาน"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">เวอร์ชันที่เล่น *</label>
+                  <input
+                    type="text"
+                    required
+                    value={customVersion}
+                    onChange={(e) => setCustomVersion(e.target.value)}
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                    placeholder="เช่น 1.0.0"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">แท็กแนวเกม (คั่นด้วยเครื่องหมายจุลภาค)</label>
+                  <input
+                    type="text"
+                    value={customTags}
+                    onChange={(e) => setCustomTags(e.target.value)}
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                    placeholder="เช่น RPG, Visual Novel, Comedy"
+                  />
+                </div>
+              </div>
+
+              {/* Cover base64 upload */}
+              <div>
+                <label className="text-xs text-slate-400 font-bold block mb-1 font-semibold">อัปโหลดรูปปกเกมกำหนดเอง</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    id="cover-upload-custom"
+                    onChange={handleCustomCoverUpload}
+                    className="hidden"
+                  />
+                  <label
+                    htmlFor="cover-upload-custom"
+                    className="bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer border border-slate-800 transition-colors shrink-0"
+                  >
+                    📤 อัปโหลดรูปปก
+                  </label>
+                  {customCoverUrl && (
+                    <span className="text-[10px] text-emerald-400 font-bold">อัปโหลดไฟล์ภาพปก Base64 สำเร็จ</span>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400 font-bold block mb-1">เรื่องย่อ / คำอธิบายเกม</label>
+                <textarea
+                  value={customOverview}
+                  onChange={(e) => setCustomOverview(e.target.value)}
+                  className="glass-input w-full p-4 text-sm rounded-xl h-20 text-slate-200"
+                  placeholder="เรื่องย่อคราวๆ หรือบันทึกย่อ..."
+                />
+              </div>
+
+              {/* Screenshot base64 upload (up to 4) */}
+              <div>
+                <label className="text-xs text-slate-400 font-bold block mb-1 font-semibold">
+                  อัปโหลดรูปภาพหน้าจอ/ภาพตัวอย่าง (สูงสุด 4 รูป)
+                </label>
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      id="screenshot-upload-custom"
+                      multiple
+                      onChange={handleCustomScreenshotUpload}
+                      className="hidden"
+                      disabled={customScreenshots.length >= 4}
+                    />
+                    <label
+                      htmlFor="screenshot-upload-custom"
+                      className={`text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer border transition-colors shrink-0 ${
+                        customScreenshots.length >= 4
+                          ? 'bg-slate-900 text-slate-655 border-slate-900 cursor-not-allowed'
+                          : 'bg-slate-900 hover:bg-slate-800 text-slate-200 border-slate-800'
+                      }`}
+                    >
+                      📷 เลือกรูปภาพหน้าจอ
+                    </label>
+                    <span className="text-[10px] text-slate-500">({customScreenshots.length}/4 รูป)</span>
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-2.5 mt-1">
+                    {customScreenshots.map((src, index) => (
+                      <div key={index} className="aspect-video border border-slate-850 rounded-xl overflow-hidden relative group">
+                        <img src={src} alt="" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => setCustomScreenshots(customScreenshots.filter((_, i) => i !== index))}
+                          className="absolute top-1 right-1 w-5 h-5 bg-red-650 text-white rounded-full flex items-center justify-center text-[10px] cursor-pointer hover:bg-red-500"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="text-[10px] text-slate-400 font-bold block mb-1">Patreon URL</label>
+                  <input
+                    type="text"
+                    value={customPatreonUrl}
+                    onChange={(e) => setCustomPatreonUrl(e.target.value)}
+                    className="glass-input w-full h-9 px-3 text-[11px] rounded-lg text-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 font-bold block mb-1">Steam/Buy URL</label>
+                  <input
+                    type="text"
+                    value={customBuyUrl}
+                    onChange={(e) => setCustomBuyUrl(e.target.value)}
+                    className="glass-input w-full h-9 px-3 text-[11px] rounded-lg text-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 font-bold block mb-1">Social URL</label>
+                  <input
+                    type="text"
+                    value={customSocialUrl}
+                    onChange={(e) => setCustomSocialUrl(e.target.value)}
+                    className="glass-input w-full h-9 px-3 text-[11px] rounded-lg text-slate-200"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-slate-900 flex justify-end gap-2.5">
+                <button
+                  type="submit"
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold h-10 px-5 rounded-xl text-xs transition-colors cursor-pointer"
+                >
+                  💾 บันทึกเกมใหม่
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsAddingCustom(false)}
+                  className="bg-slate-900 hover:bg-slate-855 text-slate-355 border border-slate-855 px-5 h-10 rounded-xl font-bold text-xs cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 5. USER REPORT MODAL */}
+      {isReportingGame && (
+        <div className="modal-overlay" onClick={() => setIsReportingGame(null)}>
+          <div className="modal-content w-full max-w-xl bg-slate-950/95 border border-slate-855 rounded-3xl p-6 relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            
+            <button
+              onClick={() => setIsReportingGame(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-855 w-9 h-9 border border-slate-855 rounded-full flex items-center justify-center cursor-pointer"
+            >
+              ✕
+            </button>
+
+            <h2 className="text-lg font-black text-slate-100 mb-4">
+              🚩 รายงานข้อมูลสำหรับเกม: <span className="text-blue-400">{isReportingGame.title}</span>
+            </h2>
+
+            {/* 6. Tabs for Version update / Error report */}
+            <div className="flex border-b border-slate-900 mb-5">
+              <button
+                type="button"
+                onClick={() => setReportType('update')}
+                className={`flex-1 pb-3 text-xs font-bold text-center border-b-2 transition-all cursor-pointer ${
+                  reportType === 'update' ? 'border-blue-500 text-slate-200' : 'border-transparent text-slate-400'
+                }`}
+              >
+                รายงานอัปเดตเวอร์ชันใหม่
+              </button>
+              <button
+                type="button"
+                onClick={() => setReportType('error')}
+                className={`flex-1 pb-3 text-xs font-bold text-center border-b-2 transition-all cursor-pointer ${
+                  reportType === 'error' ? 'border-blue-500 text-slate-200' : 'border-transparent text-slate-400'
+                }`}
+              >
+                รายงานข้อผิดพลาดข้อมูล
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveReport} className="flex flex-col gap-4">
+              
+              {reportType === 'update' ? (
+                // UPDATE CATEGORY FIELDS
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <label className="text-xs text-slate-400 font-bold block mb-1">
+                      เวอร์ชันปัจจุบันในระบบ
+                    </label>
+                    <input
+                      type="text"
+                      disabled
+                      value={isReportingGame.version}
+                      className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-500 bg-slate-900/60 border-slate-900/80 cursor-not-allowed"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-400 font-bold block mb-1">
+                      เวอร์ชันใหม่ที่แนะนำ *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={reportReportedVersion}
+                      onChange={(e) => setReportReportedVersion(e.target.value)}
+                      className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                      placeholder="เช่น v1.1.0 หรือ Act 2"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-400 font-bold block mb-1">
+                      รายละเอียดการอัปเดต / Changelog *
+                    </label>
+                    <textarea
+                      required
+                      value={reportDescription}
+                      onChange={(e) => setReportDescription(e.target.value)}
+                      className="glass-input w-full p-4 text-sm rounded-xl h-24 text-slate-200"
+                      placeholder="เช่น มีการอัปเดตเนื้อหาใหม่ล่าสุดบนหน้า Patreon ของผู้พัฒนา..."
+                    />
+                  </div>
+                </div>
+              ) : (
+                // ERROR CATEGORY FIELDS
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <label className="text-xs text-slate-400 font-bold block mb-1">
+                      ชื่อเกม (ชื่ออ้างอิง)
+                    </label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={isReportingGame.title}
+                      className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-500 bg-slate-900/60 border-slate-900/80 cursor-not-allowed"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs text-slate-400 font-bold block mb-1">
+                        ลิ้งก์อ้างอิงข้อมูลใหม่
+                      </label>
+                      <input
+                        type="text"
+                        value={reportUrls}
+                        onChange={(e) => setReportUrls(e.target.value)}
+                        className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                        placeholder="เช่น ลิ้งก์ Patreon หรือ Steam"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-400 font-bold block mb-1">
+                        เวอร์ชันที่ควรระบุ
+                      </label>
+                      <input
+                        type="text"
+                        value={reportReportedVersion}
+                        onChange={(e) => setReportReportedVersion(e.target.value)}
+                        className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                        placeholder="ปล่อยว่างหากถูกต้องแล้ว"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs text-slate-400 font-bold block mb-1">
+                        แท็กที่ต้องการแก้ไข
+                      </label>
+                      <input
+                        type="text"
+                        value={reportTags}
+                        onChange={(e) => setReportTags(e.target.value)}
+                        className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                        placeholder="เช่น Comedy, Magic"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-400 font-bold block mb-1">
+                        สถานะความผิดพลาด *
+                      </label>
+                      <select
+                        value={reportErrorStatus}
+                        onChange={(e) => setReportErrorStatus(e.target.value)}
+                        className="glass-input w-full h-11 px-3 text-sm rounded-xl text-slate-200"
+                      >
+                        <option value="ข้อมูลล้าสมัย">ข้อมูลล้าสมัย</option>
+                        <option value="ลิ้งก์เสีย">ลิ้งก์เสีย</option>
+                        <option value="ข้อมูลไม่ถูกต้อง">ข้อมูลไม่ถูกต้อง</option>
+                        <option value="อื่นๆ">อื่นๆ</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-400 font-bold block mb-1">
+                      รายละเอียดข้อร้องเรียนเพิ่มเติม *
+                    </label>
+                    <textarea
+                      required
+                      value={reportDescription}
+                      onChange={(e) => setReportDescription(e.target.value)}
+                      className="glass-input w-full p-4 text-sm rounded-xl h-24 text-slate-200"
+                      placeholder="ระบุข้อผิดพลาด เช่น ลิงก์ Patreon ใช้งานไม่ได้ หรือแท็กนี้ไม่เกี่ยวกับตัวเกม..."
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-4 pt-4 border-t border-slate-900 flex justify-end gap-2.5">
+                <button
+                  type="submit"
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold h-10 px-5 rounded-xl text-xs transition-colors cursor-pointer"
+                >
+                  📤 ส่งคำร้องข้อร้องเรียน
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsReportingGame(null)}
+                  className="bg-slate-900 hover:bg-slate-855 text-slate-355 border border-slate-855 px-5 h-10 rounded-xl font-bold text-xs cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 6. SUGGEST NEW GAME MODAL (FOR REGULAR USER) */}
+      {isSuggestingNew && (
+        <div className="modal-overlay" onClick={() => setIsSuggestingNew(false)}>
+          <div className="modal-content w-full max-w-xl bg-slate-950/95 border border-slate-855 rounded-3xl p-6 relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            
+            <button
+              onClick={() => setIsSuggestingNew(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-855 w-9 h-9 border border-slate-855 rounded-full flex items-center justify-center cursor-pointer"
+            >
+              ✕
+            </button>
+
+            <h2 className="text-lg font-black text-slate-100 mb-4 flex items-center gap-2">
+              ➕ เสนอแนะเพิ่มเกมใหม่เข้าระบบหลัก
+            </h2>
+
+            <form onSubmit={handleSaveSuggestion} className="flex flex-col gap-4">
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">ชื่อเกมที่เสนอแนะ *</label>
+                  <input
+                    type="text"
+                    required
+                    value={suggestTitle}
+                    onChange={(e) => setSuggestTitle(e.target.value)}
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                    placeholder="กรอกชื่อภาษาอังกฤษอย่างเป็นทางการ"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">ผู้พัฒนา *</label>
+                  <input
+                    type="text"
+                    required
+                    value={suggestDeveloper}
+                    onChange={(e) => setSuggestDeveloper(e.target.value)}
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                    placeholder="เช่น Caribdis"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">เวอร์ชันล่าสุดที่มี *</label>
+                  <input
+                    type="text"
+                    required
+                    value={suggestVersion}
+                    onChange={(e) => setSuggestVersion(e.target.value)}
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                    placeholder="เช่น v0.5.1"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">ลิงก์รูปหน้าปกเว็บ/Patreon</label>
+                  <input
+                    type="text"
+                    value={suggestCoverUrl}
+                    onChange={(e) => setSuggestCoverUrl(e.target.value)}
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                    placeholder="https://..."
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400 font-bold block mb-1">แท็กประเภทแนวเกม (คั่นด้วยจุลภาค)</label>
+                <input
+                  type="text"
+                  value={suggestTags}
+                  onChange={(e) => setSuggestTags(e.target.value)}
+                  className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                  placeholder="เช่น Comedy, Sci-Fi"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400 font-bold block mb-1">รายละเอียดเรื่องย่อแบบย่อ</label>
+                <textarea
+                  value={suggestOverview}
+                  onChange={(e) => setSuggestOverview(e.target.value)}
+                  className="glass-input w-full p-4 text-sm rounded-xl h-24 text-slate-200"
+                  placeholder="พิมพ์คำอธิบายประกอบเบื้องต้น..."
+                />
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-slate-900 flex justify-end gap-2.5">
+                <button
+                  type="submit"
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold h-10 px-5 rounded-xl text-xs transition-colors cursor-pointer"
+                >
+                  📤 ส่งข้อเสนอแนะแอดมิน
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsSuggestingNew(false)}
+                  className="bg-slate-900 hover:bg-slate-855 text-slate-355 border border-slate-355 px-5 h-10 rounded-xl font-bold text-xs cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 7. ADMIN ADD GAME MODAL (POPUP) */}
+      {adminAddGameOpen && (
+        <div className="modal-overlay" onClick={() => setAdminAddGameOpen(false)}>
+          <div className="modal-content w-full max-w-2xl bg-slate-950/95 border border-slate-855 rounded-3xl p-6 relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            
+            <button
+              onClick={() => setAdminAddGameOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-855 w-9 h-9 border border-slate-855 rounded-full flex items-center justify-center cursor-pointer"
+            >
+              ✕
+            </button>
+
+            <h2 className="text-lg font-black text-slate-100 mb-4">
+              ➕ แผงแอดมิน: เพิ่มเกมเข้าระบบใหม่
+            </h2>
+
+            <form onSubmit={handleSaveAdminForm} className="flex flex-col gap-4">
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">ชื่อเกมหลัก *</label>
+                  <input
+                    type="text"
+                    required
+                    value={adminTitle}
+                    onChange={(e) => setAdminTitle(e.target.value)}
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                    placeholder="เช่น Eternum"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">ผู้พัฒนา *</label>
+                  <input
+                    type="text"
+                    required
+                    value={adminDeveloper}
+                    onChange={(e) => setAdminDeveloper(e.target.value)}
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                    placeholder="เช่น Caribdis"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">เวอร์ชันเกม *</label>
+                  <input
+                    type="text"
+                    required
+                    value={adminVersion}
+                    onChange={(e) => setAdminVersion(e.target.value)}
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                    placeholder="เช่น v0.6.5"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">แท็กหมวดหมู่ (คั่นด้วยเครื่องหมายจุลภาค)</label>
+                  <input
+                    type="text"
+                    value={adminTags}
+                    onChange={(e) => setAdminTags(e.target.value)}
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                    placeholder="Comedy, Sci-Fi, Drama"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">คะแนนตั้งต้นระบบ (1.0 - 5.0)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="1.0"
+                    max="5.0"
+                    value={adminRating}
+                    onChange={(e) => setAdminRating(e.target.value)}
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1 font-semibold">อัปโหลดรูปปก (Base64)</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      id="admin-cover-upload-add"
+                      onChange={handleAdminCoverUpload}
+                      className="hidden"
+                    />
+                    <label
+                      htmlFor="admin-cover-upload-add"
+                      className="bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-bold px-3 py-2.5 rounded-xl cursor-pointer border border-slate-800 transition-colors shrink-0"
+                    >
+                      📤 อัปโหลดปก
+                    </label>
+                    <input
+                      type="text"
+                      value={adminCoverUrl}
+                      onChange={(e) => setAdminCoverUrl(e.target.value)}
+                      className="glass-input flex-grow h-11 px-4 text-xs rounded-xl text-slate-200"
+                      placeholder="หรือพิมพ์ URL รูปภาพตรงนี้..."
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400 font-bold block mb-1">รายละเอียดเนื้อหาเรื่องย่อเกมหลัก</label>
+                <textarea
+                  value={adminOverview}
+                  onChange={(e) => setAdminOverview(e.target.value)}
+                  className="glass-input w-full p-4 text-sm rounded-xl h-24 text-slate-200"
+                  placeholder="เขียนเรื่องย่ออย่างเป็นทางการ..."
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="text-[10px] text-slate-400 font-bold block mb-1">Patreon URL</label>
+                  <input
+                    type="text"
+                    value={adminPatreonUrl}
+                    onChange={(e) => setAdminPatreonUrl(e.target.value)}
+                    className="glass-input w-full h-9 px-3 text-[11px] rounded-lg text-slate-200"
+                    placeholder="https://..."
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 font-bold block mb-1">Steam/Buy URL</label>
+                  <input
+                    type="text"
+                    value={adminBuyUrl}
+                    onChange={(e) => setAdminBuyUrl(e.target.value)}
+                    className="glass-input w-full h-9 px-3 text-[11px] rounded-lg text-slate-200"
+                    placeholder="https://..."
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 font-bold block mb-1">Social/Twitter URL</label>
+                  <input
+                    type="text"
+                    value={adminSocialUrl}
+                    onChange={(e) => setAdminSocialUrl(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400 font-bold block mb-1">
+                  อัปโหลดภาพตัวอย่างหลัก (สูงสุด 4 รูป)
+                </label>
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      id="screenshot-upload-admin-add"
+                      multiple
+                      onChange={handleAdminScreenshotUpload}
+                      className="hidden"
+                      disabled={adminScreenshots.length >= 4}
+                    />
+                    <label
+                      htmlFor="screenshot-upload-admin-add"
+                      className={`text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer border transition-colors shrink-0 ${
+                        adminScreenshots.length >= 4
+                          ? 'bg-slate-900 text-slate-650 border-slate-900 cursor-not-allowed'
+                          : 'bg-slate-900 hover:bg-slate-800 text-slate-200 border-slate-800'
+                      }`}
+                    >
+                      📷 เลือกรูปภาพหน้าจอ
+                    </label>
+                    <span className="text-[10px] text-slate-500">({adminScreenshots.length}/4 รูป)</span>
+                  </div>
+                  {adminScreenshots.length > 0 && (
+                    <div className="flex gap-2.5 overflow-x-auto pb-1 scrollbar-thin">
+                      {adminScreenshots.map((src, idx) => (
+                        <div key={idx} className="relative w-16 h-12 rounded-lg overflow-hidden border border-slate-900 shrink-0">
+                          <img src={src} className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => setAdminScreenshots((prev) => prev.filter((_, i) => i !== idx))}
+                            className="absolute top-0 right-0 bg-red-650 hover:bg-red-750 text-white w-4 h-4 flex items-center justify-center rounded-bl-lg cursor-pointer text-[10px]"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-slate-900 flex justify-end gap-2.5">
+                <button
+                  type="submit"
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold h-10 px-5 rounded-xl text-xs transition-colors cursor-pointer"
+                >
+                  💾 บันทึกเกมใหม่
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdminAddGameOpen(false);
+                    handleResetAdminForm();
+                  }}
+                  className="bg-slate-900 hover:bg-slate-855 text-slate-355 border border-slate-855 px-5 h-10 rounded-xl font-bold text-xs cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 8. ADMIN EDIT GAME MODAL (POPUP) */}
+      {adminEditGameOpen && (
+        <div className="modal-overlay" onClick={() => setAdminEditGameOpen(false)}>
+          <div className="modal-content w-full max-w-2xl bg-slate-950/95 border border-slate-855 rounded-3xl p-6 relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            
+            <button
+              onClick={() => setAdminEditGameOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-855 w-9 h-9 border border-slate-855 rounded-full flex items-center justify-center cursor-pointer"
+            >
+              ✕
+            </button>
+
+            <h2 className="text-lg font-black text-slate-100 mb-4">
+              ✏️ แผงแอดมิน: แก้ไขข้อมูลเกมหลัก (ID: {adminFormGameId})
+            </h2>
+
+            <form onSubmit={handleSaveAdminForm} className="flex flex-col gap-4">
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">ชื่อเกมหลัก *</label>
+                  <input
+                    type="text"
+                    required
+                    value={adminTitle}
+                    onChange={(e) => setAdminTitle(e.target.value)}
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">ผู้พัฒนา *</label>
+                  <input
+                    type="text"
+                    required
+                    value={adminDeveloper}
+                    onChange={(e) => setAdminDeveloper(e.target.value)}
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">เวอร์ชันเกม *</label>
+                  <input
+                    type="text"
+                    required
+                    value={adminVersion}
+                    onChange={(e) => setAdminVersion(e.target.value)}
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">แท็กหมวดหมู่ (คั่นด้วยเครื่องหมายจุลภาค)</label>
+                  <input
+                    type="text"
+                    value={adminTags}
+                    onChange={(e) => setAdminTags(e.target.value)}
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">คะแนนจากระบบ (1.0 - 5.0)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="1.0"
+                    max="5.0"
+                    value={adminRating}
+                    onChange={(e) => setAdminRating(e.target.value)}
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1 font-semibold">อัปโหลดรูปปกใหม่ (Base64)</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      id="admin-cover-upload-edit"
+                      onChange={handleAdminCoverUpload}
+                      className="hidden"
+                    />
+                    <label
+                      htmlFor="admin-cover-upload-edit"
+                      className="bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-bold px-3 py-2.5 rounded-xl cursor-pointer border border-slate-800 transition-colors shrink-0"
+                    >
+                      📤 อัปโหลดปก
+                    </label>
+                    <input
+                      type="text"
+                      value={adminCoverUrl}
+                      onChange={(e) => setAdminCoverUrl(e.target.value)}
+                      className="glass-input flex-grow h-11 px-4 text-xs rounded-xl text-slate-200"
+                      placeholder="หรือพิมพ์ URL รูปภาพตรงนี้..."
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400 font-bold block mb-1">รายละเอียดเนื้อหาเรื่องย่อเกมหลัก</label>
+                <textarea
+                  value={adminOverview}
+                  onChange={(e) => setAdminOverview(e.target.value)}
+                  className="glass-input w-full p-4 text-sm rounded-xl h-24 text-slate-200"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="text-[10px] text-slate-400 font-bold block mb-1">Patreon URL</label>
+                  <input
+                    type="text"
+                    value={adminPatreonUrl}
+                    onChange={(e) => setAdminPatreonUrl(e.target.value)}
+                    className="glass-input w-full h-9 px-3 text-[11px] rounded-lg text-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 font-bold block mb-1">Steam/Buy URL</label>
+                  <input
+                    type="text"
+                    value={adminBuyUrl}
+                    onChange={(e) => setAdminBuyUrl(e.target.value)}
+                    className="glass-input w-full h-9 px-3 text-[11px] rounded-lg text-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 font-bold block mb-1">Social/Twitter URL</label>
+                  <input
+                    type="text"
+                    value={adminSocialUrl}
+                    onChange={(e) => setAdminSocialUrl(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400 font-bold block mb-1">
+                  อัปโหลดภาพตัวอย่างหลัก (สูงสุด 4 รูป)
+                </label>
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      id="screenshot-upload-admin-edit"
+                      multiple
+                      onChange={handleAdminScreenshotUpload}
+                      className="hidden"
+                      disabled={adminScreenshots.length >= 4}
+                    />
+                    <label
+                      htmlFor="screenshot-upload-admin-edit"
+                      className={`text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer border transition-colors shrink-0 ${
+                        adminScreenshots.length >= 4
+                          ? 'bg-slate-900 text-slate-650 border-slate-900 cursor-not-allowed'
+                          : 'bg-slate-900 hover:bg-slate-800 text-slate-200 border-slate-800'
+                      }`}
+                    >
+                      📷 เลือกรูปภาพหน้าจอ
+                    </label>
+                    <span className="text-[10px] text-slate-500">({adminScreenshots.length}/4 รูป)</span>
+                  </div>
+                  {adminScreenshots.length > 0 && (
+                    <div className="flex gap-2.5 overflow-x-auto pb-1 scrollbar-thin">
+                      {adminScreenshots.map((src, idx) => (
+                        <div key={idx} className="relative w-16 h-12 rounded-lg overflow-hidden border border-slate-900 shrink-0">
+                          <img src={src} className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => setAdminScreenshots((prev) => prev.filter((_, i) => i !== idx))}
+                            className="absolute top-0 right-0 bg-red-650 hover:bg-red-750 text-white w-4 h-4 flex items-center justify-center rounded-bl-lg cursor-pointer text-[10px]"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-slate-900 flex justify-end gap-2.5">
+                <button
+                  type="submit"
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold h-10 px-5 rounded-xl text-xs transition-colors cursor-pointer"
+                >
+                  💾 บันทึกการแก้ไข
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdminEditGameOpen(false);
+                    handleResetAdminForm();
+                  }}
+                  className="bg-slate-900 hover:bg-slate-855 text-slate-355 border border-slate-855 px-5 h-10 rounded-xl font-bold text-xs cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* TOAST SYSTEM POPUP */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 bg-slate-900 border border-blue-500 text-blue-400 font-bold px-5 py-3 rounded-xl shadow-2xl z-[9999] flex items-center gap-2 animate-fade-in-up">
+          <span className="text-lg">💡</span> {toastMessage}
+        </div>
+      )}
+
+    </div>
+  );
+}

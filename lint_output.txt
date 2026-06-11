@@ -1,0 +1,125 @@
+
+> avn-game-tracker@0.0.0 lint
+> eslint .
+
+
+C:\Users\roger\.gemini\antigravity\scratch\avn-game-tracker\src\App.jsx
+     1:8   error    'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           no-unused-vars
+    34:12  error    'e' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               no-unused-vars
+   213:7   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  211 |   useEffect(() => {
+  212 |     if (editingLocalItem) {
+> 213 |       setLocalStatus(editingLocalItem.status || 'Plan to Play');
+      |       ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  214 |       setLocalPlayTime(editingLocalItem.playTime || 0);
+  215 |       setLocalRating(editingLocalItem.rating || 0);
+  216 |       setLocalNotes(editingLocalItem.notes || '');                                                                                                          react-hooks/set-state-in-effect
+   231:7   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  229 |   useEffect(() => {
+  230 |     if (editingOfficialGame) {
+> 231 |       setAdminTitle(editingOfficialGame.title || '');
+      |       ^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  232 |       setAdminDeveloper(editingOfficialGame.developer || '');
+  233 |       setAdminVersion(triggeringReport && triggeringReport.type === 'update' ? triggeringReport.reportedVersion : editingOfficialGame.version || '');
+  234 |       setAdminOverview(editingOfficialGame.overview || '');  react-hooks/set-state-in-effect
+   247:9   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  245 |     if (isAddingOfficial) {
+  246 |       if (triggeringReport) {
+> 247 |         setAdminTitle(triggeringReport.gameTitle || '');
+      |         ^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  248 |         setAdminDeveloper(triggeringReport.developer || '');
+  249 |         setAdminVersion(triggeringReport.reportedVersion || '');
+  250 |         setAdminOverview(triggeringReport.overview || '');                                                                             react-hooks/set-state-in-effect
+   274:7   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  272 |   useEffect(() => {
+  273 |     if (isSuggestingNew) {
+> 274 |       setSuggestTitle('');
+      |       ^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  275 |       setSuggestDeveloper('');
+  276 |       setSuggestVersion('');
+  277 |       setSuggestCoverUrl('');                                                                                                                                                                                                                     react-hooks/set-state-in-effect
+   285:7   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  283 |   useEffect(() => {
+  284 |     if (isReportingGame) {
+> 285 |       setReportType('update');
+      |       ^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  286 |       setReportReportedVersion('');
+  287 |       setReportDescription('');
+  288 |       setReportTags('');                                                                                                                                                                                                                react-hooks/set-state-in-effect
+   294:9   error    'isAddingCustom' is not defined                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             no-undef
+   295:7   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  293 |   useEffect(() => {
+  294 |     if (isAddingCustom) {
+> 295 |       setCustomTitle('');
+      |       ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  296 |       setCustomDeveloper('');
+  297 |       setCustomVersion('');
+  298 |       setCustomOverview('');                                                                                                                                                                                                                           react-hooks/set-state-in-effect
+   305:6   warning  React Hook useEffect has an unnecessary dependency: 'isAddingCustom'. Either exclude it or remove the dependency array. Outer scope values like 'isAddingCustom' aren't valid dependencies because mutating them doesn't re-render the component                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            react-hooks/exhaustive-deps
+   305:7   error    'isAddingCustom' is not defined                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             no-undef
+   309:5   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  307 |   // Sync temp marquee values when props change
+  308 |   useEffect(() => {
+> 309 |     setTempTickerMessage(tickerMessage);
+      |     ^^^^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  310 |     setTempShowTicker(showTicker);
+  311 |   }, [tickerMessage, showTicker]);
+  312 |                                                                                                                                                                                                   react-hooks/set-state-in-effect
+   442:5   error    'setIsAddingCustom' is not defined                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          no-undef
+  1008:32  error    'setIsAddingCustom' is not defined                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          no-undef
+  1970:8   error    'isAddingCustom' is not defined                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             no-undef
+  1971:55  error    'setIsAddingCustom' is not defined                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          no-undef
+  1982:32  error    'setIsAddingCustom' is not defined                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          no-undef
+  2098:34  error    'setIsAddingCustom' is not defined                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          no-undef
+
+✖ 18 problems (17 errors, 1 warning)
+
