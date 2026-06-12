@@ -82,6 +82,22 @@ function readFileAsBase64(file) {
   });
 }
 
+function decodeJwt(token) {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
+  }
+}
+
 const OFFICIAL_SCREENSHOT_PLACEHOLDERS = [
   'https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=800&auto=format&fit=crop',
   'https://images.unsplash.com/photo-1511512578047-dfb367046420?q=80&w=800&auto=format&fit=crop',
@@ -127,6 +143,11 @@ export default function App() {
   // --- CORE STATE ---
   const [currentUser, setCurrentUser] = useState(() => {
     return localStorage.getItem('avn_current_user_v7') || 'Guest';
+  });
+
+  const [googleUserProfile, setGoogleUserProfile] = useState(() => {
+    const saved = localStorage.getItem('avn_google_user_profile_v9');
+    return saved ? JSON.parse(saved) : null;
   });
 
   // --- GOOGLE SIGN-IN SIMULATION STATE ---
@@ -268,7 +289,7 @@ export default function App() {
   const [adminUserSearch, setAdminUserSearch] = useState('');
 
   const [officialGames, setOfficialGames] = useState(() => {
-    const saved = localStorage.getItem('avn_official_games_v7');
+    const saved = localStorage.getItem('avn_official_games_v9');
     return saved ? JSON.parse(saved) : initialOfficialGames;
   });
 
@@ -307,17 +328,31 @@ export default function App() {
   // --- UI STATE ---
   const [activeTab, setActiveTab] = useState('online'); // 'online', 'local', 'admin'
   const [searchQuery, setSearchQuery] = useState('');
+  const [catalogPage, setCatalogPage] = useState(1);
   
   // Tag Filter states
   const [selectedCatalogTags, setSelectedCatalogTags] = useState([]);
   const [catalogTagSearch, setCatalogTagSearch] = useState('');
   const [showTagFilterCatalog, setShowTagFilterCatalog] = useState(false);
 
+  // Reset catalog page during render when search, tags, or tab changes to avoid ESLint warning
+  const [prevSearchQuery, setPrevSearchQuery] = useState(searchQuery);
+  const [prevCatalogTags, setPrevCatalogTags] = useState(selectedCatalogTags);
+  const [prevActiveTab, setPrevActiveTab] = useState(activeTab);
+
+  if (searchQuery !== prevSearchQuery || selectedCatalogTags !== prevCatalogTags || activeTab !== prevActiveTab) {
+    setPrevSearchQuery(searchQuery);
+    setPrevCatalogTags(selectedCatalogTags);
+    setPrevActiveTab(activeTab);
+    setCatalogPage(1);
+  }
+
   const [selectedLibraryTags, setSelectedLibraryTags] = useState([]);
   const [libraryTagSearch, setLibraryTagSearch] = useState('');
   const [showTagFilterLibrary, setShowTagFilterLibrary] = useState(false);
 
   const [adminCatalogSearch, setAdminCatalogSearch] = useState('');
+  const [selectedAdminGameIds, setSelectedAdminGameIds] = useState([]);
 
   const [libraryStatusFilter, setLibraryStatusFilter] = useState('All');
   const [adminReportTab, setAdminReportTab] = useState('update'); // 'update', 'error', 'new'
@@ -336,6 +371,36 @@ export default function App() {
   const alert = (msg) => {
     setCustomAlert({ message: msg, title: '🔔 แจ้งเตือนระบบ' });
   };
+
+  function handleGoogleLoginCallback(response) {
+    setIsLoggingIn(true);
+    setTimeout(() => {
+      const decoded = decodeJwt(response.credential);
+      if (decoded) {
+        const { email, name, picture } = decoded;
+        const profile = {
+          name: name,
+          email: email,
+          role: email,
+          avatar: picture
+        };
+        setGoogleUserProfile(profile);
+        
+        setUserRoles((prev) => {
+          if (prev[email]) return prev;
+          const isAdminEmail = email === 'pattarasak.raksanrong@gmail.com' || email === 'admin@gmail.com';
+          return { ...prev, [email]: isAdminEmail ? 'admin' : 'free' };
+        });
+        
+        setCurrentUser(email);
+        setToastMessage(`ลงชื่อเข้าใช้ในฐานะ ${decoded.name} สำเร็จ!`);
+      } else {
+        setToastMessage('ไม่สามารถเชื่อมโยงบัญชี Google ได้');
+      }
+      setIsLoggingIn(false);
+      setIsGoogleLoginOpen(false);
+    }, 800);
+  }
 
 
   // Admin Modals
@@ -412,6 +477,46 @@ export default function App() {
   }, [currentUser]);
 
   useEffect(() => {
+    if (googleUserProfile) {
+      localStorage.setItem('avn_google_user_profile_v9', JSON.stringify(googleUserProfile));
+    } else {
+      localStorage.removeItem('avn_google_user_profile_v9');
+    }
+  }, [googleUserProfile]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && typeof window.google !== 'undefined') {
+      try {
+        window.google.accounts.id.initialize({
+          client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID || '1023772242138-placeholder.apps.googleusercontent.com',
+          callback: handleGoogleLoginCallback
+        });
+      } catch (err) {
+        console.error('Google accounts ID initialize error:', err);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isGoogleLoginOpen && typeof window !== 'undefined' && typeof window.google !== 'undefined') {
+      try {
+        const container = document.getElementById('google-signin-btn-container');
+        if (container) {
+          window.google.accounts.id.renderButton(container, {
+            theme: 'outline',
+            size: 'large',
+            width: '320',
+            text: 'signin_with',
+            shape: 'rectangular'
+          });
+        }
+      } catch (err) {
+        console.error('Google button rendering error:', err);
+      }
+    }
+  }, [isGoogleLoginOpen]);
+
+  useEffect(() => {
     localStorage.setItem('avn_user_roles_v9', JSON.stringify(userRoles));
   }, [userRoles]);
 
@@ -436,7 +541,7 @@ export default function App() {
   }, [globalTags]);
 
   useEffect(() => {
-    localStorage.setItem('avn_official_games_v7', JSON.stringify(officialGames));
+    localStorage.setItem('avn_official_games_v9', JSON.stringify(officialGames));
   }, [officialGames]);
 
   useEffect(() => {
@@ -559,6 +664,9 @@ export default function App() {
 
   const googleUser = useMemo(() => {
     if (isGuest) return null;
+    if (googleUserProfile && (googleUserProfile.email === currentUser || googleUserProfile.role === currentUser)) {
+      return googleUserProfile;
+    }
     const found = MOCK_GOOGLE_ACCOUNTS.find(acc => acc.role === currentUser || acc.email === currentUser);
     if (found) return found;
     const username = currentUser.split('@')[0];
@@ -569,7 +677,7 @@ export default function App() {
       role: currentUser,
       avatar: ''
     };
-  }, [currentUser, isGuest]);
+  }, [currentUser, isGuest, googleUserProfile]);
 
 
 
@@ -608,6 +716,19 @@ export default function App() {
       return matchSearch && matchTag;
     });
   }, [officialGames, searchQuery, selectedCatalogTags]);
+
+  const ITEMS_PER_PAGE = 20;
+  const totalCatalogItems = filteredCatalog.length;
+  const totalCatalogPages = Math.ceil(totalCatalogItems / ITEMS_PER_PAGE);
+  const catalogStartIndex = (catalogPage - 1) * ITEMS_PER_PAGE;
+  const catalogEndIndex = Math.min(catalogStartIndex + ITEMS_PER_PAGE, totalCatalogItems);
+  
+  const displayStart = totalCatalogItems === 0 ? 0 : catalogStartIndex + 1;
+  const displayEnd = catalogEndIndex;
+
+  const paginatedCatalog = useMemo(() => {
+    return filteredCatalog.slice(catalogStartIndex, catalogEndIndex);
+  }, [filteredCatalog, catalogStartIndex, catalogEndIndex]);
 
   // Calculate compact stats for Library Dashboard
   const libraryStats = useMemo(() => {
@@ -720,12 +841,16 @@ export default function App() {
 
   const handleUserChange = (newUser) => {
     setCurrentUser(newUser);
+    setSelectedAdminGameIds([]);
     if (newUser === 'Guest') {
       setActiveTab('online');
+      setGoogleUserProfile(null);
     } else if (newUser !== 'Admin' && activeTab === 'admin') {
       setActiveTab('online');
     }
   };
+
+
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
@@ -734,6 +859,7 @@ export default function App() {
     setSelectedLibraryTags([]);
     setCatalogTagSearch('');
     setLibraryTagSearch('');
+    setSelectedAdminGameIds([]);
     if (tab === 'admin') {
       setTempTickerMessage(tickerMessage);
       setTempShowTicker(showTicker);
@@ -793,6 +919,7 @@ export default function App() {
   const handleDeleteOfficialGame = (gameId) => {
     if (window.confirm('คุณแน่ใจหรือไม่ที่จะลบเกมนี้ออกจากระบบหลัก? ข้อมูลประวัติการเล่นของผู้ใช้จะยังคงอยู่ แต่อ้างอิงจะหายไป')) {
       setOfficialGames(officialGames.filter((g) => g.id !== gameId));
+      setSelectedAdminGameIds((prev) => prev.filter((id) => id !== gameId));
       setToastMessage('ลบเกมออกจากแคตตาล็อกระบบแล้ว');
     }
   };
@@ -829,6 +956,46 @@ export default function App() {
 
     setUserNotifications((prev) => [...newNotifications, ...prev]);
     setToastMessage(`📢 ส่งแจ้งเตือนอัปเดตเวอร์ชัน v${game.version} ไปยังผู้ใช้ Premium ${recipients.length} คนสำเร็จ!`);
+  };
+
+  const handleSendBulkUpdateNotification = () => {
+    if (selectedAdminGameIds.length === 0) {
+      setToastMessage('กรุณาเลือกอย่างน้อยหนึ่งเกมก่อนส่งแจ้งเตือน');
+      return;
+    }
+
+    const premiumUsers = Object.keys(userRoles).filter(
+      (username) => userRoles[username] === 'premium' && username !== 'Guest'
+    );
+
+    if (premiumUsers.length === 0) {
+      setToastMessage('ไม่พบสมาชิกประเภท Premium ในระบบที่จะจัดส่งแจ้งเตือน');
+      return;
+    }
+
+    const newNotifications = [];
+    let idx = 0;
+    selectedAdminGameIds.forEach((gameId) => {
+      const game = officialGames.find((g) => g.id === gameId);
+      if (!game) return;
+
+      premiumUsers.forEach((user) => {
+        newNotifications.push({
+          id: 'unotif-' + Date.now() + '-' + (idx++) + '-' + Math.random().toString(36).substring(2, 5),
+          recipient: user,
+          gameId: game.id,
+          gameTitle: game.title,
+          version: game.version,
+          timestamp: getIsoTimestamp(),
+          read: false,
+          message: `เกม ${game.title} ได้อัปเดตเป็นเวอร์ชัน ${game.version} แล้ว! 🚀`
+        });
+      });
+    });
+
+    setUserNotifications((prev) => [...newNotifications, ...prev]);
+    setSelectedAdminGameIds([]);
+    setToastMessage(`📢 ส่งแจ้งเตือนอัปเดตเกมให้เฉพาะสมาชิก Premium (${premiumUsers.length} คน) สำเร็จแล้ว!`);
   };
 
   const handleUpdatePremiumSignupDate = (username, dateStr) => {
@@ -1678,7 +1845,11 @@ export default function App() {
                                 <span>พบเวอร์ชันใหม่สำหรับ <span className="font-extrabold text-blue-400">{notif.gameTitle}</span></span>
                               )
                             ) : (
-                              <span>เกม <span className="font-extrabold text-blue-400">{notif.gameTitle}</span> มีเวอร์ชันใหม่ล่าสุดแล้ว!</span>
+                              notif.message ? (
+                                <span>{notif.message}</span>
+                              ) : (
+                                <span>เกม <span className="font-extrabold text-blue-400">{notif.gameTitle}</span> มีเวอร์ชันใหม่ล่าสุดแล้ว!</span>
+                              )
                             )}
                           </div>
                           <div className="mt-1 flex justify-between items-center text-[10px]">
@@ -1687,7 +1858,9 @@ export default function App() {
                                 <span className="text-slate-400">v{notif.currentVersion} ➔ <span className="text-emerald-455 font-bold">v{notif.reportedVersion}</span></span>
                               )
                             ) : (
-                              <span className="text-slate-400">เวอร์ชันล่าสุด: <span className="text-emerald-455 font-bold">v{notif.version}</span></span>
+                              !notif.message && (
+                                <span className="text-slate-400">เวอร์ชันล่าสุด: <span className="text-emerald-455 font-bold">v{notif.version}</span></span>
+                              )
                             )}
                             <span className="text-slate-500 block text-right w-full">{formatThaiDate(notif.timestamp)}</span>
                           </div>
@@ -1987,17 +2160,17 @@ export default function App() {
             {/* Catalog Grid */}
             <div>
               <div className="flex justify-between items-center mb-4">
-                <span className="text-xs font-extrabold text-slate-500">พบทั้งหมด {filteredCatalog.length} รายการ</span>
+                <span className="text-xs font-extrabold text-slate-500">แสดงเกมที่ {displayStart}-{displayEnd} จาก {totalCatalogItems} รายการ</span>
               </div>
 
-              {filteredCatalog.length === 0 ? (
+              {totalCatalogItems === 0 ? (
                 <div className="text-center py-24 glass-panel rounded-3xl border border-slate-900">
                   <span className="text-5xl block mb-3">🔍</span>
                   <p className="text-slate-450 font-bold text-base">ไม่พบเกมตามเงื่อนไขที่คุณค้นหา</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-                  {filteredCatalog.map((game) => {
+                  {paginatedCatalog.map((game) => {
                     const libraryItem = currentLibraryList.find((item) => item.gameId === game.id);
                     const isInLib = !!libraryItem;
 
@@ -2068,6 +2241,65 @@ export default function App() {
                       </div>
                     );
                   })}
+                </div>
+              )}
+
+              {/* Pagination Controls */}
+              {totalCatalogPages > 1 && (
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-8 pt-6 border-t border-slate-900/40 animate-fade-in">
+                  <span className="text-xs font-extrabold text-slate-500">
+                    แสดงเกมที่ {displayStart}-{displayEnd} จาก {totalCatalogItems} รายการ
+                  </span>
+                  
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setCatalogPage(prev => Math.max(prev - 1, 1))}
+                      disabled={catalogPage === 1}
+                      className="h-9 w-9 flex items-center justify-center rounded-xl border border-slate-800 bg-slate-900/40 text-slate-400 hover:text-white hover:bg-slate-800/60 disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer"
+                      title="หน้าก่อนหน้า"
+                    >
+                      ‹
+                    </button>
+                    
+                    {Array.from({ length: totalCatalogPages }).map((_, idx) => {
+                      const pageNum = idx + 1;
+                      const isNear = Math.abs(catalogPage - pageNum) <= 1;
+                      const isFirstOrLast = pageNum === 1 || pageNum === totalCatalogPages;
+                      
+                      if (!isNear && !isFirstOrLast) {
+                        if (pageNum === 2 || pageNum === totalCatalogPages - 1) {
+                          return <span key={pageNum} className="text-slate-600 text-xs px-1">...</span>;
+                        }
+                        return null;
+                      }
+                      
+                      return (
+                        <button
+                          key={pageNum}
+                          type="button"
+                          onClick={() => setCatalogPage(pageNum)}
+                          className={`h-9 min-w-9 px-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                            catalogPage === pageNum
+                              ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/25'
+                              : 'border-slate-800 bg-slate-900/40 text-slate-400 hover:text-white hover:bg-slate-800/60'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                    
+                    <button
+                      type="button"
+                      onClick={() => setCatalogPage(prev => Math.min(prev + 1, totalCatalogPages))}
+                      disabled={catalogPage === totalCatalogPages}
+                      className="h-9 w-9 flex items-center justify-center rounded-xl border border-slate-800 bg-slate-900/40 text-slate-400 hover:text-white hover:bg-slate-800/60 disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer"
+                      title="หน้าถัดไป"
+                    >
+                      ›
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -2916,7 +3148,7 @@ export default function App() {
                             avn_current_user_v7: currentUser,
                             avn_user_roles_v9: userRoles,
                             avn_user_premium_dates_v9: userPremiumDates,
-                            avn_official_games_v7: officialGames,
+                            avn_official_games_v9: officialGames,
                             avn_user_libraries_v7: userLibraries,
                             avn_reports_v7: reports,
                             avn_global_tags_v9: globalTags,
@@ -2964,13 +3196,15 @@ export default function App() {
                             try {
                               const parsed = JSON.parse(event.target.result);
                               
-                              if (!parsed.avn_official_games_v7 || !parsed.avn_user_libraries_v7 || !parsed.avn_user_roles_v9) {
+                              if ((!parsed.avn_official_games_v9 && !parsed.avn_official_games_v8 && !parsed.avn_official_games_v7) || !parsed.avn_user_libraries_v7 || !parsed.avn_user_roles_v9) {
                                 alert('รูปแบบไฟล์ข้อมูลสำรองระบบไม่ถูกต้อง ไม่พบโครงสร้างฐานข้อมูลหลัก');
                                 return;
                               }
                               
                               if (confirm('⚠️ คำเตือน: การกู้คืนข้อมูลระบบจะเขียนทับข้อมูลและค่าตั้งค่าทั้งหมดในปัจจุบัน คุณแน่ใจที่จะดำเนินการต่อหรือไม่?')) {
-                                if (parsed.avn_official_games_v7) setOfficialGames(parsed.avn_official_games_v7);
+                                if (parsed.avn_official_games_v9) setOfficialGames(parsed.avn_official_games_v9);
+                                else if (parsed.avn_official_games_v8) setOfficialGames(parsed.avn_official_games_v8);
+                                else if (parsed.avn_official_games_v7) setOfficialGames(parsed.avn_official_games_v7);
                                 if (parsed.avn_user_libraries_v7) setUserLibraries(parsed.avn_user_libraries_v7);
                                 if (parsed.avn_user_roles_v9) setUserRoles(parsed.avn_user_roles_v9);
                                 if (parsed.avn_user_premium_dates_v9) setUserPremiumDates(parsed.avn_user_premium_dates_v9);
@@ -3180,12 +3414,23 @@ export default function App() {
                   🗄️ ตัวจัดการแคตตาล็อกระบบหลัก ({officialGames.length})
                 </h3>
 
-                <div className="flex items-center gap-3 w-full sm:w-auto">
+                <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+                  {selectedAdminGameIds.length > 0 && (
+                    <button
+                      onClick={handleSendBulkUpdateNotification}
+                      className="bg-amber-600 hover:bg-amber-500 text-white font-bold px-4 h-10 rounded-xl flex items-center gap-1.5 text-xs transition-all cursor-pointer shrink-0 animate-fade-in shadow-lg shadow-amber-900/20"
+                    >
+                      📢 ส่งแจ้งเตือนอัปเดต ({selectedAdminGameIds.length} เกม) ให้สมาชิก Premium
+                    </button>
+                  )}
                   <input
                     type="text"
                     placeholder="ค้นหาชื่อเกมเพื่อจัดการ..."
                     value={adminCatalogSearch}
-                    onChange={(e) => setAdminCatalogSearch(e.target.value)}
+                    onChange={(e) => {
+                      setAdminCatalogSearch(e.target.value);
+                      setSelectedAdminGameIds([]);
+                    }}
                     className="glass-input h-10 px-4 text-xs rounded-xl focus:outline-none w-full sm:w-64"
                   />
                   <button
@@ -3194,10 +3439,93 @@ export default function App() {
                       setAdminFormMode('add');
                       setAdminAddGameOpen(true);
                     }}
-                    className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 h-10 rounded-xl flex items-center gap-1.5 text-xs transition-all cursor-pointer shrink-0"
+                    className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 h-10 rounded-xl flex items-center gap-1.5 text-xs transition-all cursor-pointer shrink-0 animate-fade-in"
                   >
                     ➕ เพิ่มเกมใหม่
                   </button>
+
+                  <div className="relative shrink-0 animate-fade-in">
+                    <input
+                      type="file"
+                      accept=".json"
+                      id="admin-import-games-json"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+                        
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                          try {
+                            const importedGames = JSON.parse(event.target.result);
+                            
+                            // Validate that it's an array and check basic structure
+                            if (!Array.isArray(importedGames)) {
+                              alert('รูปแบบไฟล์ไม่ถูกต้อง คาดหวังข้อมูลที่เป็น Array ของเกม');
+                              return;
+                            }
+                            
+                            if (importedGames.length > 0 && (!importedGames[0].title || !importedGames[0].id)) {
+                              alert('รูปแบบไฟล์ไม่ถูกต้อง ข้อมูลในอาร์เรย์ต้องมีฟิลด์ title และ id/slug');
+                              return;
+                            }
+                            
+                            if (confirm(`คุณต้องการนำเข้าเกมจำนวน ${importedGames.length} รายการจากไฟล์นี้หรือไม่?\n(เกมที่มีชื่อหรือ ID/Slug ซ้ำจะถูกเขียนทับด้วยข้อมูลจากไฟล์นี้)`)) {
+                              setOfficialGames(prev => {
+                                const merged = [...prev];
+                                let addedCount = 0;
+                                let updatedCount = 0;
+                                
+                                importedGames.forEach(newGame => {
+                                  const idx = merged.findIndex(g => 
+                                    g.id.toLowerCase() === newGame.id.toLowerCase() || 
+                                    g.title.trim().toLowerCase() === newGame.title.trim().toLowerCase()
+                                  );
+                                  
+                                  const mapped = {
+                                    id: newGame.id,
+                                    title: newGame.title,
+                                    developer: newGame.developer || 'Unknown',
+                                    version: newGame.version || '0.1.0',
+                                    overview: newGame.overview || '',
+                                    patreonUrl: newGame.patreonUrl || '',
+                                    buyUrl: newGame.buyUrl || '',
+                                    socialUrl: newGame.socialUrl || '',
+                                    tags: newGame.tags || [],
+                                    rating: typeof newGame.rating === 'number' ? newGame.rating : 5.0,
+                                    coverUrl: newGame.coverUrl || '',
+                                    screenshots: newGame.screenshots || []
+                                  };
+                                  
+                                  if (idx !== -1) {
+                                    merged[idx] = { ...merged[idx], ...mapped };
+                                    updatedCount++;
+                                  } else {
+                                    merged.push(mapped);
+                                    addedCount++;
+                                  }
+                                });
+                                
+                                alert(`นำเข้าข้อมูลเรียบร้อยแล้ว!\n- อัปเดตข้อมูลเกมเดิม: ${updatedCount} รายการ\n- เพิ่มเกมใหม่: ${addedCount} รายการ`);
+                                return merged;
+                              });
+                            }
+                          } catch (err) {
+                            alert('เกิดข้อผิดพลาดในการอ่านไฟล์ JSON: ' + err.message);
+                          }
+                        };
+                        reader.readAsText(file);
+                        // Reset input value to allow uploading same file again
+                        e.target.value = '';
+                      }}
+                    />
+                    <label
+                      htmlFor="admin-import-games-json"
+                      className="bg-slate-800 hover:bg-slate-700 border border-slate-700/60 text-slate-200 font-bold px-4 h-10 rounded-xl flex items-center justify-center gap-1.5 text-xs transition-all cursor-pointer shrink-0"
+                    >
+                      📥 นำเข้าแคตตาล็อก (JSON)
+                    </label>
+                  </div>
                 </div>
               </div>
 
@@ -3206,7 +3534,31 @@ export default function App() {
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-slate-900 text-slate-400 font-bold">
-                      <th className="pb-3 pl-2">รูปปก</th>
+                      <th className="pb-3 pl-2 w-10">
+                        <input
+                          type="checkbox"
+                          checked={
+                            adminFilteredCatalog.length > 0 &&
+                            adminFilteredCatalog.every((game) => selectedAdminGameIds.includes(game.id))
+                          }
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              const visibleIds = adminFilteredCatalog.map((g) => g.id);
+                              setSelectedAdminGameIds((prev) => {
+                                const newSelection = new Set([...prev, ...visibleIds]);
+                                return Array.from(newSelection);
+                              });
+                            } else {
+                              const visibleIds = adminFilteredCatalog.map((g) => g.id);
+                              setSelectedAdminGameIds((prev) =>
+                                prev.filter((id) => !visibleIds.includes(id))
+                              );
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-slate-800 text-blue-600 focus:ring-blue-500 bg-slate-900 cursor-pointer"
+                        />
+                      </th>
+                      <th className="pb-3">รูปปก</th>
                       <th className="pb-3">ชื่อเกม</th>
                       <th className="pb-3">ผู้พัฒนา</th>
                       <th className="pb-3">เวอร์ชัน</th>
@@ -3217,7 +3569,23 @@ export default function App() {
                   <tbody className="divide-y divide-slate-900/60">
                     {adminFilteredCatalog.map((game) => (
                       <tr key={game.id} className="hover:bg-slate-900/30 transition-colors">
-                        <td className="py-2.5 pl-2">
+                        <td className="py-2.5 pl-2 w-10">
+                          <input
+                            type="checkbox"
+                            checked={selectedAdminGameIds.includes(game.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedAdminGameIds((prev) => [...prev, game.id]);
+                              } else {
+                                setSelectedAdminGameIds((prev) =>
+                                  prev.filter((id) => id !== game.id)
+                                );
+                              }
+                            }}
+                            className="w-4 h-4 rounded border-slate-800 text-blue-600 focus:ring-blue-500 bg-slate-900 cursor-pointer"
+                          />
+                        </td>
+                        <td className="py-2.5">
                           <div className="w-8 h-10 rounded-lg overflow-hidden custom-placeholder border border-white/5">
                             {game.coverUrl ? (
                               <img src={game.coverUrl} alt="" className="w-full h-full object-cover" />
@@ -4875,6 +5243,21 @@ export default function App() {
                 </div>
               ) : (
                 <>
+                  {/* Google OAuth Standard Button */}
+                  <div className="flex flex-col items-center justify-center gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-inner">
+                    <div className="text-xs font-black text-slate-500 uppercase tracking-wider">
+                      ลงชื่อเข้าใช้งานจริงผ่าน Google
+                    </div>
+                    {/* Google API will render the button here */}
+                    <div id="google-signin-btn-container" className="min-h-[40px] flex items-center justify-center"></div>
+                  </div>
+
+                  <div className="flex items-center gap-2 my-2 text-slate-400 text-[10px] justify-center">
+                    <span className="h-[1px] bg-slate-200 flex-1"></span>
+                    <span>หรือ ใช้บัญชีจำลองทดสอบ</span>
+                    <span className="h-[1px] bg-slate-200 flex-1"></span>
+                  </div>
+
                   <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
                     เลือกบัญชีผู้ใช้จำลอง
                   </div>
