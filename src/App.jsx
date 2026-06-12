@@ -118,6 +118,11 @@ const MOCK_GOOGLE_ACCOUNTS = [
   { name: 'Admin AVN', email: 'admin.avn@gmail.com', role: 'Admin', avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=80&h=80&q=80' }
 ];
 
+function getUserGmail(username) {
+  const found = MOCK_GOOGLE_ACCOUNTS.find(acc => acc.role === username || acc.email === username);
+  return found ? found.email : username;
+}
+
 export default function App() {
   // --- CORE STATE ---
   const [currentUser, setCurrentUser] = useState(() => {
@@ -2650,7 +2655,7 @@ export default function App() {
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
                       <tr className="border-b border-slate-900 text-slate-400 font-bold">
-                        <th className="pb-3 pl-2">ผู้ใช้</th>
+                        <th className="pb-3 pl-2">Gmail ของผู้ใช้</th>
                         <th className="pb-3">บทบาท</th>
                         <th className="pb-3">วันที่สมัคร Premium</th>
                         <th className="pb-3">วันที่หมดอายุ Premium</th>
@@ -2664,8 +2669,8 @@ export default function App() {
                         )
                         .map((username) => (
                         <tr key={username} className="hover:bg-slate-900/30 transition-colors">
-                          <td className="py-3 pl-2 font-bold text-slate-200 truncate max-w-[120px]" title={username}>
-                            {username}
+                          <td className="py-3 pl-2 font-bold text-slate-200 truncate max-w-[180px]" title={getUserGmail(username)}>
+                            {getUserGmail(username)}
                           </td>
                           <td className="py-3">
                             <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${
