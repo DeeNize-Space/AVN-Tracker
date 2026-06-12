@@ -199,6 +199,7 @@ export default function App() {
   });
   const [newTagInput, setNewTagInput] = useState('');
   const [newGmailInput, setNewGmailInput] = useState('');
+  const [adminUserSearch, setAdminUserSearch] = useState('');
 
   const [officialGames, setOfficialGames] = useState(() => {
     const saved = localStorage.getItem('avn_official_games_v7');
@@ -2613,24 +2614,36 @@ export default function App() {
                 <p className="text-[11px] text-slate-400">
                   ปรับเปลี่ยนบทบาทผู้ใช้งานระบบจำลองเพื่อทดสอบการเข้าถึงหน้าแอดมินหรือโควตาคลังเกม (Free: 7 เกม / Premium: ไม่จำกัด / Admin: สิทธิ์แอดมิน)
                 </p>
-                {/* Form to add Gmail user */}
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newGmailInput}
-                    onChange={(e) => setNewGmailInput(e.target.value)}
-                    className="glass-input flex-1 h-9 px-3 text-xs rounded-xl text-slate-200"
-                    placeholder="ป้อน Gmail เช่น member.test@gmail.com..."
-                  />
-                  <button
-                    onClick={() => {
-                      handleAddGmailUser(newGmailInput);
-                      setNewGmailInput('');
-                    }}
-                    className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded-xl cursor-pointer transition-colors"
-                  >
-                    ➕ เพิ่มผู้ใช้
-                  </button>
+                {/* Form to add Gmail user and Search User */}
+                <div className="flex flex-col sm:flex-row gap-2 justify-between">
+                  <div className="flex gap-2 flex-1 max-w-sm">
+                    <input
+                      type="text"
+                      value={newGmailInput}
+                      onChange={(e) => setNewGmailInput(e.target.value)}
+                      className="glass-input flex-1 h-9 px-3 text-xs rounded-xl text-slate-200"
+                      placeholder="ป้อน Gmail เช่น member.test@gmail.com..."
+                    />
+                    <button
+                      onClick={() => {
+                        handleAddGmailUser(newGmailInput);
+                        setNewGmailInput('');
+                      }}
+                      className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded-xl cursor-pointer transition-colors whitespace-nowrap shrink-0"
+                    >
+                      ➕ เพิ่มผู้ใช้
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={adminUserSearch}
+                      onChange={(e) => setAdminUserSearch(e.target.value)}
+                      className="glass-input w-full sm:w-44 h-9 pl-8 pr-3 text-xs rounded-xl text-slate-200"
+                      placeholder="ค้นหาสมาชิก/Gmail..."
+                    />
+                    <span className="absolute left-2.5 top-2.5 text-slate-500 text-xs">🔍</span>
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto max-h-72 scrollbar-thin">
@@ -2645,7 +2658,11 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-900/60">
-                      {Object.keys(userRoles).map((username) => (
+                      {Object.keys(userRoles)
+                        .filter((username) =>
+                          username.toLowerCase().includes(adminUserSearch.toLowerCase())
+                        )
+                        .map((username) => (
                         <tr key={username} className="hover:bg-slate-900/30 transition-colors">
                           <td className="py-3 pl-2 font-bold text-slate-200 truncate max-w-[120px]" title={username}>
                             {username}
