@@ -270,6 +270,11 @@ export default function App() {
   const [isSuggestingNew, setIsSuggestingNew] = useState(false);
   const [isReportingGame, setIsReportingGame] = useState(null);
   const [editingLocalItem, setEditingLocalItem] = useState(null);
+  const [customAlert, setCustomAlert] = useState(null);
+
+  const alert = (msg) => {
+    setCustomAlert({ message: msg, title: '🔔 แจ้งเตือนระบบ' });
+  };
 
 
   // Admin Modals
@@ -433,10 +438,12 @@ export default function App() {
           setTimeout(() => {
             setUserRoles(prev => ({ ...prev, [currentUser]: 'free' }));
           }, 0);
-          // Format date for Thai notice
+           // Format date for Thai notice
           const parts = sub.expiryDate.split('-');
           const displayDate = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : sub.expiryDate;
-          alert(`⚠️ สมาชิก Premium ของคุณหมดอายุแล้วเมื่อวันที่ ${displayDate} ระบบได้ปรับบทบาทเป็น Free เเล้ว`);
+          setTimeout(() => {
+            alert(`⚠️ สมาชิก Premium ของคุณหมดอายุแล้วเมื่อวันที่ ${displayDate} ระบบได้ปรับบทบาทเป็น Free เเล้ว`);
+          }, 0);
         }
       }
     }
@@ -4457,6 +4464,43 @@ export default function App() {
                   ไว้ทีหลัง
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOM SYSTEM ALERT MODAL */}
+      {customAlert && (
+        <div className="fixed inset-0 bg-slate-955/80 backdrop-blur-md z-[9999] flex items-center justify-center p-4">
+          <div 
+            className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="p-5 pb-3.5 border-b border-slate-850 flex items-center justify-between">
+              <h3 className="text-xs font-black text-slate-100 flex items-center gap-2">
+                {customAlert.title}
+              </h3>
+              <button
+                onClick={() => setCustomAlert(null)}
+                className="text-slate-455 hover:text-white bg-slate-955 hover:bg-slate-855 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer text-xs"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-5 flex flex-col gap-4 text-center">
+              <p className="text-xs text-slate-200 leading-relaxed font-bold">
+                {customAlert.message}
+              </p>
+              <button
+                type="button"
+                onClick={() => setCustomAlert(null)}
+                className="w-full h-10 flex items-center justify-center bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl cursor-pointer transition-all shadow-md"
+              >
+                ตกลง
+              </button>
             </div>
           </div>
         </div>
