@@ -115,7 +115,7 @@ const MOCK_GOOGLE_ACCOUNTS = [
   { name: 'Alice Gamer', email: 'alice.gamer@gmail.com', role: 'Alice', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=80&h=80&q=80' },
   { name: 'Charlie Tracker', email: 'charlie.tracker@gmail.com', role: 'Charlie', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&h=80&q=80' },
   { name: 'Dave Player', email: 'dave.play@gmail.com', role: 'Dave', avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=80&h=80&q=80' },
-  { name: 'Admin AVN', email: 'admin.avn@gmail.com', role: 'Admin', avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=80&h=80&q=80' }
+  { name: 'Pattarasak Raksanrong', email: 'pattarasak.raksanrong@gmail.com', role: 'Admin', avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=80&h=80&q=80' }
 ];
 
 function getUserGmail(username) {
@@ -147,6 +147,7 @@ export default function App() {
       'Charlie': 'free',
       'Dave': 'free',
       'Admin': 'admin',
+      'pattarasak.raksanrong@gmail.com': 'admin',
       'Guest': 'free'
     };
   });
@@ -158,7 +159,8 @@ export default function App() {
       'Alice': { signupDate: '', expiryDate: '' },
       'Charlie': { signupDate: '', expiryDate: '' },
       'Dave': { signupDate: '', expiryDate: '' },
-      'Admin': { signupDate: '', expiryDate: '' }
+      'Admin': { signupDate: '', expiryDate: '' },
+      'pattarasak.raksanrong@gmail.com': { signupDate: '', expiryDate: '' }
     };
   });
 
