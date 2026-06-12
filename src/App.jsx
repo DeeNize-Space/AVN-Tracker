@@ -171,6 +171,41 @@ export default function App() {
   const [isPaymentSimulating, setIsPaymentSimulating] = useState(false);
   const [isSendingSuggestion, setIsSendingSuggestion] = useState(false);
 
+  // --- REVENUE STATE ---
+  const [revenueTransactions, setRevenueTransactions] = useState(() => {
+    const saved = localStorage.getItem('avn_revenue_transactions_v9');
+    if (saved) return JSON.parse(saved);
+    return [
+      {
+        id: 'tx-1781230491823',
+        username: 'Alice',
+        email: 'alice.gamer@gmail.com',
+        package: 'yearly',
+        amount: 499,
+        timestamp: '2026-05-15T10:00:00.000Z',
+        status: 'success'
+      },
+      {
+        id: 'tx-1781230951923',
+        username: 'Charlie',
+        email: 'charlie.tracker@gmail.com',
+        package: 'monthly',
+        amount: 49,
+        timestamp: '2026-06-05T14:30:00.000Z',
+        status: 'success'
+      },
+      {
+        id: 'tx-1781231852923',
+        username: 'Dave',
+        email: 'dave.play@gmail.com',
+        package: 'monthly',
+        amount: 49,
+        timestamp: '2026-06-10T09:15:00.000Z',
+        status: 'success'
+      }
+    ];
+  });
+
   // --- WEBSITE SETTINGS STATES ---
   const [webTitle, setWebTitle] = useState(() => {
     return localStorage.getItem('avn_web_title_v8') || 'AVN Star Hub';
@@ -361,6 +396,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('avn_user_notifications_v9', JSON.stringify(userNotifications));
   }, [userNotifications]);
+
+  useEffect(() => {
+    localStorage.setItem('avn_revenue_transactions_v9', JSON.stringify(revenueTransactions));
+  }, [revenueTransactions]);
 
   useEffect(() => {
     localStorage.setItem('avn_web_tagline_v9', webTagline);
@@ -1550,6 +1589,89 @@ export default function App() {
                           {subscriptionRole === 'admin' ? '🛡️ ผู้ดูแลระบบ (Admin)' : subscriptionRole === 'premium' ? '👑 สมาชิกพรีเมียม (Premium)' : '👥 สมาชิกทั่วไป (Free)'}
                         </span>
                       </div>
+                      
+                      {/* Personal Library Backup section */}
+                      <div className="flex flex-col gap-2 py-3 border-b border-slate-900 mb-3 text-left">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">💾 สำรองคลังส่วนตัว</span>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              try {
+                                const libraryData = {
+                                  username: currentUser,
+                                  email: getUserGmail(currentUser),
+                                  library: userLibraries[currentUser] || [],
+                                  backupType: 'avn_personal_library_v7'
+                                };
+                                const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
+                                  JSON.stringify(libraryData, null, 2)
+                                )}`;
+                                const downloadAnchor = document.createElement('a');
+                                downloadAnchor.setAttribute('href', jsonString);
+                                downloadAnchor.setAttribute('download', `avn_library_backup_${currentUser}.json`);
+                                document.body.appendChild(downloadAnchor);
+                                downloadAnchor.click();
+                                downloadAnchor.remove();
+                                setToastMessage('ส่งออกคลังประวัติสำเร็จ!');
+                              } catch {
+                                alert('เกิดข้อผิดพลาดในการส่งออกคลังข้อมูล');
+                              }
+                            }}
+                            className="flex-1 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 text-[10px] font-bold py-1.5 rounded-lg cursor-pointer text-center"
+                            title="ดาวน์โหลดประวัติการเล่นเก็บไว้"
+                          >
+                            📤 ส่งออกคลัง
+                          </button>
+                          
+                          <div className="flex-1 relative">
+                            <input
+                              type="file"
+                              accept=".json"
+                              id="library-backup-import"
+                              onChange={(e) => {
+                                const file = e.target.files[0];
+                                if (!file) return;
+                                
+                                const reader = new FileReader();
+                                reader.onload = (event) => {
+                                  try {
+                                    const parsed = JSON.parse(event.target.result);
+                                    if (parsed.backupType !== 'avn_personal_library_v7' || !Array.isArray(parsed.library)) {
+                                      alert('ไฟล์ดังกล่าวไม่ใช่ประวัติคลังเกมนอนุมัติของระบบ AVN Star Hub');
+                                      return;
+                                    }
+                                    
+                                    if (confirm(`คุณต้องการกู้คืนประวัติคลังเกมจำนวน ${parsed.library.length} เกมมาทับข้อมูลปัจจุบันของคุณหรือไม่?`)) {
+                                      setUserLibraries(prev => ({
+                                        ...prev,
+                                        [currentUser]: parsed.library.map(item => ({
+                                          ...item,
+                                          status: normalizeStatus(item.status)
+                                        }))
+                                      }));
+                                      setToastMessage('📥 นำเข้าคลังประวัติส่วนตัวสำเร็จ!');
+                                      setIsUserDropdownOpen(false);
+                                    }
+                                  } catch {
+                                    alert('เกิดข้อผิดพลาดในการนำเข้าไฟล์ประวัติ');
+                                  }
+                                };
+                                reader.readAsText(file);
+                                e.target.value = '';
+                              }}
+                              className="hidden"
+                            />
+                            <label
+                              htmlFor="library-backup-import"
+                              className="w-full bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 text-[10px] font-bold py-1.5 rounded-lg cursor-pointer text-center flex items-center justify-center"
+                            >
+                              📥 นำเข้าคลัง
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+
                       <button
                         onClick={() => {
                           setIsUserDropdownOpen(false);
@@ -2173,8 +2295,179 @@ export default function App() {
               </div>
             </div>
 
+            {/* Financial Analytics Dashboard */}
+            <div className="glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
+              <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
+                📊 ระบบวิเคราะห์รายได้และการเงิน (Financial Analytics)
+              </h3>
+              
+              {/* Financial Stats Cards */}
+              {(() => {
+                const totalRevenue = revenueTransactions.reduce((sum, tx) => sum + (tx.amount || 0), 0);
+                
+                // Count active premium users and calculate MRR
+                const activePremiumCount = Object.keys(userRoles).filter(user => {
+                  const role = userRoles[user];
+                  if (role !== 'premium') return false;
+                  
+                  // Check if expired
+                  const sub = userPremiumDates[user];
+                  if (sub && sub.expiryDate) {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const expiry = new Date(sub.expiryDate);
+                    expiry.setHours(0, 0, 0, 0);
+                    return today <= expiry;
+                  }
+                  return true;
+                }).length;
+                
+                // MRR calculation based on active packages
+                let monthlyCount = 0;
+                let yearlyCount = 0;
+                
+                Object.keys(userRoles).forEach(user => {
+                  if (userRoles[user] === 'premium') {
+                    const userTx = revenueTransactions.find(tx => tx.username === user && tx.status === 'success');
+                    if (userTx && userTx.package === 'yearly') {
+                      yearlyCount++;
+                    } else {
+                      monthlyCount++;
+                    }
+                  }
+                });
+                
+                const mrrValue = (monthlyCount * 49) + (yearlyCount * (499 / 12));
+                const totalPlans = monthlyCount + yearlyCount;
+                const monthlyPct = totalPlans > 0 ? Math.round((monthlyCount / totalPlans) * 100) : 0;
+                const yearlyPct = totalPlans > 0 ? 100 - monthlyPct : 0;
+
+                return (
+                  <div className="flex flex-col gap-6">
+                    {/* Stats Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="bg-slate-955/40 border border-slate-900 p-4.5 rounded-2xl flex flex-col gap-1">
+                        <span className="text-slate-400 text-xs font-bold block">💰 รายได้สะสมทั้งหมด</span>
+                        <span className="text-xl font-black text-amber-400">{totalRevenue.toLocaleString()} บาท</span>
+                        <span className="text-[10px] text-slate-500">จากการสแกนจ่ายจำลอง</span>
+                      </div>
+                      
+                      <div className="bg-slate-955/40 border border-slate-900 p-4.5 rounded-2xl flex flex-col gap-1">
+                        <span className="text-slate-400 text-xs font-bold block">📈 รายได้รายเดือนเฉลี่ย (MRR)</span>
+                        <span className="text-xl font-black text-emerald-400">{mrrValue.toFixed(2)} บาท/เดือน</span>
+                        <span className="text-[10px] text-slate-500">คำนวณตามแพ็กเกจ active</span>
+                      </div>
+
+                      <div className="bg-slate-955/40 border border-slate-900 p-4.5 rounded-2xl flex flex-col gap-1">
+                        <span className="text-slate-400 text-xs font-bold block">👑 สมาชิก Premium ปัจจุบัน</span>
+                        <span className="text-xl font-black text-blue-400">{activePremiumCount} บัญชี</span>
+                        <span className="text-[10px] text-slate-500">จากบัญชีทั้งหมดในระบบ</span>
+                      </div>
+                    </div>
+
+                    {/* Plan ratio bar */}
+                    <div className="bg-slate-955/20 border border-slate-900/50 p-4.5 rounded-2xl flex flex-col gap-2">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-slate-350">สัดส่วนผู้ใช้แพ็กเกจ Premium</span>
+                        <span className="text-slate-400">
+                          รายเดือน: {monthlyCount} ({monthlyPct}%) | รายปี: {yearlyCount} ({yearlyPct}%)
+                        </span>
+                      </div>
+                      
+                      <div className="h-4 w-full bg-slate-955 rounded-full overflow-hidden flex border border-slate-900">
+                        {totalPlans === 0 ? (
+                          <div className="w-full h-full flex items-center justify-center text-[10px] text-slate-650 font-bold bg-slate-955">
+                            ไม่มีสมาชิก Premium ในขณะนี้
+                          </div>
+                        ) : (
+                          <>
+                            {monthlyCount > 0 && (
+                              <div 
+                                style={{ width: `${monthlyPct}%` }} 
+                                className="h-full bg-blue-600 transition-all duration-500" 
+                                title={`รายเดือน: ${monthlyCount} บัญชี`}
+                              />
+                            )}
+                            {yearlyCount > 0 && (
+                              <div 
+                                style={{ width: `${yearlyPct}%` }} 
+                                className="h-full bg-amber-500 transition-all duration-500" 
+                                title={`รายปี: ${yearlyCount} บัญชี`}
+                              />
+                            )}
+                          </>
+                        )}
+                      </div>
+                      
+                      {totalPlans > 0 && (
+                        <div className="flex gap-4 text-[10px] font-bold mt-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-2.5 h-2.5 rounded bg-blue-600 inline-block"/>
+                            <span className="text-slate-400">แพ็กเกจรายเดือน (49 บาท)</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-2.5 h-2.5 rounded bg-amber-500 inline-block"/>
+                            <span className="text-slate-400">แพ็กเกจรายปี (499 บาท)</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Transactions Table */}
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-455 mb-2.5">📝 ประวัติรายการธุรกรรมการเงินล่าสุด</h4>
+                      <div className="overflow-x-auto border border-slate-900 rounded-2xl bg-slate-950/20 max-h-60 scrollbar-thin">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="border-b border-slate-900 bg-slate-950/40 text-slate-400 font-bold sticky top-0 backdrop-blur">
+                              <th className="p-3 pl-4">รหัสธุรกรรม</th>
+                              <th className="p-3">บัญชีผู้สมัคร</th>
+                              <th className="p-3">แพ็กเกจ</th>
+                              <th className="p-3 text-center">จำนวนยอดโอน</th>
+                              <th className="p-3">วันและเวลาชำระเงิน</th>
+                              <th className="p-3 text-right pr-4">สถานะ</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-900/40">
+                            {revenueTransactions.length === 0 ? (
+                              <tr>
+                                <td colSpan="6" className="text-center py-6 text-slate-500 italic">
+                                  ไม่มีประวัติธุรกรรมในระบบ
+                                </td>
+                              </tr>
+                            ) : (
+                              revenueTransactions.map((tx) => (
+                                <tr key={tx.id} className="hover:bg-slate-900/20 transition-colors">
+                                  <td className="p-3 pl-4 font-mono text-[10px] text-slate-400">{tx.id}</td>
+                                  <td className="p-3 font-bold text-slate-200">{tx.email}</td>
+                                  <td className="p-3">
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                      tx.package === 'yearly' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                    }`}>
+                                      {tx.package === 'yearly' ? 'รายปี' : 'รายเดือน'}
+                                    </span>
+                                  </td>
+                                  <td className="p-3 text-center font-bold text-slate-200">{tx.amount} บาท</td>
+                                  <td className="p-3 text-slate-455">{formatThaiDate(tx.timestamp)}</td>
+                                  <td className="p-3 text-right pr-4">
+                                    <span className="bg-emerald-500/15 text-emerald-400 font-bold px-2 py-0.5 rounded-full text-[10px] border border-emerald-500/20">
+                                      ชำระเงินสำเร็จ
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
             {/* Announcement Ticker and Admin actions */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Ticker settings */}
               <div className="glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
                 <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
@@ -2353,6 +2646,116 @@ export default function App() {
                       </>
                     )}
                   </button>
+                </div>
+              </div>
+
+              {/* Full System Backup & Restore */}
+              <div className="glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
+                <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
+                  💾 สำรองและกู้คืนข้อมูลระบบ (System Backup & Restore)
+                </h3>
+                <div className="flex flex-col gap-3.5 flex-1 justify-between">
+                  <p className="text-[11px] text-slate-400 leading-normal">
+                    ดาวน์โหลดหรือนำเข้าข้อมูลโครงสร้างทั้งหมดของแอปพลิเคชัน (รวมถึงแคตตาล็อกหลัก, บัญชีผู้ใช้, สิทธิ์ Premium, รายการธุรกรรม, และประวัติคลังข้อมูลของทุกคน) ในรูปแบบไฟล์ JSON
+                  </p>
+                  
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        try {
+                          const backupData = {
+                            avn_current_user_v7: currentUser,
+                            avn_user_roles_v9: userRoles,
+                            avn_user_premium_dates_v9: userPremiumDates,
+                            avn_official_games_v7: officialGames,
+                            avn_user_libraries_v7: userLibraries,
+                            avn_reports_v7: reports,
+                            avn_global_tags_v9: globalTags,
+                            avn_web_title_v8: webTitle,
+                            avn_web_meta_desc_v9: webMetaDescription,
+                            avn_web_tagline_v9: webTagline,
+                            avn_web_logo_v8: webLogo,
+                            avn_web_logo_type_v8: webLogoType,
+                            avn_ticker_message_v7: tickerMessage,
+                            avn_show_ticker_v7: showTicker,
+                            avn_revenue_transactions_v9: revenueTransactions
+                          };
+                          
+                          const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
+                            JSON.stringify(backupData, null, 2)
+                          )}`;
+                          const downloadAnchor = document.createElement('a');
+                          const date = new Date().toISOString().slice(0, 10);
+                          downloadAnchor.setAttribute('href', jsonString);
+                          downloadAnchor.setAttribute('download', `avn_star_hub_system_backup_${date}.json`);
+                          document.body.appendChild(downloadAnchor);
+                          downloadAnchor.click();
+                          downloadAnchor.remove();
+                          setToastMessage('ส่งออกข้อมูลสำรองระบบสำเร็จ!');
+                        } catch {
+                          alert('เกิดข้อผิดพลาดในการสำรองข้อมูลระบบ');
+                        }
+                      }}
+                      className="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold h-10 px-4 rounded-xl cursor-pointer transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      📤 ส่งออกข้อมูลระบบ (JSON)
+                    </button>
+                    
+                    <div className="flex-1 relative">
+                      <input
+                        type="file"
+                        accept=".json"
+                        id="system-backup-import"
+                        onChange={(e) => {
+                          const file = e.target.files[0];
+                          if (!file) return;
+                          
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            try {
+                              const parsed = JSON.parse(event.target.result);
+                              
+                              if (!parsed.avn_official_games_v7 || !parsed.avn_user_libraries_v7 || !parsed.avn_user_roles_v9) {
+                                alert('รูปแบบไฟล์ข้อมูลสำรองระบบไม่ถูกต้อง ไม่พบโครงสร้างฐานข้อมูลหลัก');
+                                return;
+                              }
+                              
+                              if (confirm('⚠️ คำเตือน: การกู้คืนข้อมูลระบบจะเขียนทับข้อมูลและค่าตั้งค่าทั้งหมดในปัจจุบัน คุณแน่ใจที่จะดำเนินการต่อหรือไม่?')) {
+                                if (parsed.avn_official_games_v7) setOfficialGames(parsed.avn_official_games_v7);
+                                if (parsed.avn_user_libraries_v7) setUserLibraries(parsed.avn_user_libraries_v7);
+                                if (parsed.avn_user_roles_v9) setUserRoles(parsed.avn_user_roles_v9);
+                                if (parsed.avn_user_premium_dates_v9) setUserPremiumDates(parsed.avn_user_premium_dates_v9);
+                                if (parsed.avn_reports_v7) setReports(parsed.avn_reports_v7);
+                                if (parsed.avn_global_tags_v9) setGlobalTags(parsed.avn_global_tags_v9);
+                                if (parsed.avn_web_title_v8) setWebTitle(parsed.avn_web_title_v8);
+                                if (parsed.avn_web_meta_desc_v9) setWebMetaDescription(parsed.avn_web_meta_desc_v9);
+                                if (parsed.avn_web_tagline_v9) setWebTagline(parsed.avn_web_tagline_v9);
+                                if (parsed.avn_web_logo_v8) setWebLogo(parsed.avn_web_logo_v8);
+                                if (parsed.avn_web_logo_type_v8) setWebLogoType(parsed.avn_web_logo_type_v8);
+                                if (parsed.avn_ticker_message_v7) setTickerMessage(parsed.avn_ticker_message_v7);
+                                if (parsed.avn_show_ticker_v7) setShowTicker(parsed.avn_show_ticker_v7);
+                                if (parsed.avn_revenue_transactions_v9) setRevenueTransactions(parsed.avn_revenue_transactions_v9);
+                                
+                                setToastMessage('⚡ กู้คืนข้อมูลระบบทั้งหมดสำเร็จแล้ว!');
+                              }
+                            } catch {
+                              alert('เกิดข้อผิดพลาดในการอ่านไฟล์ JSON กรุณาตรวจสอบไฟล์');
+                            }
+                          };
+                          reader.readAsText(file);
+                          e.target.value = '';
+                        }}
+                        className="hidden"
+                      />
+                      <label
+                        htmlFor="system-backup-import"
+                        className="w-full bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-750 text-slate-300 text-xs font-bold h-10 rounded-xl cursor-pointer transition-all flex items-center justify-center gap-1.5"
+                      >
+                        📥 นำเข้าข้อมูลระบบ (JSON)
+                      </label>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2743,6 +3146,19 @@ export default function App() {
                                     ...prev,
                                     [username]: { signupDate: signupStr, expiryDate: expiryStr }
                                   }));
+
+                                  // Add mock transaction for admin upgrade
+                                  const txEmail = getUserGmail(username);
+                                  const newTx = {
+                                    id: 'tx-manual-' + Date.now(),
+                                    username: username,
+                                    email: txEmail,
+                                    package: 'monthly',
+                                    amount: 49,
+                                    timestamp: getIsoTimestamp(),
+                                    status: 'success'
+                                  };
+                                  setRevenueTransactions(prev => [newTx, ...prev]);
                                 }
                                 
                                 setToastMessage(`ปรับบทบาทของ ${username} เป็น ${newRole.toUpperCase()} แล้ว`);
@@ -4438,6 +4854,19 @@ export default function App() {
                         ...prev,
                         [currentUser]: { signupDate: signupStr, expiryDate: expiryStr }
                       }));
+
+                      const amountVal = selectedPackage === 'monthly' ? 49 : 499;
+                      const txEmail = getUserGmail(currentUser);
+                      const newTx = {
+                        id: 'tx-' + Date.now(),
+                        username: currentUser,
+                        email: txEmail,
+                        package: selectedPackage,
+                        amount: amountVal,
+                        timestamp: getIsoTimestamp(),
+                        status: 'success'
+                      };
+                      setRevenueTransactions(prev => [newTx, ...prev]);
 
                       setIsPaymentSimulating(false);
                       setIsUpsellOpen(false);
