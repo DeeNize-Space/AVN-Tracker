@@ -1085,8 +1085,8 @@ export default function App() {
     }
   };
 
-  // Simulated SlipOK Verification (Method 3: Discards image, stores text transaction details)
-  const handleVerifySlip = async (e) => {
+  // Simulated SlipOK Verification (Method 1: Discards image immediately, stores only text transaction details)
+  const handleVerifySlip = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -1095,14 +1095,6 @@ export default function App() {
       setUploadedSlipPreview(previewUrl);
       setIsSlipChecking(true);
       setSlipCheckLogs([]);
-
-      // Read file as Base64 to save in the transaction details (for Admin review)
-      let base64Image = null;
-      try {
-        base64Image = await readFileAsBase64(file);
-      } catch (err) {
-        console.error('Error converting slip to base64:', err);
-      }
 
       const logsList = simulateSlipError ? [
         '🤖 [SlipOK] กำลังสแกนหา Mini-QR ในรูปภาพสลิป...',
@@ -1134,8 +1126,7 @@ export default function App() {
             package: selectedPackage,
             amount: amountVal,
             timestamp: getIsoTimestamp(),
-            status: 'pending',
-            slipImage: base64Image
+            status: 'pending'
           };
           setRevenueTransactions(prev => [newTx, ...prev]);
 
@@ -1177,8 +1168,7 @@ export default function App() {
             package: selectedPackage,
             amount: amountVal,
             timestamp: getIsoTimestamp(),
-            status: 'success',
-            slipImage: base64Image
+            status: 'success'
           };
           setRevenueTransactions(prev => [newTx, ...prev]);
 
@@ -5288,96 +5278,83 @@ export default function App() {
             <div className="p-5 flex flex-col gap-4 text-center max-h-[80vh] overflow-y-auto">
               {/* Slip Image/Mockup container */}
               <div className="flex justify-center bg-slate-950/40 p-3 rounded-2xl border border-slate-800">
-                {selectedAdminTxSlip.slipImage ? (
-                  <div className="relative">
-                    <img 
-                      src={selectedAdminTxSlip.slipImage} 
-                      alt="Slip Verification" 
-                      className="max-w-full max-h-[300px] object-contain rounded-xl shadow-lg border border-slate-800"
-                    />
-                    <div className="absolute top-2 right-2 bg-slate-900/90 text-[8px] font-bold text-slate-300 px-2 py-1 rounded border border-slate-850 backdrop-blur">
-                      รูปภาพอัปโหลดจริง
-                    </div>
-                  </div>
-                ) : (
-                  /* Render simulated Bank Slip */
-                  <div className="w-full max-w-[260px] bg-white text-slate-800 rounded-2xl p-5 text-left font-sans shadow-md border border-slate-200 relative select-none">
-                    {/* Bank branding */}
-                    <div className="flex items-center justify-between border-b border-dashed border-slate-300 pb-3 mb-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center text-white font-extrabold text-[9px] font-sans">
-                          KB
-                        </div>
-                        <div>
-                          <span className="text-[10px] font-black block text-slate-900 leading-none font-sans">ธนาคารกสิกรไทย</span>
-                          <span className="text-[7px] text-slate-500 block font-sans">KASIKORNBANK</span>
-                        </div>
+                {/* Render simulated Bank Slip (Method 1: Discard image immediately, reconstruct receipt mockup from logs) */}
+                <div className="w-full max-w-[260px] bg-white text-slate-800 rounded-2xl p-5 text-left font-sans shadow-md border border-slate-200 relative select-none">
+                  {/* Bank branding */}
+                  <div className="flex items-center justify-between border-b border-dashed border-slate-300 pb-3 mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center text-white font-extrabold text-[9px] font-sans">
+                        KB
                       </div>
-                      <span className="text-[8px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-black font-sans">โอนเงินสำเร็จ</span>
-                    </div>
-
-                    {/* Receipt fields */}
-                    <div className="flex flex-col gap-2 text-[9px] font-sans">
                       <div>
-                        <span className="text-slate-400 block text-[7px] font-sans">รหัสอ้างอิง (Ref ID)</span>
-                        <span className="font-mono font-bold text-slate-800 block text-[9.5px] break-all">{selectedAdminTxSlip.transRef || 'N/A'}</span>
+                        <span className="text-[10px] font-black block text-slate-900 leading-none font-sans">ธนาคารกสิกรไทย</span>
+                        <span className="text-[7px] text-slate-500 block font-sans">KASIKORNBANK</span>
                       </div>
-                      
-                      <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 font-sans">
-                        <div>
-                          <span className="text-slate-400 block text-[7px] font-sans">ผู้โอน</span>
-                          <span className="font-bold text-slate-800 block truncate font-sans">{selectedAdminTxSlip.username}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 block text-[7px] font-sans">ผู้รับโอน</span>
-                          <span className="font-bold text-slate-800 block font-sans">AVN Star Hub</span>
-                        </div>
-                      </div>
+                    </div>
+                    <span className="text-[8px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-black font-sans">โอนเงินสำเร็จ</span>
+                  </div>
 
-                      <div className="border-t border-slate-100 pt-2 font-sans">
-                        <span className="text-slate-400 block text-[7px] font-sans">บัญชีผู้สมัคร</span>
-                        <span className="font-semibold text-slate-700 block truncate font-sans">{selectedAdminTxSlip.email}</span>
+                  {/* Receipt fields */}
+                  <div className="flex flex-col gap-2 text-[9px] font-sans">
+                    <div>
+                      <span className="text-slate-400 block text-[7px] font-sans">รหัสอ้างอิง (Ref ID)</span>
+                      <span className="font-mono font-bold text-slate-800 block text-[9.5px] break-all">{selectedAdminTxSlip.transRef || 'N/A'}</span>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 font-sans">
+                      <div>
+                        <span className="text-slate-400 block text-[7px] font-sans">ผู้โอน</span>
+                        <span className="font-bold text-slate-800 block truncate font-sans">{selectedAdminTxSlip.username}</span>
                       </div>
-
-                      <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 font-sans">
-                        <div>
-                          <span className="text-slate-400 block text-[7px] font-sans">แพ็กเกจ</span>
-                          <span className="font-bold text-slate-800 block font-sans">{selectedAdminTxSlip.package === 'yearly' ? 'รายปี (Premium)' : 'รายเดือน (Premium)'}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 block text-[7px] font-sans">จำนวนเงิน</span>
-                          <span className="font-black text-slate-900 block text-[10.5px] font-sans">{selectedAdminTxSlip.amount} บาท</span>
-                        </div>
-                      </div>
-
-                      <div className="border-t border-slate-100 pt-2 font-sans">
-                        <span className="text-slate-400 block text-[7px] font-sans">วันเวลาทำรายการ</span>
-                        <span className="text-slate-650 block font-sans">{formatThaiDate(selectedAdminTxSlip.timestamp)}</span>
+                      <div>
+                        <span className="text-slate-400 block text-[7px] font-sans">ผู้รับโอน</span>
+                        <span className="font-bold text-slate-800 block font-sans">AVN Star Hub</span>
                       </div>
                     </div>
 
-                    {/* QR Code Simulation */}
-                    <div className="flex justify-center mt-3 pt-2.5 border-t border-slate-100">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 border border-slate-200 relative flex flex-wrap p-0.5 bg-white shrink-0">
-                          <div className="w-2.5 h-2.5 bg-slate-900"></div>
-                          <div className="w-2.5 h-2.5 bg-white flex-1"></div>
-                          <div className="w-2.5 h-2.5 bg-slate-900"></div>
-                          <div className="w-2.5 h-2.5 bg-white"></div>
-                          <div className="w-2.5 h-2.5 bg-slate-900"></div>
-                          <div className="w-2.5 h-2.5 bg-white"></div>
-                          <div className="w-2.5 h-2.5 bg-slate-900"></div>
-                          <div className="w-2.5 h-2.5 bg-white"></div>
-                          <div className="w-2.5 h-2.5 bg-slate-900"></div>
-                        </div>
-                        <div className="text-[7.5px] leading-tight text-slate-400 max-w-[150px] font-sans">
-                          <span className="font-bold text-slate-600 block font-sans">สลิปจำลองสำหรับ Demo</span>
-                          สลักลายน้ำตรวจสอบแล้วผ่าน SlipOK (Mock)
-                        </div>
+                    <div className="border-t border-slate-100 pt-2 font-sans">
+                      <span className="text-slate-400 block text-[7px] font-sans">บัญชีผู้สมัคร</span>
+                      <span className="font-semibold text-slate-700 block truncate font-sans">{selectedAdminTxSlip.email}</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 font-sans">
+                      <div>
+                        <span className="text-slate-400 block text-[7px] font-sans">แพ็กเกจ</span>
+                        <span className="font-bold text-slate-800 block font-sans">{selectedAdminTxSlip.package === 'yearly' ? 'รายปี (Premium)' : 'รายเดือน (Premium)'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[7px] font-sans">จำนวนเงิน</span>
+                        <span className="font-black text-slate-900 block text-[10.5px] font-sans">{selectedAdminTxSlip.amount} บาท</span>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-slate-100 pt-2 font-sans">
+                      <span className="text-slate-400 block text-[7px] font-sans">วันเวลาทำรายการ</span>
+                      <span className="text-slate-650 block font-sans">{formatThaiDate(selectedAdminTxSlip.timestamp)}</span>
+                    </div>
+                  </div>
+
+                  {/* QR Code Simulation */}
+                  <div className="flex justify-center mt-3 pt-2.5 border-t border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 border border-slate-200 relative flex flex-wrap p-0.5 bg-white shrink-0">
+                        <div className="w-2.5 h-2.5 bg-slate-900"></div>
+                        <div className="w-2.5 h-2.5 bg-white flex-1"></div>
+                        <div className="w-2.5 h-2.5 bg-slate-900"></div>
+                        <div className="w-2.5 h-2.5 bg-white"></div>
+                        <div className="w-2.5 h-2.5 bg-slate-900"></div>
+                        <div className="w-2.5 h-2.5 bg-white"></div>
+                        <div className="w-2.5 h-2.5 bg-slate-900"></div>
+                        <div className="w-2.5 h-2.5 bg-white"></div>
+                        <div className="w-2.5 h-2.5 bg-slate-900"></div>
+                      </div>
+                      <div className="text-[7.5px] leading-tight text-slate-400 max-w-[150px] font-sans">
+                        <span className="font-bold text-slate-600 block font-sans">สลิปตรวจสอบแล้ว (Method 1)</span>
+                        ข้อมูลสลิปสแกนและบันทึกข้อความสำเร็จ (ภาพสลิปถูกลบทิ้งแล้ว)
                       </div>
                     </div>
                   </div>
-                )}
+                </div>
               </div>
 
               {/* Status Warning Details */}
