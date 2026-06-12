@@ -145,13 +145,34 @@ export default function App() {
       'Guest': 'free'
     };
   });
+
+  const [userPremiumDates, setUserPremiumDates] = useState(() => {
+    const saved = localStorage.getItem('avn_user_premium_dates_v9');
+    if (saved) return JSON.parse(saved);
+    return {
+      'Alice': { signupDate: '', expiryDate: '' },
+      'Charlie': { signupDate: '', expiryDate: '' },
+      'Dave': { signupDate: '', expiryDate: '' },
+      'Admin': { signupDate: '', expiryDate: '' }
+    };
+  });
+
+  const [userNotifications, setUserNotifications] = useState(() => {
+    const saved = localStorage.getItem('avn_user_notifications_v9');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [isUpsellOpen, setIsUpsellOpen] = useState(false);
+  const [selectedPackage, setSelectedPackage] = useState('yearly');
   const [isPaymentSimulating, setIsPaymentSimulating] = useState(false);
   const [isSendingSuggestion, setIsSendingSuggestion] = useState(false);
 
   // --- WEBSITE SETTINGS STATES ---
   const [webTitle, setWebTitle] = useState(() => {
     return localStorage.getItem('avn_web_title_v8') || 'AVN Star Hub';
+  });
+
+  const [webMetaDescription, setWebMetaDescription] = useState(() => {
+    return localStorage.getItem('avn_web_meta_desc_v9') || 'พอร์ทัลแนะนำและติดตามประวัติเกมวิชวลโนเวลยอดนิยม';
   });
 
   const [webLogo, setWebLogo] = useState(() => {
@@ -177,6 +198,7 @@ export default function App() {
     return Array.from(tags).sort();
   });
   const [newTagInput, setNewTagInput] = useState('');
+  const [newGmailInput, setNewGmailInput] = useState('');
 
   const [officialGames, setOfficialGames] = useState(() => {
     const saved = localStorage.getItem('avn_official_games_v7');
@@ -322,6 +344,14 @@ export default function App() {
   }, [userRoles]);
 
   useEffect(() => {
+    localStorage.setItem('avn_user_premium_dates_v9', JSON.stringify(userPremiumDates));
+  }, [userPremiumDates]);
+
+  useEffect(() => {
+    localStorage.setItem('avn_user_notifications_v9', JSON.stringify(userNotifications));
+  }, [userNotifications]);
+
+  useEffect(() => {
     localStorage.setItem('avn_web_tagline_v9', webTagline);
   }, [webTagline]);
 
@@ -354,12 +384,57 @@ export default function App() {
   }, [webTitle]);
 
   useEffect(() => {
+    localStorage.setItem('avn_web_meta_desc_v9', webMetaDescription);
+  }, [webMetaDescription]);
+
+  useEffect(() => {
     localStorage.setItem('avn_web_logo_v8', webLogo);
   }, [webLogo]);
 
   useEffect(() => {
     localStorage.setItem('avn_web_logo_type_v8', webLogoType);
   }, [webLogoType]);
+
+  // DOM Updates for Title & Meta Description
+  useEffect(() => {
+    document.title = webTitle;
+  }, [webTitle]);
+
+  useEffect(() => {
+    let meta = document.querySelector('meta[name="description"]');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.name = 'description';
+      document.head.appendChild(meta);
+    }
+    meta.content = webMetaDescription;
+  }, [webMetaDescription]);
+
+  // Expiry check when currentUser changes or dates are modified
+  useEffect(() => {
+    if (currentUser === 'Guest' || currentUser === 'Admin') return;
+    
+    const userRole = userRoles[currentUser];
+    if (userRole === 'premium') {
+      const sub = userPremiumDates[currentUser];
+      if (sub && sub.expiryDate) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const expiry = new Date(sub.expiryDate);
+        expiry.setHours(0, 0, 0, 0);
+        
+        if (today > expiry) {
+          setTimeout(() => {
+            setUserRoles(prev => ({ ...prev, [currentUser]: 'free' }));
+          }, 0);
+          // Format date for Thai notice
+          const parts = sub.expiryDate.split('-');
+          const displayDate = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : sub.expiryDate;
+          alert(`⚠️ สมาชิก Premium ของคุณหมดอายุแล้วเมื่อวันที่ ${displayDate} ระบบได้ปรับบทบาทเป็น Free เเล้ว`);
+        }
+      }
+    }
+  }, [currentUser, userPremiumDates, userRoles]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -398,8 +473,11 @@ export default function App() {
     if (currentUser === 'Admin') {
       return reports.filter((r) => r.status === 'pending');
     }
-    return reports.filter((r) => r.type === 'update' && r.status === 'pending');
-  }, [reports, currentUser]);
+    if (subscriptionRole === 'free') {
+      return [];
+    }
+    return userNotifications.filter((n) => n.recipient === currentUser);
+  }, [reports, currentUser, subscriptionRole, userNotifications]);
 
   const googleUser = useMemo(() => {
     if (isGuest) return null;
@@ -635,6 +713,87 @@ export default function App() {
     setToastMessage('ปฏิเสธ/ละเว้น รายงานแล้ว');
   };
 
+  const handleSendUpdateNotification = (game) => {
+    const recipients = [];
+    Object.keys(userLibraries).forEach((user) => {
+      const role = userRoles[user] || 'free';
+      const hasGame = userLibraries[user].some((item) => item.gameId === game.id);
+      if (hasGame && (role === 'premium' || role === 'admin')) {
+        recipients.push(user);
+      }
+    });
+
+    if (recipients.length === 0) {
+      setToastMessage('ไม่พบผู้ใช้ระดับ Premium ที่บันทึกเกมนี้อยู่ในคลัง');
+      return;
+    }
+
+    const newNotifications = recipients.map((user) => ({
+      id: 'unotif-' + Date.now() + '-' + Math.random().toString(36).substring(2, 5),
+      recipient: user,
+      gameId: game.id,
+      gameTitle: game.title,
+      version: game.version,
+      timestamp: getIsoTimestamp(),
+      read: false
+    }));
+
+    setUserNotifications((prev) => [...newNotifications, ...prev]);
+    setToastMessage(`📢 ส่งแจ้งเตือนอัปเดตเวอร์ชัน v${game.version} ไปยังผู้ใช้ Premium ${recipients.length} คนสำเร็จ!`);
+  };
+
+  const handleUpdatePremiumSignupDate = (username, dateStr) => {
+    setUserPremiumDates((prev) => ({
+      ...prev,
+      [username]: {
+        ...prev[username],
+        signupDate: dateStr
+      }
+    }));
+  };
+
+  const handleUpdatePremiumExpiryDate = (username, dateStr) => {
+    setUserPremiumDates((prev) => ({
+      ...prev,
+      [username]: {
+        ...prev[username],
+        expiryDate: dateStr
+      }
+    }));
+  };
+
+  const handleAddGmailUser = (gmail) => {
+    if (!gmail || !gmail.trim()) return;
+    const email = gmail.trim().toLowerCase();
+    
+    if (!email.includes('@') || email.length < 5) {
+      alert('กรุณากรอกรูปแบบ Gmail ที่ถูกต้อง');
+      return;
+    }
+
+    if (userRoles[email] !== undefined) {
+      alert('บัญชีอีเมลนี้มีอยู่ในระบบแล้ว');
+      return;
+    }
+
+    setUserRoles((prev) => ({
+      ...prev,
+      [email]: 'free'
+    }));
+
+    setUserPremiumDates((prev) => ({
+      ...prev,
+      [email]: { signupDate: '', expiryDate: '' }
+    }));
+
+    setUserLibraries((prev) => ({
+      ...prev,
+      [email]: []
+    }));
+
+    setToastMessage(`➕ เพิ่มบัญชี ${email} เข้าสู่ระบบสำเร็จ!`);
+  };
+
   // Inline library row modifications
   const handleUpdateItemStatus = (gameId, newStatus) => {
     setUserLibraries((prev) => {
@@ -744,6 +903,12 @@ export default function App() {
   const handleSaveLocalEdit = (e) => {
     e.preventDefault();
     if (!editingLocalItem) return;
+
+    if (subscriptionRole === 'free' && currentUser !== 'Admin' && currentLibraryList.length > 7) {
+      alert('🔒 สมาชิก Premium ของคุณหมดอายุแล้วและคลังมีเกมมากกว่า 7 เกม ไม่สามารถแก้ไข/บันทึกประวัติการเล่นได้จนกว่าจะสมัคร Premium อีกครั้ง');
+      setEditingLocalItem(null);
+      return;
+    }
 
     const updatedLib = currentLibraryList.map((item) => {
       if (item.gameId === editingLocalItem.gameId) {
@@ -1170,6 +1335,15 @@ export default function App() {
               📚 คลังของฉัน
             </button>
 
+            {subscriptionRole === 'free' && !isGuest && (
+              <button
+                onClick={() => setIsUpsellOpen(true)}
+                className="text-sm px-4 py-2.5 rounded-xl font-extrabold transition-all h-11 flex items-center gap-1.5 cursor-pointer text-amber-400 border border-amber-500/20 hover:border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10 active:scale-95 duration-150"
+              >
+                👑 สมัคร Premium
+              </button>
+            )}
+
             {isAdmin && (
               <button
                 onClick={() => handleTabChange('admin')}
@@ -1205,14 +1379,46 @@ export default function App() {
                 <div className="absolute right-0 mt-3 w-80 glass-panel border border-slate-805 rounded-2xl shadow-2xl z-50 p-4 animate-fade-in-up">
                   <div className="flex items-center justify-between pb-2.5 border-b border-slate-800 mb-2.5">
                     <span className="text-xs font-bold text-slate-350 flex items-center gap-1.5">
-                      🔔 การแจ้งเตือนอัปเดต ({notifications.length})
+                      🔔 การแจ้งเตือนอัปเดต ({subscriptionRole === 'free' ? 0 : notifications.length})
                     </span>
+                    {subscriptionRole !== 'free' && notifications.length > 0 && (
+                      <button
+                        onClick={() => {
+                          if (currentUser === 'Admin') {
+                            setReports(reports.map(r => ({ ...r, status: 'ignored' })));
+                          } else {
+                            setUserNotifications(userNotifications.filter(n => n.recipient !== currentUser));
+                          }
+                          setToastMessage('ล้างการแจ้งเตือนทั้งหมดแล้ว');
+                        }}
+                        className="text-[10px] font-bold text-blue-400 hover:text-blue-300 cursor-pointer"
+                      >
+                        ล้างทั้งหมด
+                      </button>
+                    )}
                   </div>
 
                   <div className="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1">
-                    {notifications.length === 0 ? (
+                    {subscriptionRole === 'free' ? (
+                      <div className="text-center py-6 px-2 flex flex-col items-center gap-3">
+                        <span className="text-3xl">🔒</span>
+                        <p className="text-xs text-slate-300 font-bold leading-normal">
+                          ฟีเจอร์แจ้งเตือนเมื่อมีเกมเวอร์ชันใหม่ออกมา เปิดใช้งานเฉพาะผู้ใช้ระดับ Premium เท่านั้น
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsUpsellOpen(true);
+                            setShowNotifications(false);
+                          }}
+                          className="bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white text-[10px] font-black py-2 px-4 rounded-xl cursor-pointer shadow-md transition-all mt-1"
+                        >
+                          👑 สมัครสมาชิก Premium
+                        </button>
+                      </div>
+                    ) : notifications.length === 0 ? (
                       <div className="text-center py-8 text-slate-500 text-xs font-medium">
-                        ไม่มีการแจ้งเตือนรอดำเนินการ
+                        ไม่มีการแจ้งเตือนใหม่
                       </div>
                     ) : (
                       notifications.map((notif) => (
@@ -1230,20 +1436,28 @@ export default function App() {
                             }
                             setShowNotifications(false);
                           }}
-                          className="p-3 bg-slate-950 border border-slate-900 text-xs text-slate-300 hover:bg-slate-900/30 cursor-pointer transition-colors"
+                          className="p-3 bg-slate-950 border border-slate-900 text-xs text-slate-350 hover:bg-slate-900/30 cursor-pointer transition-colors"
                         >
                           <div>
-                            {notif.type === 'new' ? (
-                              <span>เสนอแนะเกมใหม่: <span className="font-extrabold text-blue-400">{notif.gameTitle}</span></span>
-                            ) : notif.type === 'error' ? (
-                              <span>แจ้งข้อมูลผิดพลาด: <span className="font-extrabold text-amber-400">{notif.gameTitle}</span></span>
+                            {currentUser === 'Admin' ? (
+                              notif.type === 'new' ? (
+                                <span>เสนอแนะเกมใหม่: <span className="font-extrabold text-blue-400">{notif.gameTitle}</span></span>
+                              ) : notif.type === 'error' ? (
+                                <span>แจ้งข้อมูลผิดพลาด: <span className="font-extrabold text-amber-400">{notif.gameTitle}</span></span>
+                              ) : (
+                                <span>พบเวอร์ชันใหม่สำหรับ <span className="font-extrabold text-blue-400">{notif.gameTitle}</span></span>
+                              )
                             ) : (
-                              <span>พบเวอร์ชันใหม่สำหรับ <span className="font-extrabold text-blue-400">{notif.gameTitle}</span></span>
+                              <span>เกม <span className="font-extrabold text-blue-400">{notif.gameTitle}</span> มีเวอร์ชันใหม่ล่าสุดแล้ว!</span>
                             )}
                           </div>
                           <div className="mt-1 flex justify-between items-center text-[10px]">
-                            {notif.type === 'update' && (
-                              <span className="text-slate-400">v{notif.currentVersion} ➔ <span className="text-emerald-455 font-bold">v{notif.reportedVersion}</span></span>
+                            {currentUser === 'Admin' ? (
+                              notif.type === 'update' && (
+                                <span className="text-slate-400">v{notif.currentVersion} ➔ <span className="text-emerald-455 font-bold">v{notif.reportedVersion}</span></span>
+                              )
+                            ) : (
+                              <span className="text-slate-400">เวอร์ชันล่าสุด: <span className="text-emerald-455 font-bold">v{notif.version}</span></span>
                             )}
                             <span className="text-slate-500 block text-right w-full">{formatThaiDate(notif.timestamp)}</span>
                           </div>
@@ -1998,13 +2212,22 @@ export default function App() {
                 </h3>
                 <div className="flex flex-col gap-3.5">
                   <div>
-                    <label className="text-xs text-slate-400 font-bold block mb-1">ชื่อเว็บไซต์</label>
+                    <label className="text-xs text-slate-400 font-bold block mb-1">ชื่อเว็บไซต์ (Title)</label>
                     <input
                       type="text"
                       value={webTitle}
                       onChange={(e) => setWebTitle(e.target.value)}
                       className="glass-input w-full h-10 px-3 text-xs rounded-xl text-slate-200"
                       placeholder="พิมพ์ชื่อเว็บไซต์..."
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-400 font-bold block mb-1">คำอธิบายเว็บไซต์ (Meta Description)</label>
+                    <textarea
+                      value={webMetaDescription}
+                      onChange={(e) => setWebMetaDescription(e.target.value)}
+                      className="glass-input w-full h-14 p-3 text-xs rounded-xl text-slate-200 resize-none"
+                      placeholder="พิมพ์คำอธิบายเว็บไซต์สำหรับระบบค้นหา (SEO)..."
                     />
                   </div>
                   <div>
@@ -2348,6 +2571,13 @@ export default function App() {
                         <td className="py-2.5 text-right pr-2">
                           <div className="inline-flex items-center gap-1">
                             <button
+                              onClick={() => handleSendUpdateNotification(game)}
+                              className="w-7 h-7 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-400 rounded flex items-center justify-center cursor-pointer"
+                              title="แจ้งเตือนอัปเดตไปยังผู้ใช้ Premium"
+                            >
+                              📢
+                            </button>
+                            <button
                               onClick={() => {
                                 handleSelectGameForEdit(game);
                                 setAdminEditGameOpen(true);
@@ -2383,12 +2613,34 @@ export default function App() {
                 <p className="text-[11px] text-slate-400">
                   ปรับเปลี่ยนบทบาทผู้ใช้งานระบบจำลองเพื่อทดสอบการเข้าถึงหน้าแอดมินหรือโควตาคลังเกม (Free: 7 เกม / Premium: ไม่จำกัด / Admin: สิทธิ์แอดมิน)
                 </p>
+                {/* Form to add Gmail user */}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newGmailInput}
+                    onChange={(e) => setNewGmailInput(e.target.value)}
+                    className="glass-input flex-1 h-9 px-3 text-xs rounded-xl text-slate-200"
+                    placeholder="ป้อน Gmail เช่น member.test@gmail.com..."
+                  />
+                  <button
+                    onClick={() => {
+                      handleAddGmailUser(newGmailInput);
+                      setNewGmailInput('');
+                    }}
+                    className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded-xl cursor-pointer transition-colors"
+                  >
+                    ➕ เพิ่มผู้ใช้
+                  </button>
+                </div>
+
                 <div className="overflow-x-auto max-h-72 scrollbar-thin">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
                       <tr className="border-b border-slate-900 text-slate-400 font-bold">
                         <th className="pb-3 pl-2">ผู้ใช้</th>
-                        <th className="pb-3">บทบาทปัจจุบัน</th>
+                        <th className="pb-3">บทบาท</th>
+                        <th className="pb-3">วันที่สมัคร Premium</th>
+                        <th className="pb-3">วันที่หมดอายุ Premium</th>
                         <th className="pb-3 text-right pr-2">ปรับระดับ</th>
                       </tr>
                     </thead>
@@ -2409,6 +2661,30 @@ export default function App() {
                               {userRoles[username] === 'admin' ? '🛡️ Admin' : userRoles[username] === 'premium' ? '👑 Premium' : '👥 Free'}
                             </span>
                           </td>
+                          <td className="py-3">
+                            {userRoles[username] === 'free' ? (
+                              <span className="text-slate-650 italic">-</span>
+                            ) : (
+                              <input
+                                type="date"
+                                value={userPremiumDates[username]?.signupDate || ''}
+                                onChange={(e) => handleUpdatePremiumSignupDate(username, e.target.value)}
+                                className="bg-black text-slate-200 border border-slate-800 rounded px-1.5 py-0.5 text-[10px] w-28 focus:outline-none"
+                              />
+                            )}
+                          </td>
+                          <td className="py-3">
+                            {userRoles[username] === 'free' ? (
+                              <span className="text-slate-650 italic">-</span>
+                            ) : (
+                              <input
+                                type="date"
+                                value={userPremiumDates[username]?.expiryDate || ''}
+                                onChange={(e) => handleUpdatePremiumExpiryDate(username, e.target.value)}
+                                className="bg-black text-slate-200 border border-slate-800 rounded px-1.5 py-0.5 text-[10px] w-28 focus:outline-none"
+                              />
+                            )}
+                          </td>
                           <td className="py-3 text-right pr-2">
                             <select
                               value={userRoles[username]}
@@ -2418,6 +2694,28 @@ export default function App() {
                                   ...prev,
                                   [username]: newRole
                                 }));
+                                
+                                // Auto-fill dates if upgraded to premium
+                                if (newRole === 'premium') {
+                                  const today = new Date();
+                                  const yyyy = today.getFullYear();
+                                  const mm = String(today.getMonth() + 1).padStart(2, '0');
+                                  const dd = String(today.getDate()).padStart(2, '0');
+                                  const signupStr = `${yyyy}-${mm}-${dd}`;
+                                  
+                                  const expiryDate = new Date(today);
+                                  expiryDate.setDate(expiryDate.getDate() + 30);
+                                  const expYyyy = expiryDate.getFullYear();
+                                  const expMm = String(expiryDate.getMonth() + 1).padStart(2, '0');
+                                  const expDd = String(expiryDate.getDate()).padStart(2, '0');
+                                  const expiryStr = `${expYyyy}-${expMm}-${expDd}`;
+                                  
+                                  setUserPremiumDates(prev => ({
+                                    ...prev,
+                                    [username]: { signupDate: signupStr, expiryDate: expiryStr }
+                                  }));
+                                }
+                                
                                 setToastMessage(`ปรับบทบาทของ ${username} เป็น ${newRole.toUpperCase()} แล้ว`);
                               }}
                               className="bg-black text-white border border-slate-800 text-xs rounded-lg px-2 py-1 cursor-pointer focus:outline-none"
@@ -3985,7 +4283,7 @@ export default function App() {
             {/* Header */}
             <div className="p-5 pb-4 border-b border-slate-850 flex items-center justify-between">
               <h3 className="text-sm font-black text-slate-100 flex items-center gap-2">
-                👑 อัปเกรดสถานะพรีเมียม (Premium Tier)
+                👑 อัปเกรดสถานะพรีเมียม (Premium Member)
               </h3>
               <button
                 onClick={() => setIsUpsellOpen(false)}
@@ -3996,34 +4294,75 @@ export default function App() {
             </div>
 
             {/* Content */}
-            <div className="p-5 flex flex-col gap-4 text-center">
+            <div className="p-5 flex flex-col gap-4 text-center max-h-[80vh] overflow-y-auto">
               <div>
-                <h4 className="text-base font-black text-amber-400">ปลดล็อกโควตาคลังเกมไม่จำกัด</h4>
-                <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed max-w-sm mx-auto">
-                  ขยายคลังติดตามเกมจากสูงสุด 7 เกมยอดนิยม ไปเป็นแบบบันทึกประวัติความก้าวหน้าได้ไม่จำกัดเกม ร่วมรับสิทธิ์การแจ้งเตือนเวอร์ชันอัปเกรดด่วนพิเศษ!
+                <h4 className="text-base font-black text-amber-400">เข้าถึงสิทธิประโยชน์ระดับพรีเมียม</h4>
+                <p className="text-[11px] text-slate-400 mt-1 leading-relaxed max-w-sm mx-auto">
+                  ขยายขีดความสามารถการบันทึกประวัติการเล่น พร้อมเปิดระบบแจ้งเตือนเกมอัปเดตเวอร์ชันใหม่ด่วนพิเศษ
                 </p>
+              </div>
+
+              {/* Benefits list */}
+              <div className="text-left bg-slate-950/60 border border-slate-900 rounded-2xl p-4 flex flex-col gap-2.5">
+                <span className="text-xs font-bold text-amber-400 block mb-1">✨ สิ่งที่คุณจะได้รับเมื่อสมัคร Premium:</span>
+                <ul className="text-[11px] text-slate-300 flex flex-col gap-2 leading-relaxed">
+                  <li className="flex items-start gap-2">
+                    <span className="text-amber-500 font-bold">1.</span>
+                    <span>สามารถบันทึกสถานะของเกมได้ไม่จำกัด (จากปกติฟรีได้แค่ 7 เกม)</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-amber-500 font-bold">2.</span>
+                    <span>ระบบแจ้งเตือนเกมผ่านกระดิ่งเมื่อมีเวอร์ชันใหม่ออกมาให้เล่น</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-amber-500 font-bold">3.</span>
+                    <span>ร่วมสนับสนุนการพัฒนาฟีเจอร์ใหม่ๆ เพื่อประสบการณ์ผู้ใช้ที่ดียิ่งขึ้น</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-amber-500 font-bold">4.</span>
+                    <span>ช่วยสนับสนุนค่ารันเซิร์ฟเวอร์หลักของระบบให้ยังคงเปิดอยู่ได้</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-amber-500 font-bold">5.</span>
+                    <span>เป็นค่ากาแฟและกำลังใจเล็กๆ น้อยๆ ให้แอดมินผู้พัฒนา</span>
+                  </li>
+                </ul>
               </div>
 
               {/* Price Selector */}
               <div className="grid grid-cols-2 gap-3 mt-1">
-                <div className="bg-slate-950 border border-slate-800 p-3 rounded-2xl flex flex-col items-center justify-center relative cursor-pointer hover:border-amber-500/30 transition-colors">
+                <div 
+                  onClick={() => setSelectedPackage('monthly')}
+                  className={`p-3 rounded-2xl flex flex-col items-center justify-center relative cursor-pointer transition-all border ${
+                    selectedPackage === 'monthly'
+                      ? 'bg-slate-950 border-amber-500 shadow-md shadow-amber-500/5'
+                      : 'bg-slate-950 border-slate-800 opacity-60 hover:opacity-90'
+                  }`}
+                >
                   <span className="text-[10px] text-slate-450 font-bold">รายเดือน</span>
                   <span className="text-base font-black text-slate-200 mt-1">49 บาท</span>
                   <span className="text-[9px] text-slate-500 mt-0.5">/เดือน</span>
                 </div>
-                <div className="bg-slate-950 border-2 border-amber-500 p-3 rounded-2xl flex flex-col items-center justify-center relative cursor-pointer hover:border-amber-400 transition-colors">
+                <div 
+                  onClick={() => setSelectedPackage('yearly')}
+                  className={`p-3 rounded-2xl flex flex-col items-center justify-center relative cursor-pointer transition-all border ${
+                    selectedPackage === 'yearly'
+                      ? 'bg-slate-950 border-2 border-amber-500 shadow-md shadow-amber-500/10'
+                      : 'bg-slate-950 border-slate-800 opacity-60 hover:opacity-90'
+                  }`}
+                >
                   <span className="absolute -top-2.5 bg-gradient-to-r from-amber-600 to-yellow-600 text-[8px] font-black text-white px-2 py-0.5 rounded-full uppercase tracking-wider">
                     คุ้มที่สุด
                   </span>
                   <span className="text-[10px] text-amber-400 font-black mt-1">รายปี (ประหยัด 15%)</span>
                   <span className="text-base font-black text-slate-200 mt-1">499 บาท</span>
-                  <span className="text-[9px] text-slate-500 mt-0.5">/ปี</span>
+                  <span className="text-[9px] text-slate-500 mt-0.5">ตกวันละ 1.37 บาท!</span>
                 </div>
               </div>
 
               {/* PromptPay SVG QR Generator */}
               <div className="my-1">
-                <svg width="180" height="230" viewBox="0 0 220 280" className="mx-auto rounded-2xl bg-white p-3.5 shadow-lg border border-slate-200">
+                <svg width="150" height="195" viewBox="0 0 220 280" className="mx-auto rounded-2xl bg-white p-3.5 shadow-lg border border-slate-200">
                   <rect x="0" y="0" width="220" height="40" rx="6" fill="#003764" />
                   <text x="110" y="25" textAnchor="middle" fill="white" fontSize="13" fontWeight="900" fontFamily="sans-serif">
                     prompt pay
@@ -4036,7 +4375,7 @@ export default function App() {
                   </text>
                   <path d="M80 65h10v10H80zm20 10h10v10h-10zm-10 20h10v10h-10zm30-20h10v10h-10zm-10 40h20v10h-20zm30 10h10v20h-10zm-60 20h20v10H80zm50 20h10v10h-10zm10 10h25v10H140zm-40 25h15v10h-15zm-20-10h10v25H80zm85-40h10v20h-10zm-25 10h10v10h-10zm25 30h10v10h-10zm-45-5h10v15h-10zm35 25h10v10h-10z" fill="#0f172a" />
                   <text x="110" y="265" textAnchor="middle" fill="#64748b" fontSize="9" fontWeight="bold" fontFamily="sans-serif">
-                    สแกน QR เพื่อโอนยอดเงินสมัครสมาชิก
+                    ยอดโอน {selectedPackage === 'monthly' ? '49' : '499'} บาท
                   </text>
                 </svg>
               </div>
@@ -4052,9 +4391,28 @@ export default function App() {
                         ...prev,
                         [currentUser]: 'premium'
                       }));
+                      
+                      const today = new Date();
+                      const yyyy = today.getFullYear();
+                      const mm = String(today.getMonth() + 1).padStart(2, '0');
+                      const dd = String(today.getDate()).padStart(2, '0');
+                      const signupStr = `${yyyy}-${mm}-${dd}`;
+                      
+                      const expiryDate = new Date(today);
+                      expiryDate.setDate(expiryDate.getDate() + (selectedPackage === 'monthly' ? 30 : 365));
+                      const expYyyy = expiryDate.getFullYear();
+                      const expMm = String(expiryDate.getMonth() + 1).padStart(2, '0');
+                      const expDd = String(expiryDate.getDate()).padStart(2, '0');
+                      const expiryStr = `${expYyyy}-${expMm}-${expDd}`;
+
+                      setUserPremiumDates(prev => ({
+                        ...prev,
+                        [currentUser]: { signupDate: signupStr, expiryDate: expiryStr }
+                      }));
+
                       setIsPaymentSimulating(false);
                       setIsUpsellOpen(false);
-                      setToastMessage('ยินดีต้อนรับสู่ Premium! ปลดล็อกคลังติดตามเกมไม่จำกัดสำเร็จ');
+                      setToastMessage(`ยินดีต้อนรับเข้าสู่ระดับ Premium สำเร็จ! หมดอายุในวันที่ ${expDd}-${expMm}-${expYyyy}`);
                     }, 1500);
                   }}
                   disabled={isPaymentSimulating}
