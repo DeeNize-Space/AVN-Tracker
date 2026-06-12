@@ -176,6 +176,7 @@ export default function App() {
   const [isSlipChecking, setIsSlipChecking] = useState(false);
   const [slipCheckLogs, setSlipCheckLogs] = useState([]);
   const [simulateSlipError, setSimulateSlipError] = useState(false);
+  const [selectedAdminTxSlip, setSelectedAdminTxSlip] = useState(null);
 
   // --- REVENUE STATE ---
   const [revenueTransactions, setRevenueTransactions] = useState(() => {
@@ -1085,7 +1086,7 @@ export default function App() {
   };
 
   // Simulated SlipOK Verification (Method 3: Discards image, stores text transaction details)
-  const handleVerifySlip = (e) => {
+  const handleVerifySlip = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -1094,6 +1095,14 @@ export default function App() {
       setUploadedSlipPreview(previewUrl);
       setIsSlipChecking(true);
       setSlipCheckLogs([]);
+
+      // Read file as Base64 to save in the transaction details (for Admin review)
+      let base64Image = null;
+      try {
+        base64Image = await readFileAsBase64(file);
+      } catch (err) {
+        console.error('Error converting slip to base64:', err);
+      }
 
       const logsList = simulateSlipError ? [
         '🤖 [SlipOK] กำลังสแกนหา Mini-QR ในรูปภาพสลิป...',
@@ -1125,7 +1134,8 @@ export default function App() {
             package: selectedPackage,
             amount: amountVal,
             timestamp: getIsoTimestamp(),
-            status: 'pending'
+            status: 'pending',
+            slipImage: base64Image
           };
           setRevenueTransactions(prev => [newTx, ...prev]);
 
@@ -1167,7 +1177,8 @@ export default function App() {
             package: selectedPackage,
             amount: amountVal,
             timestamp: getIsoTimestamp(),
-            status: 'success'
+            status: 'success',
+            slipImage: base64Image
           };
           setRevenueTransactions(prev => [newTx, ...prev]);
 
@@ -2671,26 +2682,33 @@ export default function App() {
                                     )}
                                   </td>
                                   <td className="p-3 text-right pr-4">
-                                    {tx.status === 'pending' ? (
-                                      <div className="inline-flex gap-1.5 justify-end">
-                                        <button
-                                          onClick={() => handleAdminApproveTx(tx)}
-                                          className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-[9px] cursor-pointer transition-colors"
-                                          title="อนุมัติการชำระเงินและปรับสิทธิ์พรีเมียม"
-                                        >
-                                          อนุมัติ
-                                        </button>
-                                        <button
-                                          onClick={() => handleAdminRejectTx(tx)}
-                                          className="px-2 py-1 bg-red-650 hover:bg-red-550 text-white font-bold rounded text-[9px] cursor-pointer transition-colors"
-                                          title="ปฏิเสธสลิปรายการนี้"
-                                        >
-                                          ปฏิเสธ
-                                        </button>
-                                      </div>
-                                    ) : (
-                                      <span className="text-slate-650 italic text-[10px]">-</span>
-                                    )}
+                                    <div className="inline-flex gap-1.5 justify-end items-center">
+                                      <button
+                                        onClick={() => setSelectedAdminTxSlip(tx)}
+                                        className="px-2 py-1 bg-slate-850 hover:bg-slate-750 text-slate-200 border border-slate-800 font-bold rounded text-[9px] cursor-pointer transition-colors"
+                                        title="ตรวจสอบรายละเอียดสลิปและล็อกความผิดพลาด"
+                                      >
+                                        🔍 ดูสลิป
+                                      </button>
+                                      {tx.status === 'pending' && (
+                                        <>
+                                          <button
+                                            onClick={() => handleAdminApproveTx(tx)}
+                                            className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-[9px] cursor-pointer transition-colors"
+                                            title="อนุมัติการชำระเงินและปรับสิทธิ์พรีเมียม"
+                                          >
+                                            อนุมัติ
+                                          </button>
+                                          <button
+                                            onClick={() => handleAdminRejectTx(tx)}
+                                            className="px-2 py-1 bg-red-650 hover:bg-red-550 text-white font-bold rounded text-[9px] cursor-pointer transition-colors"
+                                            title="ปฏิเสธสลิปรายการนี้"
+                                          >
+                                            ปฏิเสธ
+                                          </button>
+                                        </>
+                                      )}
+                                    </div>
                                   </td>
                                 </tr>
                               ))
@@ -5243,6 +5261,191 @@ export default function App() {
       {toastMessage && (
         <div className="fixed bottom-6 right-6 bg-slate-900 border border-blue-500 text-blue-400 font-bold px-5 py-3 rounded-xl shadow-2xl z-[9999] flex items-center gap-2 animate-fade-in-up">
           <span className="text-lg">💡</span> {toastMessage}
+        </div>
+      )}
+
+      {/* VIEW SLIP MODAL FOR ADMIN */}
+      {selectedAdminTxSlip && (
+        <div className="fixed inset-0 bg-slate-955/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <div 
+            className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="p-5 pb-4 border-b border-slate-850 flex items-center justify-between">
+              <h3 className="text-sm font-black text-slate-100 flex items-center gap-2">
+                🔎 ตรวจสอบสลิปและสถานะการโอน
+              </h3>
+              <button
+                onClick={() => setSelectedAdminTxSlip(null)}
+                className="text-slate-455 hover:text-white bg-slate-955 hover:bg-slate-855 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer text-xs"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-5 flex flex-col gap-4 text-center max-h-[80vh] overflow-y-auto">
+              {/* Slip Image/Mockup container */}
+              <div className="flex justify-center bg-slate-950/40 p-3 rounded-2xl border border-slate-800">
+                {selectedAdminTxSlip.slipImage ? (
+                  <div className="relative">
+                    <img 
+                      src={selectedAdminTxSlip.slipImage} 
+                      alt="Slip Verification" 
+                      className="max-w-full max-h-[300px] object-contain rounded-xl shadow-lg border border-slate-800"
+                    />
+                    <div className="absolute top-2 right-2 bg-slate-900/90 text-[8px] font-bold text-slate-300 px-2 py-1 rounded border border-slate-850 backdrop-blur">
+                      รูปภาพอัปโหลดจริง
+                    </div>
+                  </div>
+                ) : (
+                  /* Render simulated Bank Slip */
+                  <div className="w-full max-w-[260px] bg-white text-slate-800 rounded-2xl p-5 text-left font-sans shadow-md border border-slate-200 relative select-none">
+                    {/* Bank branding */}
+                    <div className="flex items-center justify-between border-b border-dashed border-slate-300 pb-3 mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center text-white font-extrabold text-[9px] font-sans">
+                          KB
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-black block text-slate-900 leading-none font-sans">ธนาคารกสิกรไทย</span>
+                          <span className="text-[7px] text-slate-500 block font-sans">KASIKORNBANK</span>
+                        </div>
+                      </div>
+                      <span className="text-[8px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-black font-sans">โอนเงินสำเร็จ</span>
+                    </div>
+
+                    {/* Receipt fields */}
+                    <div className="flex flex-col gap-2 text-[9px] font-sans">
+                      <div>
+                        <span className="text-slate-400 block text-[7px] font-sans">รหัสอ้างอิง (Ref ID)</span>
+                        <span className="font-mono font-bold text-slate-800 block text-[9.5px] break-all">{selectedAdminTxSlip.transRef || 'N/A'}</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 font-sans">
+                        <div>
+                          <span className="text-slate-400 block text-[7px] font-sans">ผู้โอน</span>
+                          <span className="font-bold text-slate-800 block truncate font-sans">{selectedAdminTxSlip.username}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[7px] font-sans">ผู้รับโอน</span>
+                          <span className="font-bold text-slate-800 block font-sans">AVN Star Hub</span>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-100 pt-2 font-sans">
+                        <span className="text-slate-400 block text-[7px] font-sans">บัญชีผู้สมัคร</span>
+                        <span className="font-semibold text-slate-700 block truncate font-sans">{selectedAdminTxSlip.email}</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 font-sans">
+                        <div>
+                          <span className="text-slate-400 block text-[7px] font-sans">แพ็กเกจ</span>
+                          <span className="font-bold text-slate-800 block font-sans">{selectedAdminTxSlip.package === 'yearly' ? 'รายปี (Premium)' : 'รายเดือน (Premium)'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[7px] font-sans">จำนวนเงิน</span>
+                          <span className="font-black text-slate-900 block text-[10.5px] font-sans">{selectedAdminTxSlip.amount} บาท</span>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-100 pt-2 font-sans">
+                        <span className="text-slate-400 block text-[7px] font-sans">วันเวลาทำรายการ</span>
+                        <span className="text-slate-650 block font-sans">{formatThaiDate(selectedAdminTxSlip.timestamp)}</span>
+                      </div>
+                    </div>
+
+                    {/* QR Code Simulation */}
+                    <div className="flex justify-center mt-3 pt-2.5 border-t border-slate-100">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 border border-slate-200 relative flex flex-wrap p-0.5 bg-white shrink-0">
+                          <div className="w-2.5 h-2.5 bg-slate-900"></div>
+                          <div className="w-2.5 h-2.5 bg-white flex-1"></div>
+                          <div className="w-2.5 h-2.5 bg-slate-900"></div>
+                          <div className="w-2.5 h-2.5 bg-white"></div>
+                          <div className="w-2.5 h-2.5 bg-slate-900"></div>
+                          <div className="w-2.5 h-2.5 bg-white"></div>
+                          <div className="w-2.5 h-2.5 bg-slate-900"></div>
+                          <div className="w-2.5 h-2.5 bg-white"></div>
+                          <div className="w-2.5 h-2.5 bg-slate-900"></div>
+                        </div>
+                        <div className="text-[7.5px] leading-tight text-slate-400 max-w-[150px] font-sans">
+                          <span className="font-bold text-slate-600 block font-sans">สลิปจำลองสำหรับ Demo</span>
+                          สลักลายน้ำตรวจสอบแล้วผ่าน SlipOK (Mock)
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Status Warning Details */}
+              <div className="text-left bg-slate-950/60 border border-slate-800 rounded-2xl p-4 flex flex-col gap-2">
+                <span className="text-xs font-bold text-slate-200 block">📋 รายละเอียดการตรวจสอบเชิงระบบ:</span>
+                
+                {selectedAdminTxSlip.status === 'pending' ? (
+                  <div className="text-[11px] text-amber-400 flex flex-col gap-1.5 leading-relaxed bg-amber-500/5 border border-amber-500/10 p-2.5 rounded-xl">
+                    <span className="font-black flex items-center gap-1">⚠️ ตรวจพบลักษณะสลิปต้องสงสัย (Pending)</span>
+                    <span className="text-[10px] text-slate-300">
+                      - ตรวจพบค่าความคล้ายคลึงของเลขรหัสอ้างอิง (Ref) หรือยอดเงินไม่สอดคล้องกับฐานข้อมูลปัจจุบัน
+                    </span>
+                    <span className="text-[10px] text-slate-300">
+                      - ข้อแนะนำสำหรับแอดมิน: กรุณาเปิดแอปพลิเคชันบัญชีธนาคารเพื่อตรวจสอบยอดเงินรับเข้าปลายทางจริง หากมีเงินเข้าถูกต้องจำนวน {selectedAdminTxSlip.amount} บาท ให้กดปุ่มอนุมัติระบบด้านล่าง
+                    </span>
+                  </div>
+                ) : selectedAdminTxSlip.status === 'success' ? (
+                  <div className="text-[11px] text-emerald-400 flex flex-col gap-1 leading-relaxed bg-emerald-500/5 border border-emerald-500/10 p-2.5 rounded-xl">
+                    <span className="font-black">🟢 ตรวจสอบถูกต้องสำเร็จ (Success)</span>
+                    <span className="text-[10px] text-slate-350">
+                      - ผ่านการยืนยันข้อมูลแล้ว และผู้สมัครได้รับสิทธิ์ Premium เรียบร้อย
+                    </span>
+                  </div>
+                ) : (
+                  <div className="text-[11px] text-red-400 flex flex-col gap-1.5 leading-relaxed bg-rose-500/5 border border-rose-500/10 p-2.5 rounded-xl">
+                    <span className="font-black flex items-center gap-1">🔴 รายการชำระเงินไม่ถูกต้อง (Failed)</span>
+                    <span className="text-[10px] text-slate-350">
+                      - เหตุผลการปฏิเสธ: {selectedAdminTxSlip.reason || 'ตรวจสอบพบลักษณะสลิปซ้ำซ้อนหรือยอดโอนไม่ตรง'}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons inside inspect modal */}
+              {selectedAdminTxSlip.status === 'pending' && (
+                <div className="grid grid-cols-2 gap-3 mt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleAdminApproveTx(selectedAdminTxSlip);
+                      setSelectedAdminTxSlip(null);
+                    }}
+                    className="w-full h-11 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-xl cursor-pointer transition-all shadow-lg"
+                  >
+                    ✔️ อนุมัติสิทธิ์
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleAdminRejectTx(selectedAdminTxSlip);
+                      setSelectedAdminTxSlip(null);
+                    }}
+                    className="w-full h-11 bg-red-650 hover:bg-red-550 text-white text-xs font-black rounded-xl cursor-pointer transition-all shadow-lg"
+                  >
+                    ❌ ปฏิเสธรายการ
+                  </button>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setSelectedAdminTxSlip(null)}
+                className="w-full h-10 border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-slate-300 text-xs font-bold rounded-xl cursor-pointer transition-colors"
+              >
+                ปิดหน้าต่างตรวจสอบ
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
