@@ -367,6 +367,7 @@ export default function App() {
   const [isReportingGame, setIsReportingGame] = useState(null);
   const [editingLocalItem, setEditingLocalItem] = useState(null);
   const [customAlert, setCustomAlert] = useState(null);
+  const [customConfirm, setCustomConfirm] = useState(null);
 
   const alert = (msg) => {
     setCustomAlert({ message: msg, title: '🔔 แจ้งเตือนระบบ' });
@@ -917,11 +918,15 @@ export default function App() {
   };
 
   const handleDeleteOfficialGame = (gameId) => {
-    if (window.confirm('คุณแน่ใจหรือไม่ที่จะลบเกมนี้ออกจากระบบหลัก? ข้อมูลประวัติการเล่นของผู้ใช้จะยังคงอยู่ แต่อ้างอิงจะหายไป')) {
-      setOfficialGames(officialGames.filter((g) => g.id !== gameId));
-      setSelectedAdminGameIds((prev) => prev.filter((id) => id !== gameId));
-      setToastMessage('ลบเกมออกจากแคตตาล็อกระบบแล้ว');
-    }
+    setCustomConfirm({
+      title: 'ลบเกมออกจากระบบหลัก',
+      message: 'คุณแน่ใจหรือไม่ที่จะลบเกมนี้ออกจากระบบหลัก? ข้อมูลประวัติการเล่นของผู้ใช้จะยังคงอยู่ แต่อ้างอิงจะหายไป',
+      onConfirm: () => {
+        setOfficialGames(officialGames.filter((g) => g.id !== gameId));
+        setSelectedAdminGameIds((prev) => prev.filter((id) => id !== gameId));
+        setToastMessage('ลบเกมออกจากแคตตาล็อกระบบแล้ว');
+      }
+    });
   };
 
   const handleIgnoreReport = (reportId) => {
@@ -1993,17 +1998,21 @@ export default function App() {
                                       return;
                                     }
                                     
-                                    if (confirm(`คุณต้องการกู้คืนประวัติคลังเกมจำนวน ${parsed.library.length} เกมมาทับข้อมูลปัจจุบันของคุณหรือไม่?`)) {
-                                      setUserLibraries(prev => ({
-                                        ...prev,
-                                        [currentUser]: parsed.library.map(item => ({
-                                          ...item,
-                                          status: normalizeStatus(item.status)
-                                        }))
-                                      }));
-                                      setToastMessage('📥 นำเข้าคลังประวัติส่วนตัวสำเร็จ!');
-                                      setIsUserDropdownOpen(false);
-                                    }
+                                    setCustomConfirm({
+                                      title: 'นำเข้าข้อมูลคลังประวัติส่วนตัว',
+                                      message: `คุณต้องการกู้คืนประวัติคลังเกมจำนวน ${parsed.library.length} เกมมาทับข้อมูลปัจจุบันของคุณหรือไม่?`,
+                                      onConfirm: () => {
+                                        setUserLibraries(prev => ({
+                                          ...prev,
+                                          [currentUser]: parsed.library.map(item => ({
+                                            ...item,
+                                            status: normalizeStatus(item.status)
+                                          }))
+                                        }));
+                                        setToastMessage('📥 นำเข้าคลังประวัติส่วนตัวสำเร็จ!');
+                                        setIsUserDropdownOpen(false);
+                                      }
+                                    });
                                   } catch {
                                     alert('เกิดข้อผิดพลาดในการนำเข้าไฟล์ประวัติ');
                                   }
@@ -2652,9 +2661,13 @@ export default function App() {
                             </button>
                             <button
                               onClick={() => {
-                                if (confirm('คุณต้องการลบเกมนี้ออกจากคลังประวัติส่วนตัวหรือไม่?')) {
-                                  handleDeleteLibraryItem(item.gameId);
-                                }
+                                setCustomConfirm({
+                                  title: 'ลบเกมออกจากคลังส่วนตัว',
+                                  message: 'คุณต้องการลบเกมนี้ออกจากคลังประวัติส่วนตัวหรือไม่?',
+                                  onConfirm: () => {
+                                    handleDeleteLibraryItem(item.gameId);
+                                  }
+                                });
                               }}
                               className="flex-grow py-1 px-1 text-[11px] font-black rounded-lg bg-red-955/25 border border-red-900/30 hover:bg-red-900/40 hover:border-red-750/50 text-red-400 transition-colors cursor-pointer text-center"
                             >
@@ -3201,26 +3214,30 @@ export default function App() {
                                 return;
                               }
                               
-                              if (confirm('⚠️ คำเตือน: การกู้คืนข้อมูลระบบจะเขียนทับข้อมูลและค่าตั้งค่าทั้งหมดในปัจจุบัน คุณแน่ใจที่จะดำเนินการต่อหรือไม่?')) {
-                                if (parsed.avn_official_games_v9) setOfficialGames(parsed.avn_official_games_v9);
-                                else if (parsed.avn_official_games_v8) setOfficialGames(parsed.avn_official_games_v8);
-                                else if (parsed.avn_official_games_v7) setOfficialGames(parsed.avn_official_games_v7);
-                                if (parsed.avn_user_libraries_v7) setUserLibraries(parsed.avn_user_libraries_v7);
-                                if (parsed.avn_user_roles_v9) setUserRoles(parsed.avn_user_roles_v9);
-                                if (parsed.avn_user_premium_dates_v9) setUserPremiumDates(parsed.avn_user_premium_dates_v9);
-                                if (parsed.avn_reports_v7) setReports(parsed.avn_reports_v7);
-                                if (parsed.avn_global_tags_v9) setGlobalTags(parsed.avn_global_tags_v9);
-                                if (parsed.avn_web_title_v8) setWebTitle(parsed.avn_web_title_v8);
-                                if (parsed.avn_web_meta_desc_v9) setWebMetaDescription(parsed.avn_web_meta_desc_v9);
-                                if (parsed.avn_web_tagline_v9) setWebTagline(parsed.avn_web_tagline_v9);
-                                if (parsed.avn_web_logo_v8) setWebLogo(parsed.avn_web_logo_v8);
-                                if (parsed.avn_web_logo_type_v8) setWebLogoType(parsed.avn_web_logo_type_v8);
-                                if (parsed.avn_ticker_message_v7) setTickerMessage(parsed.avn_ticker_message_v7);
-                                if (parsed.avn_show_ticker_v7) setShowTicker(parsed.avn_show_ticker_v7);
-                                if (parsed.avn_revenue_transactions_v9) setRevenueTransactions(parsed.avn_revenue_transactions_v9);
-                                
-                                setToastMessage('⚡ กู้คืนข้อมูลระบบทั้งหมดสำเร็จแล้ว!');
-                              }
+                              setCustomConfirm({
+                                title: 'กู้คืนข้อมูลระบบหลัก',
+                                message: '⚠️ คำเตือน: การกู้คืนข้อมูลระบบจะเขียนทับข้อมูลและค่าตั้งค่าทั้งหมดในปัจจุบัน คุณแน่ใจที่จะดำเนินการต่อหรือไม่?',
+                                onConfirm: () => {
+                                  if (parsed.avn_official_games_v9) setOfficialGames(parsed.avn_official_games_v9);
+                                  else if (parsed.avn_official_games_v8) setOfficialGames(parsed.avn_official_games_v8);
+                                  else if (parsed.avn_official_games_v7) setOfficialGames(parsed.avn_official_games_v7);
+                                  if (parsed.avn_user_libraries_v7) setUserLibraries(parsed.avn_user_libraries_v7);
+                                  if (parsed.avn_user_roles_v9) setUserRoles(parsed.avn_user_roles_v9);
+                                  if (parsed.avn_user_premium_dates_v9) setUserPremiumDates(parsed.avn_user_premium_dates_v9);
+                                  if (parsed.avn_reports_v7) setReports(parsed.avn_reports_v7);
+                                  if (parsed.avn_global_tags_v9) setGlobalTags(parsed.avn_global_tags_v9);
+                                  if (parsed.avn_web_title_v8) setWebTitle(parsed.avn_web_title_v8);
+                                  if (parsed.avn_web_meta_desc_v9) setWebMetaDescription(parsed.avn_web_meta_desc_v9);
+                                  if (parsed.avn_web_tagline_v9) setWebTagline(parsed.avn_web_tagline_v9);
+                                  if (parsed.avn_web_logo_v8) setWebLogo(parsed.avn_web_logo_v8);
+                                  if (parsed.avn_web_logo_type_v8) setWebLogoType(parsed.avn_web_logo_type_v8);
+                                  if (parsed.avn_ticker_message_v7) setTickerMessage(parsed.avn_ticker_message_v7);
+                                  if (parsed.avn_show_ticker_v7) setShowTicker(parsed.avn_show_ticker_v7);
+                                  if (parsed.avn_revenue_transactions_v9) setRevenueTransactions(parsed.avn_revenue_transactions_v9);
+                                  
+                                  setToastMessage('⚡ กู้คืนข้อมูลระบบทั้งหมดสำเร็จแล้ว!');
+                                }
+                              });
                             } catch {
                               alert('เกิดข้อผิดพลาดในการอ่านไฟล์ JSON กรุณาตรวจสอบไฟล์');
                             }
@@ -3470,46 +3487,50 @@ export default function App() {
                               return;
                             }
                             
-                            if (confirm(`คุณต้องการนำเข้าเกมจำนวน ${importedGames.length} รายการจากไฟล์นี้หรือไม่?\n(เกมที่มีชื่อหรือ ID/Slug ซ้ำจะถูกเขียนทับด้วยข้อมูลจากไฟล์นี้)`)) {
-                              setOfficialGames(prev => {
-                                const merged = [...prev];
-                                let addedCount = 0;
-                                let updatedCount = 0;
-                                
-                                importedGames.forEach(newGame => {
-                                  const idx = merged.findIndex(g => 
-                                    g.id.toLowerCase() === newGame.id.toLowerCase() || 
-                                    g.title.trim().toLowerCase() === newGame.title.trim().toLowerCase()
-                                  );
+                            setCustomConfirm({
+                              title: 'นำเข้าข้อมูลแคตตาล็อก',
+                              message: `คุณต้องการนำเข้าเกมจำนวน ${importedGames.length} รายการจากไฟล์นี้หรือไม่?\n(เกมที่มีชื่อหรือ ID/Slug ซ้ำจะถูกเขียนทับด้วยข้อมูลจากไฟล์นี้)`,
+                              onConfirm: () => {
+                                setOfficialGames(prev => {
+                                  const merged = [...prev];
+                                  let addedCount = 0;
+                                  let updatedCount = 0;
                                   
-                                  const mapped = {
-                                    id: newGame.id,
-                                    title: newGame.title,
-                                    developer: newGame.developer || 'Unknown',
-                                    version: newGame.version || '0.1.0',
-                                    overview: newGame.overview || '',
-                                    patreonUrl: newGame.patreonUrl || '',
-                                    buyUrl: newGame.buyUrl || '',
-                                    socialUrl: newGame.socialUrl || '',
-                                    tags: newGame.tags || [],
-                                    rating: typeof newGame.rating === 'number' ? newGame.rating : 5.0,
-                                    coverUrl: newGame.coverUrl || '',
-                                    screenshots: newGame.screenshots || []
-                                  };
+                                  importedGames.forEach(newGame => {
+                                    const idx = merged.findIndex(g => 
+                                      g.id.toLowerCase() === newGame.id.toLowerCase() || 
+                                      g.title.trim().toLowerCase() === newGame.title.trim().toLowerCase()
+                                    );
+                                    
+                                    const mapped = {
+                                      id: newGame.id,
+                                      title: newGame.title,
+                                      developer: newGame.developer || 'Unknown',
+                                      version: newGame.version || '0.1.0',
+                                      overview: newGame.overview || '',
+                                      patreonUrl: newGame.patreonUrl || '',
+                                      buyUrl: newGame.buyUrl || '',
+                                      socialUrl: newGame.socialUrl || '',
+                                      tags: newGame.tags || [],
+                                      rating: typeof newGame.rating === 'number' ? newGame.rating : 5.0,
+                                      coverUrl: newGame.coverUrl || '',
+                                      screenshots: newGame.screenshots || []
+                                    };
+                                    
+                                    if (idx !== -1) {
+                                      merged[idx] = { ...merged[idx], ...mapped };
+                                      updatedCount++;
+                                    } else {
+                                      merged.push(mapped);
+                                      addedCount++;
+                                    }
+                                  });
                                   
-                                  if (idx !== -1) {
-                                    merged[idx] = { ...merged[idx], ...mapped };
-                                    updatedCount++;
-                                  } else {
-                                    merged.push(mapped);
-                                    addedCount++;
-                                  }
+                                  alert(`นำเข้าข้อมูลเรียบร้อยแล้ว!\n- อัปเดตข้อมูลเกมเดิม: ${updatedCount} รายการ\n- เพิ่มเกมใหม่: ${addedCount} รายการ`);
+                                  return merged;
                                 });
-                                
-                                alert(`นำเข้าข้อมูลเรียบร้อยแล้ว!\n- อัปเดตข้อมูลเกมเดิม: ${updatedCount} รายการ\n- เพิ่มเกมใหม่: ${addedCount} รายการ`);
-                                return merged;
-                              });
-                            }
+                              }
+                            });
                           } catch (err) {
                             alert('เกิดข้อผิดพลาดในการอ่านไฟล์ JSON: ' + err.message);
                           }
@@ -5627,6 +5648,62 @@ export default function App() {
               >
                 ตกลง
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOM SYSTEM CONFIRM MODAL */}
+      {customConfirm && (
+        <div className="fixed inset-0 bg-slate-955/80 backdrop-blur-md z-[9999] flex items-center justify-center p-4">
+          <div 
+            className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="p-5 pb-3.5 border-b border-slate-850 flex items-center justify-between">
+              <h3 className="text-xs font-black text-slate-100 flex items-center gap-2">
+                {customConfirm.title || 'ยืนยันการทำรายการ'}
+              </h3>
+              <button
+                onClick={() => setCustomConfirm(null)}
+                className="text-slate-455 hover:text-white bg-slate-955 hover:bg-slate-855 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer text-xs"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-5 flex flex-col gap-4 text-center">
+              <p className="text-xs text-slate-200 leading-relaxed font-bold whitespace-pre-line">
+                {customConfirm.message}
+              </p>
+              <div className="flex gap-3 mt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (customConfirm.onConfirm) {
+                      customConfirm.onConfirm();
+                    }
+                    setCustomConfirm(null);
+                  }}
+                  className="flex-1 h-10 flex items-center justify-center bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl cursor-pointer transition-all shadow-md"
+                >
+                  ตกลง
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (customConfirm.onCancel) {
+                      customConfirm.onCancel();
+                    }
+                    setCustomConfirm(null);
+                  }}
+                  className="flex-1 h-10 flex items-center justify-center bg-slate-800 hover:bg-slate-700 border border-slate-700/60 text-slate-200 text-xs font-bold rounded-xl cursor-pointer transition-colors"
+                >
+                  ยกเลิก
+                </button>
+              </div>
             </div>
           </div>
         </div>
