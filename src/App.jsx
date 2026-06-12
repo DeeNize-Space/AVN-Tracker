@@ -171,6 +171,11 @@ export default function App() {
   const [isPaymentSimulating, setIsPaymentSimulating] = useState(false);
   const [isSendingSuggestion, setIsSendingSuggestion] = useState(false);
 
+  // --- SLIPOK SIMULATION STATES ---
+  const [uploadedSlipPreview, setUploadedSlipPreview] = useState(null);
+  const [isSlipChecking, setIsSlipChecking] = useState(false);
+  const [slipCheckLogs, setSlipCheckLogs] = useState([]);
+
   // --- REVENUE STATE ---
   const [revenueTransactions, setRevenueTransactions] = useState(() => {
     const saved = localStorage.getItem('avn_revenue_transactions_v9');
@@ -1008,6 +1013,82 @@ export default function App() {
         console.error(err);
         alert('เกิดข้อผิดพลาดในการแปลงไฟล์รูปภาพ');
       }
+    }
+  };
+
+  // Simulated SlipOK Verification (Method 3: Discards image, stores text transaction details)
+  const handleVerifySlip = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      const previewUrl = URL.createObjectURL(file);
+      setUploadedSlipPreview(previewUrl);
+      setIsSlipChecking(true);
+      setSlipCheckLogs([]);
+
+      const logsList = [
+        '🤖 [SlipOK] กำลังสแกนหา Mini-QR ในรูปภาพสลิป...',
+        '🤖 [SlipOK] ดึงข้อมูลรหัสอ้างอิงธุรกรรมธนาคารสำเร็จ...',
+        '🤖 [SlipOK] กำลังยื่นคำขอตรวจสอบข้อมูลกับ API ธนาคารพาณิชย์...',
+        '🤖 [SlipOK] ยืนยันสลิปถูกต้อง! ยอดโอนตรงกับราคาแพ็กเกจ (ชำระเงินสำเร็จ)'
+      ];
+
+      logsList.forEach((log, index) => {
+        setTimeout(() => {
+          setSlipCheckLogs(prev => [...prev, log]);
+        }, (index + 1) * 500);
+      });
+
+      setTimeout(() => {
+        setUserRoles(prev => ({
+          ...prev,
+          [currentUser]: 'premium'
+        }));
+        
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        const signupStr = `${yyyy}-${mm}-${dd}`;
+        
+        const expiryDate = new Date(today);
+        expiryDate.setDate(expiryDate.getDate() + (selectedPackage === 'monthly' ? 30 : 365));
+        const expYyyy = expiryDate.getFullYear();
+        const expMm = String(expiryDate.getMonth() + 1).padStart(2, '0');
+        const expDd = String(expiryDate.getDate()).padStart(2, '0');
+        const expiryStr = `${expYyyy}-${expMm}-${expDd}`;
+
+        setUserPremiumDates(prev => ({
+          ...prev,
+          [currentUser]: { signupDate: signupStr, expiryDate: expiryStr }
+        }));
+
+        const amountVal = selectedPackage === 'monthly' ? 49 : 499;
+        const txEmail = getUserGmail(currentUser);
+        const newTx = {
+          id: 'tx-' + Date.now(),
+          transRef: 'ref-20260612' + Math.floor(100000 + Math.random() * 900000),
+          username: currentUser,
+          email: txEmail,
+          package: selectedPackage,
+          amount: amountVal,
+          timestamp: getIsoTimestamp(),
+          status: 'success'
+        };
+        setRevenueTransactions(prev => [newTx, ...prev]);
+
+        setIsSlipChecking(false);
+        setUploadedSlipPreview(null);
+        setIsUpsellOpen(false);
+        setToastMessage(`ยินดีต้อนรับเข้าสู่ระดับ Premium สำเร็จ! หมดอายุในวันที่ ${expDd}-${expMm}-${expYyyy}`);
+      }, 2500);
+
+    } catch (err) {
+      console.error(err);
+      alert('เกิดข้อผิดพลาดในการประมวลผลไฟล์สลิป');
+      setIsSlipChecking(false);
+      setUploadedSlipPreview(null);
     }
   };
 
@@ -4513,6 +4594,64 @@ export default function App() {
                     onChange={(e) => setAdminSocialUrl(e.target.value)}
                   />
                 </div>
+              </div>
+
+              {/* SlipOK Scan Console & Image Preview */}
+              {isSlipChecking && (
+                <div className="flex flex-col gap-3.5 bg-slate-950/80 border border-slate-900 rounded-2xl p-4.5 text-left">
+                  <div className="flex items-center gap-3">
+                    {uploadedSlipPreview && (
+                      <div className="w-11 h-14 rounded-lg overflow-hidden border border-slate-800 shrink-0 bg-slate-900">
+                        <img src={uploadedSlipPreview} alt="Slip Uploaded" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                    <div className="flex-grow">
+                      <span className="text-[10px] text-slate-500 font-extrabold uppercase block">สถานะการทำรายการ</span>
+                      <div className="flex items-center gap-2 text-xs font-bold text-slate-300 mt-1">
+                        <div className="w-3.5 h-3.5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+                        <span>SlipOK กำลังประมวลผลธุรกรรม...</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Console Logs */}
+                  <div className="bg-black border border-slate-900 rounded-xl p-3 h-28 overflow-y-auto font-mono text-[9px] text-emerald-400 flex flex-col gap-1 select-none scrollbar-thin">
+                    {slipCheckLogs.map((log, idx) => (
+                      <div key={idx} className="leading-normal">{log}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex flex-col gap-2">
+                {!isSlipChecking && (
+                  <>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      id="payment-slip-upload"
+                      onChange={handleVerifySlip}
+                      className="hidden"
+                    />
+                    <label
+                      htmlFor="payment-slip-upload"
+                      className="w-full h-11 flex items-center justify-center gap-2 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white text-xs font-black rounded-xl cursor-pointer transition-all shadow-lg shadow-amber-500/15"
+                    >
+                      📤 อัปโหลดสลิปธนาคารเพื่อสแกน (SlipOK)
+                    </label>
+                  </>
+                )}
+                <button
+                  type="button"
+                  disabled={isSlipChecking}
+                  onClick={() => setIsUpsellOpen(false)}
+                  className={`text-xs font-bold text-slate-500 hover:text-slate-350 py-1 transition-colors ${
+                    isSlipChecking ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+                  }`}
+                >
+                  ไว้ทีหลัง
+                </button>
               </div>
 
               <div>
