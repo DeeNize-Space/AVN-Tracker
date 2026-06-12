@@ -175,6 +175,7 @@ export default function App() {
   const [uploadedSlipPreview, setUploadedSlipPreview] = useState(null);
   const [isSlipChecking, setIsSlipChecking] = useState(false);
   const [slipCheckLogs, setSlipCheckLogs] = useState([]);
+  const [simulateSlipError, setSimulateSlipError] = useState(false);
 
   // --- REVENUE STATE ---
   const [revenueTransactions, setRevenueTransactions] = useState(() => {
@@ -183,6 +184,7 @@ export default function App() {
     return [
       {
         id: 'tx-1781230491823',
+        transRef: 'ref-20260515102911',
         username: 'Alice',
         email: 'alice.gamer@gmail.com',
         package: 'yearly',
@@ -192,6 +194,7 @@ export default function App() {
       },
       {
         id: 'tx-1781230951923',
+        transRef: 'ref-20260605143022',
         username: 'Charlie',
         email: 'charlie.tracker@gmail.com',
         package: 'monthly',
@@ -201,15 +204,30 @@ export default function App() {
       },
       {
         id: 'tx-1781231852923',
+        transRef: 'ref-20260610091533',
         username: 'Dave',
         email: 'dave.play@gmail.com',
         package: 'monthly',
         amount: 49,
         timestamp: '2026-06-10T09:15:00.000Z',
-        status: 'success'
+        status: 'pending'
+      },
+      {
+        id: 'tx-1781232851999',
+        transRef: 'ref-20260611112233',
+        username: 'unknown',
+        email: 'attacker.bot@gmail.com',
+        package: 'monthly',
+        amount: 49,
+        timestamp: '2026-06-11T11:22:00.000Z',
+        status: 'failed',
+        reason: 'สลิปนี้ถูกนำมาใช้งานซ้ำแล้ว'
       }
     ];
   });
+
+  const [adminTxSearch, setAdminTxSearch] = useState('');
+  const [adminTxStatusFilter, setAdminTxStatusFilter] = useState('All');
 
   // --- WEBSITE SETTINGS STATES ---
   const [webTitle, setWebTitle] = useState(() => {
@@ -622,6 +640,17 @@ export default function App() {
     );
   }, [officialGames, adminCatalogSearch]);
 
+  const filteredTransactions = useMemo(() => {
+    return revenueTransactions.filter(tx => {
+      const matchSearch = 
+        tx.id.toLowerCase().includes(adminTxSearch.toLowerCase()) ||
+        (tx.transRef && tx.transRef.toLowerCase().includes(adminTxSearch.toLowerCase())) ||
+        tx.email.toLowerCase().includes(adminTxSearch.toLowerCase());
+      const matchStatus = adminTxStatusFilter === 'All' || tx.status === adminTxStatusFilter;
+      return matchSearch && matchStatus;
+    });
+  }, [revenueTransactions, adminTxSearch, adminTxStatusFilter]);
+
   // --- ACTIONS HANDLERS ---
 
   const handleRunScraper = () => {
@@ -817,6 +846,45 @@ export default function App() {
         expiryDate: dateStr
       }
     }));
+  };
+
+  const handleAdminApproveTx = (tx) => {
+    const username = tx.username;
+    setUserRoles(prev => ({
+      ...prev,
+      [username]: 'premium'
+    }));
+
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const signupStr = `${yyyy}-${mm}-${dd}`;
+    
+    const expiryDate = new Date(today);
+    expiryDate.setDate(expiryDate.getDate() + (tx.package === 'yearly' ? 365 : 30));
+    const expYyyy = expiryDate.getFullYear();
+    const expMm = String(expiryDate.getMonth() + 1).padStart(2, '0');
+    const expDd = String(expiryDate.getDate()).padStart(2, '0');
+    const expiryStr = `${expYyyy}-${expMm}-${expDd}`;
+
+    setUserPremiumDates(prev => ({
+      ...prev,
+      [username]: { signupDate: signupStr, expiryDate: expiryStr }
+    }));
+
+    setRevenueTransactions(prev => 
+      prev.map(t => t.id === tx.id ? { ...t, status: 'success' } : t)
+    );
+
+    setToastMessage(`✔️ อนุมัติสิทธิ์ Premium ให้แก่ผู้ใช้ ${tx.email} สำเร็จ!`);
+  };
+
+  const handleAdminRejectTx = (tx) => {
+    setRevenueTransactions(prev => 
+      prev.map(t => t.id === tx.id ? { ...t, status: 'failed', reason: 'แอดมินปฏิเสธการตรวจสอบ' } : t)
+    );
+    setToastMessage(`❌ ปฏิเสธรายการชำระเงินของ ${tx.email} แล้ว`);
   };
 
   const handleAddGmailUser = (gmail) => {
@@ -1027,7 +1095,12 @@ export default function App() {
       setIsSlipChecking(true);
       setSlipCheckLogs([]);
 
-      const logsList = [
+      const logsList = simulateSlipError ? [
+        '🤖 [SlipOK] กำลังสแกนหา Mini-QR ในรูปภาพสลิป...',
+        '🤖 [SlipOK] ตรวจพบรหัสอ้างอิงธุรกรรมธนาคาร: ref-20260612' + Math.floor(100000 + Math.random() * 900000),
+        '⚠️ [SlipOK] ตรวจพบปัญหา: ยอดเงินหรือสลิปซ้ำซ้อนกับการโอนครั้งก่อน',
+        '🤖 [SlipOK] ส่งข้อมูลไปยังคิว "รอการตรวจสอบ" เพื่อให้ผู้ดูแลระบบยืนยัน...'
+      ] : [
         '🤖 [SlipOK] กำลังสแกนหา Mini-QR ในรูปภาพสลิป...',
         '🤖 [SlipOK] ดึงข้อมูลรหัสอ้างอิงธุรกรรมธนาคารสำเร็จ...',
         '🤖 [SlipOK] กำลังยื่นคำขอตรวจสอบข้อมูลกับ API ธนาคารพาณิชย์...',
@@ -1041,47 +1114,68 @@ export default function App() {
       });
 
       setTimeout(() => {
-        setUserRoles(prev => ({
-          ...prev,
-          [currentUser]: 'premium'
-        }));
-        
-        const today = new Date();
-        const yyyy = today.getFullYear();
-        const mm = String(today.getMonth() + 1).padStart(2, '0');
-        const dd = String(today.getDate()).padStart(2, '0');
-        const signupStr = `${yyyy}-${mm}-${dd}`;
-        
-        const expiryDate = new Date(today);
-        expiryDate.setDate(expiryDate.getDate() + (selectedPackage === 'monthly' ? 30 : 365));
-        const expYyyy = expiryDate.getFullYear();
-        const expMm = String(expiryDate.getMonth() + 1).padStart(2, '0');
-        const expDd = String(expiryDate.getDate()).padStart(2, '0');
-        const expiryStr = `${expYyyy}-${expMm}-${expDd}`;
+        if (simulateSlipError) {
+          const amountVal = selectedPackage === 'monthly' ? 49 : 499;
+          const txEmail = getUserGmail(currentUser);
+          const newTx = {
+            id: 'tx-' + Date.now(),
+            transRef: 'ref-20260612' + Math.floor(100000 + Math.random() * 900000),
+            username: currentUser,
+            email: txEmail,
+            package: selectedPackage,
+            amount: amountVal,
+            timestamp: getIsoTimestamp(),
+            status: 'pending'
+          };
+          setRevenueTransactions(prev => [newTx, ...prev]);
 
-        setUserPremiumDates(prev => ({
-          ...prev,
-          [currentUser]: { signupDate: signupStr, expiryDate: expiryStr }
-        }));
+          setIsSlipChecking(false);
+          setUploadedSlipPreview(null);
+          setIsUpsellOpen(false);
+          setToastMessage('⚠️ สลิปส่งเข้าระบบแอดมินเพื่อรอการตรวจสอบแบบแมนนวลแล้ว');
+        } else {
+          setUserRoles(prev => ({
+            ...prev,
+            [currentUser]: 'premium'
+          }));
+          
+          const today = new Date();
+          const yyyy = today.getFullYear();
+          const mm = String(today.getMonth() + 1).padStart(2, '0');
+          const dd = String(today.getDate()).padStart(2, '0');
+          const signupStr = `${yyyy}-${mm}-${dd}`;
+          
+          const expiryDate = new Date(today);
+          expiryDate.setDate(expiryDate.getDate() + (selectedPackage === 'monthly' ? 30 : 365));
+          const expYyyy = expiryDate.getFullYear();
+          const expMm = String(expiryDate.getMonth() + 1).padStart(2, '0');
+          const expDd = String(expiryDate.getDate()).padStart(2, '0');
+          const expiryStr = `${expYyyy}-${expMm}-${expDd}`;
 
-        const amountVal = selectedPackage === 'monthly' ? 49 : 499;
-        const txEmail = getUserGmail(currentUser);
-        const newTx = {
-          id: 'tx-' + Date.now(),
-          transRef: 'ref-20260612' + Math.floor(100000 + Math.random() * 900000),
-          username: currentUser,
-          email: txEmail,
-          package: selectedPackage,
-          amount: amountVal,
-          timestamp: getIsoTimestamp(),
-          status: 'success'
-        };
-        setRevenueTransactions(prev => [newTx, ...prev]);
+          setUserPremiumDates(prev => ({
+            ...prev,
+            [currentUser]: { signupDate: signupStr, expiryDate: expiryStr }
+          }));
 
-        setIsSlipChecking(false);
-        setUploadedSlipPreview(null);
-        setIsUpsellOpen(false);
-        setToastMessage(`ยินดีต้อนรับเข้าสู่ระดับ Premium สำเร็จ! หมดอายุในวันที่ ${expDd}-${expMm}-${expYyyy}`);
+          const amountVal = selectedPackage === 'monthly' ? 49 : 499;
+          const txEmail = getUserGmail(currentUser);
+          const newTx = {
+            id: 'tx-' + Date.now(),
+            transRef: 'ref-20260612' + Math.floor(100000 + Math.random() * 900000),
+            username: currentUser,
+            email: txEmail,
+            package: selectedPackage,
+            amount: amountVal,
+            timestamp: getIsoTimestamp(),
+            status: 'success'
+          };
+          setRevenueTransactions(prev => [newTx, ...prev]);
+
+          setIsSlipChecking(false);
+          setUploadedSlipPreview(null);
+          setIsUpsellOpen(false);
+          setToastMessage(`ยินดีต้อนรับเข้าสู่ระดับ Premium สำเร็จ! หมดอายุในวันที่ ${expDd}-${expMm}-${expYyyy}`);
+        }
       }, 2500);
 
     } catch (err) {
@@ -2494,32 +2588,63 @@ export default function App() {
                       )}
                     </div>
 
+                    {/* Transactions Header & Controls */}
+                    <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+                      <h4 className="text-xs font-bold text-slate-455">📝 ประวัติรายการธุรกรรมการเงินล่าสุด ({filteredTransactions.length})</h4>
+                      
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <div className="relative flex-1 sm:flex-initial">
+                          <input
+                            type="text"
+                            placeholder="ค้นหารหัส/Ref/บัญชี..."
+                            value={adminTxSearch}
+                            onChange={(e) => setAdminTxSearch(e.target.value)}
+                            className="glass-input h-9 px-3 pl-8 text-xs rounded-xl focus:outline-none w-full sm:w-48"
+                          />
+                          <span className="absolute left-2.5 top-2 text-slate-500 text-xs">🔍</span>
+                        </div>
+                        
+                        <select
+                          value={adminTxStatusFilter}
+                          onChange={(e) => setAdminTxStatusFilter(e.target.value)}
+                          className="glass-input h-9 px-2 text-xs rounded-xl bg-black text-white cursor-pointer"
+                        >
+                          <option value="All" className="bg-black text-white">ทุกสถานะ</option>
+                          <option value="success" className="bg-black text-white">🟢 สำเร็จ</option>
+                          <option value="pending" className="bg-black text-white">🟡 รอตรวจสอบ</option>
+                          <option value="failed" className="bg-black text-white">🔴 ล้มเหลว</option>
+                        </select>
+                      </div>
+                    </div>
+
                     {/* Transactions Table */}
                     <div>
-                      <h4 className="text-xs font-bold text-slate-455 mb-2.5">📝 ประวัติรายการธุรกรรมการเงินล่าสุด</h4>
-                      <div className="overflow-x-auto border border-slate-900 rounded-2xl bg-slate-950/20 max-h-60 scrollbar-thin">
+                      <div className="overflow-x-auto border border-slate-900 rounded-2xl bg-slate-955/20 max-h-60 scrollbar-thin">
                         <table className="w-full text-left text-xs border-collapse">
                           <thead>
                             <tr className="border-b border-slate-900 bg-slate-950/40 text-slate-400 font-bold sticky top-0 backdrop-blur">
                               <th className="p-3 pl-4">รหัสธุรกรรม</th>
+                              <th className="p-3">Ref ธนาคาร</th>
                               <th className="p-3">บัญชีผู้สมัคร</th>
                               <th className="p-3">แพ็กเกจ</th>
                               <th className="p-3 text-center">จำนวนยอดโอน</th>
                               <th className="p-3">วันและเวลาชำระเงิน</th>
-                              <th className="p-3 text-right pr-4">สถานะ</th>
+                              <th className="p-3 text-center">สถานะ</th>
+                              <th className="p-3 text-right pr-4">การจัดการ</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-900/40">
-                            {revenueTransactions.length === 0 ? (
+                            {filteredTransactions.length === 0 ? (
                               <tr>
-                                <td colSpan="6" className="text-center py-6 text-slate-500 italic">
-                                  ไม่มีประวัติธุรกรรมในระบบ
+                                <td colSpan="8" className="text-center py-6 text-slate-500 italic">
+                                  ไม่พบข้อมูลธุรกรรมตามเงื่อนไขค้นหา
                                 </td>
                               </tr>
                             ) : (
-                              revenueTransactions.map((tx) => (
+                              filteredTransactions.map((tx) => (
                                 <tr key={tx.id} className="hover:bg-slate-900/20 transition-colors">
-                                  <td className="p-3 pl-4 font-mono text-[10px] text-slate-400">{tx.id}</td>
+                                  <td className="p-3 pl-4 font-mono text-[10px] text-slate-450">{tx.id}</td>
+                                  <td className="p-3 font-mono text-[10px] text-slate-400">{tx.transRef || '-'}</td>
                                   <td className="p-3 font-bold text-slate-200">{tx.email}</td>
                                   <td className="p-3">
                                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
@@ -2530,10 +2655,42 @@ export default function App() {
                                   </td>
                                   <td className="p-3 text-center font-bold text-slate-200">{tx.amount} บาท</td>
                                   <td className="p-3 text-slate-455">{formatThaiDate(tx.timestamp)}</td>
+                                  <td className="p-3 text-center">
+                                    {tx.status === 'success' ? (
+                                      <span className="bg-emerald-500/15 text-emerald-400 font-bold px-2 py-0.5 rounded-full text-[10px] border border-emerald-500/20 whitespace-nowrap">
+                                        🟢 สำเร็จ
+                                      </span>
+                                    ) : tx.status === 'pending' ? (
+                                      <span className="bg-amber-500/15 text-amber-400 font-bold px-2 py-0.5 rounded-full text-[10px] border border-amber-500/20 whitespace-nowrap animate-pulse" title="สลิปรอการตรวจสอบ">
+                                        🟡 รอตรวจสอบ
+                                      </span>
+                                    ) : (
+                                      <span className="bg-red-500/15 text-red-400 font-bold px-2 py-0.5 rounded-full text-[10px] border border-red-500/20 whitespace-nowrap" title={tx.reason || 'ทำรายการไม่สำเร็จ'}>
+                                        🔴 ล้มเหลว
+                                      </span>
+                                    )}
+                                  </td>
                                   <td className="p-3 text-right pr-4">
-                                    <span className="bg-emerald-500/15 text-emerald-400 font-bold px-2 py-0.5 rounded-full text-[10px] border border-emerald-500/20">
-                                      ชำระเงินสำเร็จ
-                                    </span>
+                                    {tx.status === 'pending' ? (
+                                      <div className="inline-flex gap-1.5 justify-end">
+                                        <button
+                                          onClick={() => handleAdminApproveTx(tx)}
+                                          className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-[9px] cursor-pointer transition-colors"
+                                          title="อนุมัติการชำระเงินและปรับสิทธิ์พรีเมียม"
+                                        >
+                                          อนุมัติ
+                                        </button>
+                                        <button
+                                          onClick={() => handleAdminRejectTx(tx)}
+                                          className="px-2 py-1 bg-red-650 hover:bg-red-550 text-white font-bold rounded text-[9px] cursor-pointer transition-colors"
+                                          title="ปฏิเสธสลิปรายการนี้"
+                                        >
+                                          ปฏิเสธ
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <span className="text-slate-650 italic text-[10px]">-</span>
+                                    )}
                                   </td>
                                 </tr>
                               ))
@@ -4596,63 +4753,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* SlipOK Scan Console & Image Preview */}
-              {isSlipChecking && (
-                <div className="flex flex-col gap-3.5 bg-slate-950/80 border border-slate-900 rounded-2xl p-4.5 text-left">
-                  <div className="flex items-center gap-3">
-                    {uploadedSlipPreview && (
-                      <div className="w-11 h-14 rounded-lg overflow-hidden border border-slate-800 shrink-0 bg-slate-900">
-                        <img src={uploadedSlipPreview} alt="Slip Uploaded" className="w-full h-full object-cover" />
-                      </div>
-                    )}
-                    <div className="flex-grow">
-                      <span className="text-[10px] text-slate-500 font-extrabold uppercase block">สถานะการทำรายการ</span>
-                      <div className="flex items-center gap-2 text-xs font-bold text-slate-300 mt-1">
-                        <div className="w-3.5 h-3.5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-                        <span>SlipOK กำลังประมวลผลธุรกรรม...</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Console Logs */}
-                  <div className="bg-black border border-slate-900 rounded-xl p-3 h-28 overflow-y-auto font-mono text-[9px] text-emerald-400 flex flex-col gap-1 select-none scrollbar-thin">
-                    {slipCheckLogs.map((log, idx) => (
-                      <div key={idx} className="leading-normal">{log}</div>
-                    ))}
-                  </div>
-                </div>
-              )}
 
-              {/* Action Buttons */}
-              <div className="flex flex-col gap-2">
-                {!isSlipChecking && (
-                  <>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      id="payment-slip-upload"
-                      onChange={handleVerifySlip}
-                      className="hidden"
-                    />
-                    <label
-                      htmlFor="payment-slip-upload"
-                      className="w-full h-11 flex items-center justify-center gap-2 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white text-xs font-black rounded-xl cursor-pointer transition-all shadow-lg shadow-amber-500/15"
-                    >
-                      📤 อัปโหลดสลิปธนาคารเพื่อสแกน (SlipOK)
-                    </label>
-                  </>
-                )}
-                <button
-                  type="button"
-                  disabled={isSlipChecking}
-                  onClick={() => setIsUpsellOpen(false)}
-                  className={`text-xs font-bold text-slate-500 hover:text-slate-350 py-1 transition-colors ${
-                    isSlipChecking ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
-                  }`}
-                >
-                  ไว้ทีหลัง
-                </button>
-              </div>
 
               <div>
                 <label className="text-xs text-slate-400 font-bold block mb-1">
@@ -4964,70 +5065,134 @@ export default function App() {
                 </svg>
               </div>
 
+              {/* SlipOK Scan Console & Image Preview */}
+              {isSlipChecking && (
+                <div className="flex flex-col gap-3.5 bg-slate-950/80 border border-slate-900 rounded-2xl p-4.5 text-left">
+                  <div className="flex items-center gap-3">
+                    {uploadedSlipPreview && (
+                      <div className="w-11 h-14 rounded-lg overflow-hidden border border-slate-800 shrink-0 bg-slate-900">
+                        <img src={uploadedSlipPreview} alt="Slip Uploaded" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                    <div className="flex-grow">
+                      <span className="text-[10px] text-slate-500 font-extrabold uppercase block">สถานะการทำรายการ</span>
+                      <div className="flex items-center gap-2 text-xs font-bold text-slate-300 mt-1">
+                        <div className="w-3.5 h-3.5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+                        <span>SlipOK กำลังประมวลผลธุรกรรม...</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Console Logs */}
+                  <div className="bg-black border border-slate-900 rounded-xl p-3 h-28 overflow-y-auto font-mono text-[9px] text-emerald-400 flex flex-col gap-1 select-none scrollbar-thin">
+                    {slipCheckLogs.map((log, idx) => (
+                      <div key={idx} className="leading-normal">{log}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Action Buttons */}
               <div className="flex flex-col gap-2">
+                {!isSlipChecking && (
+                  <>
+                    {/* Toggle Switch to simulate slip issue */}
+                    <div className="flex items-center justify-between bg-slate-950/40 p-2.5 rounded-xl border border-slate-900 mb-1">
+                      <div className="flex flex-col text-left">
+                        <span className="text-[11.5px] font-extrabold text-amber-400">⚠️ จำลองโอนเงินแล้วสลิปมีปัญหา</span>
+                        <span className="text-[9.5px] text-slate-400">สลิปจะติดสถานะ Pending เพื่อส่งให้แอดมินอนุมัติแมนนวล</span>
+                      </div>
+                      <input 
+                        type="checkbox" 
+                        checked={simulateSlipError} 
+                        onChange={(e) => setSimulateSlipError(e.target.checked)}
+                        className="w-4.5 h-4.5 rounded border-slate-800 bg-slate-950 text-amber-500 focus:ring-0 cursor-pointer"
+                      />
+                    </div>
+
+                    <input
+                      type="file"
+                      accept="image/*"
+                      id="payment-slip-upload"
+                      onChange={handleVerifySlip}
+                      className="hidden"
+                    />
+                    <label
+                      htmlFor="payment-slip-upload"
+                      className="w-full h-11 flex items-center justify-center gap-2 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white text-xs font-black rounded-xl cursor-pointer transition-all shadow-lg shadow-amber-500/15"
+                    >
+                      📤 อัปโหลดสลิปธนาคารเพื่อสแกน (SlipOK)
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsPaymentSimulating(true);
+                        setTimeout(() => {
+                          setUserRoles(prev => ({
+                            ...prev,
+                            [currentUser]: 'premium'
+                          }));
+                          
+                          const today = new Date();
+                          const yyyy = today.getFullYear();
+                          const mm = String(today.getMonth() + 1).padStart(2, '0');
+                          const dd = String(today.getDate()).padStart(2, '0');
+                          const signupStr = `${yyyy}-${mm}-${dd}`;
+                          
+                          const expiryDate = new Date(today);
+                          expiryDate.setDate(expiryDate.getDate() + (selectedPackage === 'monthly' ? 30 : 365));
+                          const expYyyy = expiryDate.getFullYear();
+                          const expMm = String(expiryDate.getMonth() + 1).padStart(2, '0');
+                          const expDd = String(expiryDate.getDate()).padStart(2, '0');
+                          const expiryStr = `${expYyyy}-${expMm}-${expDd}`;
+
+                          setUserPremiumDates(prev => ({
+                            ...prev,
+                            [currentUser]: { signupDate: signupStr, expiryDate: expiryStr }
+                          }));
+
+                          const amountVal = selectedPackage === 'monthly' ? 49 : 499;
+                          const txEmail = getUserGmail(currentUser);
+                          const newTx = {
+                            id: 'tx-' + Date.now(),
+                            transRef: 'ref-20260612' + Math.floor(100000 + Math.random() * 900000),
+                            username: currentUser,
+                            email: txEmail,
+                            package: selectedPackage,
+                            amount: amountVal,
+                            timestamp: getIsoTimestamp(),
+                            status: 'success'
+                          };
+                          setRevenueTransactions(prev => [newTx, ...prev]);
+
+                          setIsPaymentSimulating(false);
+                          setIsUpsellOpen(false);
+                          setToastMessage(`ยินดีต้อนรับเข้าสู่ระดับ Premium สำเร็จ! หมดอายุในวันที่ ${expDd}-${expMm}-${expYyyy}`);
+                        }, 1500);
+                      }}
+                      disabled={isPaymentSimulating}
+                      className="w-full h-11 flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 text-xs font-bold rounded-xl cursor-pointer transition-all"
+                    >
+                      {isPaymentSimulating ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-slate-200 border-t-transparent rounded-full animate-spin"></div>
+                          <span>กำลังจำลองเปิดใช้งาน...</span>
+                        </>
+                      ) : (
+                        <span>⚡️ ข้ามการสแกนสลิป (อนุมัติ Premium ทันที)</span>
+                      )}
+                    </button>
+                  </>
+                )}
+                
                 <button
                   type="button"
-                  onClick={() => {
-                    setIsPaymentSimulating(true);
-                    setTimeout(() => {
-                      setUserRoles(prev => ({
-                        ...prev,
-                        [currentUser]: 'premium'
-                      }));
-                      
-                      const today = new Date();
-                      const yyyy = today.getFullYear();
-                      const mm = String(today.getMonth() + 1).padStart(2, '0');
-                      const dd = String(today.getDate()).padStart(2, '0');
-                      const signupStr = `${yyyy}-${mm}-${dd}`;
-                      
-                      const expiryDate = new Date(today);
-                      expiryDate.setDate(expiryDate.getDate() + (selectedPackage === 'monthly' ? 30 : 365));
-                      const expYyyy = expiryDate.getFullYear();
-                      const expMm = String(expiryDate.getMonth() + 1).padStart(2, '0');
-                      const expDd = String(expiryDate.getDate()).padStart(2, '0');
-                      const expiryStr = `${expYyyy}-${expMm}-${expDd}`;
-
-                      setUserPremiumDates(prev => ({
-                        ...prev,
-                        [currentUser]: { signupDate: signupStr, expiryDate: expiryStr }
-                      }));
-
-                      const amountVal = selectedPackage === 'monthly' ? 49 : 499;
-                      const txEmail = getUserGmail(currentUser);
-                      const newTx = {
-                        id: 'tx-' + Date.now(),
-                        username: currentUser,
-                        email: txEmail,
-                        package: selectedPackage,
-                        amount: amountVal,
-                        timestamp: getIsoTimestamp(),
-                        status: 'success'
-                      };
-                      setRevenueTransactions(prev => [newTx, ...prev]);
-
-                      setIsPaymentSimulating(false);
-                      setIsUpsellOpen(false);
-                      setToastMessage(`ยินดีต้อนรับเข้าสู่ระดับ Premium สำเร็จ! หมดอายุในวันที่ ${expDd}-${expMm}-${expYyyy}`);
-                    }, 1500);
-                  }}
-                  disabled={isPaymentSimulating}
-                  className="w-full h-11 flex items-center justify-center gap-2 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white text-xs font-black rounded-xl cursor-pointer transition-all shadow-lg shadow-amber-500/15"
-                >
-                  {isPaymentSimulating ? (
-                    <>
-                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      <span>กำลังตรวจสอบยอดโอนจำลอง...</span>
-                    </>
-                  ) : (
-                    <span>✔️ ยืนยันการโอนเงิน (จำลอง)</span>
-                  )}
-                </button>
-                <button
-                  type="button"
+                  disabled={isSlipChecking}
                   onClick={() => setIsUpsellOpen(false)}
-                  className="text-xs font-bold text-slate-500 hover:text-slate-300 py-1 transition-colors cursor-pointer"
+                  className={`text-xs font-bold text-slate-500 hover:text-slate-350 py-1 transition-colors ${
+                    isSlipChecking ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+                  }`}
                 >
                   ไว้ทีหลัง
                 </button>
