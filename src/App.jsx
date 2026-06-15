@@ -5579,6 +5579,13 @@ export default function App() {
                     <div id="google-signin-btn-container" className="min-h-[40px] flex items-center justify-center"></div>
                   </div>
 
+                  {(import.meta.env.VITE_GOOGLE_CLIENT_ID || '1023772242138-placeholder.apps.googleusercontent.com').includes('placeholder') && (
+                    <div className="bg-rose-50 border border-rose-100 text-rose-700 rounded-2xl p-4 text-xs flex flex-col gap-1.5 leading-relaxed text-left">
+                      <span className="font-bold">⚠️ ยังไม่ได้เปิดใช้งาน Google Client ID</span>
+                      <span>ระบบตรวจพบว่าคุณใช้ Google Client ID จำลองอยู่ กรุณาเพิ่มตัวแปร `VITE_GOOGLE_CLIENT_ID` ใน Vercel Environment Variables และทำการ Redeploy แอปออนไลน์</span>
+                    </div>
+                  )}
+
                   <div className="mt-4 flex justify-end items-center">
                     <button
                       type="button"
