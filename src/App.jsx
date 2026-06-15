@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { initialOfficialGames, initialMockUsers, initialMockUserLibraries, initialReports } from './data/mockGames';
+import { initialOfficialGames, initialMockUserLibraries, initialReports } from './data/mockGames';
 import { db, auth } from './firebase';
 import { 
   doc, 
@@ -191,16 +191,8 @@ function renderReviewStars(rating, interactive = false, onSelect = null) {
   );
 }
 
-const MOCK_GOOGLE_ACCOUNTS = [
-  { name: 'Alice Gamer', email: 'alice.gamer@gmail.com', role: 'Alice', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=80&h=80&q=80' },
-  { name: 'Charlie Tracker', email: 'charlie.tracker@gmail.com', role: 'Charlie', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&h=80&q=80' },
-  { name: 'Dave Player', email: 'dave.play@gmail.com', role: 'Dave', avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=80&h=80&q=80' },
-  { name: 'Pattarasak Raksanrong', email: 'pattarasak.raksanrong@gmail.com', role: 'Admin', avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=80&h=80&q=80' }
-];
-
 function getUserGmail(username) {
-  const found = MOCK_GOOGLE_ACCOUNTS.find(acc => acc.role === username || acc.email === username);
-  return found ? found.email : username;
+  return username;
 }
 
 export default function App() {
@@ -228,12 +220,8 @@ export default function App() {
     const saved = localStorage.getItem('avn_user_roles_v9');
     if (saved) return JSON.parse(saved);
     return {
-      'Alice': 'free',
-      'Charlie': 'free',
-      'Dave': 'free',
-      'Admin': 'admin',
-      'pattarasak.raksanrong@gmail.com': 'admin',
       'pattarasak.raksanarong@gmail.com': 'admin',
+      'pattarasak.raksanrong@gmail.com': 'admin',
       'Guest': 'free'
     };
   });
@@ -242,12 +230,8 @@ export default function App() {
     const saved = localStorage.getItem('avn_user_premium_dates_v9');
     if (saved) return JSON.parse(saved);
     return {
-      'Alice': { signupDate: '', expiryDate: '' },
-      'Charlie': { signupDate: '', expiryDate: '' },
-      'Dave': { signupDate: '', expiryDate: '' },
-      'Admin': { signupDate: '', expiryDate: '' },
-      'pattarasak.raksanrong@gmail.com': { signupDate: '', expiryDate: '' },
-      'pattarasak.raksanarong@gmail.com': { signupDate: '', expiryDate: '' }
+      'pattarasak.raksanarong@gmail.com': { signupDate: '', expiryDate: '' },
+      'pattarasak.raksanrong@gmail.com': { signupDate: '', expiryDate: '' }
     };
   });
 
@@ -956,8 +940,6 @@ export default function App() {
     if (googleUserProfile && (googleUserProfile.email === currentUser || googleUserProfile.role === currentUser)) {
       return googleUserProfile;
     }
-    const found = MOCK_GOOGLE_ACCOUNTS.find(acc => acc.role === currentUser || acc.email === currentUser);
-    if (found) return found;
     const username = currentUser.split('@')[0];
     const capitalized = username.charAt(0).toUpperCase() + username.slice(1);
     return {
@@ -3040,7 +3022,7 @@ export default function App() {
                 <span className="text-3xl bg-blue-500/10 w-12 h-12 rounded-xl flex items-center justify-center">👥</span>
                 <div>
                   <span className="text-slate-400 text-xs font-bold block mb-0.5">ผู้ใช้งานทั้งหมด</span>
-                  <span className="text-2xl font-black text-slate-100">{initialMockUsers.length}</span>
+                  <span className="text-2xl font-black text-slate-100">{Object.keys(userRoles).length}</span>
                 </div>
               </div>
               <div className="glass-panel p-5.5 rounded-2xl flex items-center gap-4.5 border-l-4 border-l-emerald-500">
@@ -5652,11 +5634,15 @@ export default function App() {
                       } else {
                         // Local Simulation
                         const trimmedEmail = email.toLowerCase();
+                        const isAdminEmail = trimmedEmail === 'pattarasak.raksanarong@gmail.com' || trimmedEmail === 'pattarasak.raksanrong@gmail.com' || trimmedEmail === 'admin@gmail.com';
+                        if (isAdminEmail && loginPassword !== 'Ro28062543') {
+                          alert('❌ รหัสผ่านไม่ถูกต้องสำหรับบัญชีผู้ดูแลระบบ (โหมดจำลอง)');
+                          return;
+                        }
                         setIsLoggingIn(true);
                         setTimeout(() => {
                           setUserRoles((prev) => {
                             if (prev[trimmedEmail]) return prev;
-                            const isAdminEmail = trimmedEmail === 'pattarasak.raksanarong@gmail.com' || trimmedEmail === 'pattarasak.raksanrong@gmail.com' || trimmedEmail === 'admin@gmail.com';
                             return { ...prev, [trimmedEmail]: isAdminEmail ? 'admin' : 'free' };
                           });
                           setCurrentUser(trimmedEmail);

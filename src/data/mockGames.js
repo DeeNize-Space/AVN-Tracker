@@ -8511,41 +8511,25 @@ export const initialOfficialGames = [
 
 export const initialMockUsers = [
   {
-    "username": "Alice",
-    "active": true
-  },
-  {
-    "username": "Bob",
-    "active": false
-  },
-  {
-    "username": "Charlie",
-    "active": true
-  },
-  {
-    "username": "Dave",
-    "active": true
-  },
-  {
-    "username": "Admin",
+    "username": "pattarasak.raksanarong@gmail.com",
     "active": true
   }
 ];
 
 export const initialMockUserLibraries = {
-  "Alice": [
+  "pattarasak.raksanarong@gmail.com": [
     {
       "gameId": "being-a-dik",
       "status": "Playing",
       "playTime": 18.5,
       "rating": 5,
-      "notes": "Best visual novel ever! Can't wait for the next season.",
+      "notes": "หนึ่งในเกม AVN ที่ดีที่สุด! แนะนำให้เล่น",
       "lastUpdated": "2026-06-10T14:30:00.000Z",
       "isCustom": false,
       "title": "Being a DIK",
       "developer": "Dr PinkCake",
       "version": "0.9.0",
-      "coverUrl": "/covers/being-a-dik.jpg",
+      "coverUrl": "",
       "overview": "You play as a young man from a low-income family attending college...",
       "tags": [
         "Comedy",
@@ -8554,149 +8538,23 @@ export const initialMockUserLibraries = {
     },
     {
       "gameId": "eternum",
-      "status": "Plan to Play",
-      "playTime": 0,
-      "rating": 0,
-      "notes": "",
-      "lastUpdated": "2026-06-05T09:00:00.000Z",
-      "isCustom": false,
-      "title": "Eternum",
-      "developer": "Caribdis",
-      "version": "0.6.5",
-      "coverUrl": "",
-      "overview": "You move to Kredon...",
-      "tags": [
-        "Sci-Fi",
-        "MMORPG"
-      ],
-      "patreonUrl": "",
-      "buyUrl": "",
-      "socialUrl": ""
-    }
-  ],
-  "Bob": [
-    {
-      "gameId": "doki-doki",
-      "status": "Completed",
-      "playTime": 6.2,
+      "status": "Played to Latest",
+      "playTime": 24,
       "rating": 5,
-      "notes": "Absolute masterpiece. Broke the fourth wall perfectly.",
-      "lastUpdated": "2026-05-20T18:15:00.000Z",
-      "isCustom": false,
-      "title": "Doki Doki Literature Club!",
-      "developer": "Team Salvato",
-      "version": "1.1.5",
-      "coverUrl": "",
-      "overview": "Join the literature club...",
-      "tags": [
-        "Psychological Horror",
-        "Anime"
-      ],
-      "patreonUrl": "",
-      "buyUrl": "",
-      "socialUrl": ""
-    }
-  ],
-  "Charlie": [
-    {
-      "gameId": "being-a-dik",
-      "status": "Completed",
-      "playTime": 32,
-      "rating": 4,
-      "notes": "Awesome gameplay elements.",
-      "lastUpdated": "2026-06-08T20:45:00.000Z",
-      "isCustom": false,
-      "title": "Being a DIK",
-      "developer": "Dr PinkCake",
-      "version": "0.9.0",
-      "coverUrl": "/covers/being-a-dik.jpg",
-      "overview": "You play as a young man...",
-      "tags": [
-        "Comedy",
-        "College Life"
-      ]
-    },
-    {
-      "gameId": "eternum",
-      "status": "Playing",
-      "playTime": 12.8,
-      "rating": 5,
-      "notes": "Incredible graphics and storytelling.",
+      "notes": "กราฟิกและเนื้อเรื่องแนวไซไฟอลังการมาก",
       "lastUpdated": "2026-06-11T02:00:00.000Z",
       "isCustom": false,
       "title": "Eternum",
       "developer": "Caribdis",
-      "version": "0.6.5",
+      "version": "0.9.0",
       "coverUrl": "",
       "overview": "You move to Kredon...",
       "tags": [
         "Sci-Fi",
         "MMORPG"
       ],
-      "patreonUrl": "",
-      "buyUrl": "",
-      "socialUrl": ""
-    },
-    {
-      "gameId": "freshwomen",
-      "status": "Plan to Play",
-      "playTime": 0,
-      "rating": 0,
-      "notes": "Looks promising.",
-      "lastUpdated": "2026-06-11T02:05:00.000Z",
-      "isCustom": false,
-      "title": "FreshWomen",
-      "developer": "Oppai Games",
-      "version": "1.1.0",
-      "coverUrl": "/covers/freshwomen.jpg",
-      "overview": "You are a young man...",
-      "tags": [
-        "Comedy",
-        "College Life"
-      ]
-    }
-  ],
-  "Dave": [
-    {
-      "gameId": "katawa-shoujo",
-      "status": "Playing",
-      "playTime": 22.4,
-      "rating": 5,
-      "notes": "Emi's route is so wholesome.",
-      "lastUpdated": "2026-06-11T10:10:00.000Z",
-      "isCustom": false,
-      "title": "Katawa Shoujo",
-      "developer": "Four Leaf Studios",
-      "version": "1.3.1",
-      "coverUrl": "",
-      "overview": "Set in Yamaku High School...",
-      "tags": [
-        "Deep Story",
-        "Drama"
-      ],
-      "patreonUrl": "",
-      "buyUrl": "",
-      "socialUrl": ""
-    },
-    {
-      "gameId": "summer-memories",
-      "status": "Completed",
-      "playTime": 15,
-      "rating": 4,
-      "notes": "Nice nostalgia vibes.",
-      "lastUpdated": "2026-06-01T12:00:00.000Z",
-      "isCustom": false,
-      "title": "Summer Memories",
-      "developer": "Dojin Otome",
-      "version": "2.0.2",
-      "coverUrl": "",
-      "overview": "Spend your summer...",
-      "tags": [
-        "Pixel Art",
-        "Retro"
-      ],
-      "patreonUrl": "",
-      "buyUrl": "",
+      "patreonUrl": "https://www.patreon.com/onceinalifetime",
+      "buyUrl": "https://caribdis.itch.io/eternum",
       "socialUrl": ""
     }
   ]
