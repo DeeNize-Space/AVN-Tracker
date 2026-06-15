@@ -255,49 +255,7 @@ export default function App() {
   const [revenueTransactions, setRevenueTransactions] = useState(() => {
     const saved = localStorage.getItem('avn_revenue_transactions_v9');
     if (saved) return JSON.parse(saved);
-    return [
-      {
-        id: 'tx-1781230491823',
-        transRef: 'ref-20260515102911',
-        username: 'Alice',
-        email: 'alice.gamer@gmail.com',
-        package: 'yearly',
-        amount: 499,
-        timestamp: '2026-05-15T10:00:00.000Z',
-        status: 'success'
-      },
-      {
-        id: 'tx-1781230951923',
-        transRef: 'ref-20260605143022',
-        username: 'Charlie',
-        email: 'charlie.tracker@gmail.com',
-        package: 'monthly',
-        amount: 49,
-        timestamp: '2026-06-05T14:30:00.000Z',
-        status: 'success'
-      },
-      {
-        id: 'tx-1781231852923',
-        transRef: 'ref-20260610091533',
-        username: 'Dave',
-        email: 'dave.play@gmail.com',
-        package: 'monthly',
-        amount: 49,
-        timestamp: '2026-06-10T09:15:00.000Z',
-        status: 'pending'
-      },
-      {
-        id: 'tx-1781232851999',
-        transRef: 'ref-20260611112233',
-        username: 'unknown',
-        email: 'attacker.bot@gmail.com',
-        package: 'monthly',
-        amount: 49,
-        timestamp: '2026-06-11T11:22:00.000Z',
-        status: 'failed',
-        reason: 'สลิปนี้ถูกนำมาใช้งานซ้ำแล้ว'
-      }
-    ];
+    return [];
   });
 
   const [adminTxSearch, setAdminTxSearch] = useState('');
@@ -563,6 +521,22 @@ export default function App() {
       console.error('Error saving config to Firestore:', err);
     }
   };
+
+  // Clear old mock data caches on first load of this production version
+  useEffect(() => {
+    const isMockCleared = localStorage.getItem('avn_mock_cleared_v11');
+    if (!isMockCleared) {
+      localStorage.removeItem('avn_user_roles_v9');
+      localStorage.removeItem('avn_user_premium_dates_v9');
+      localStorage.removeItem('avn_revenue_transactions_v9');
+      localStorage.removeItem('avn_reports_v7');
+      localStorage.removeItem('avn_user_libraries_v7');
+      localStorage.removeItem('avn_google_user_profile_v9');
+      localStorage.removeItem('avn_current_user_v7');
+      localStorage.setItem('avn_mock_cleared_v11', 'true');
+      window.location.reload();
+    }
+  }, []);
 
   // Mount Effect: Load Firestore Data
   useEffect(() => {
