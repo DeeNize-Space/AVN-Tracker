@@ -12,9 +12,21 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID || ""
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
+let db = null;
+let auth = null;
+
+// Only initialize if both apiKey and projectId are present to avoid crashing on empty credentials
+if (firebaseConfig.apiKey && firebaseConfig.projectId) {
+  try {
+    const app = initializeApp(firebaseConfig);
+    db = getFirestore(app);
+    auth = getAuth(app);
+    console.log("Firebase initialized successfully.");
+  } catch (err) {
+    console.error("Firebase initialization failed:", err);
+  }
+} else {
+  console.log("Firebase credentials missing. Running in Local Simulation Mode.");
+}
 
 export { db, auth };

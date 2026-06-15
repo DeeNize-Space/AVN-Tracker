@@ -390,7 +390,7 @@ export default function App() {
   });
 
   // --- DATABASE & PAYMENT STATES ---
-  const isFirebaseEnabled = !!import.meta.env.VITE_FIREBASE_PROJECT_ID;
+  const isFirebaseEnabled = !!db && !!auth;
   const [isDbLoaded, setIsDbLoaded] = useState(false);
   const [promptPayId, setPromptPayId] = useState(() => {
     return localStorage.getItem('avn_promptpay_id') || import.meta.env.VITE_PROMPTPAY_ID || '0812345678';
