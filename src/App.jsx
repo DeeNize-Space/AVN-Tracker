@@ -1,9 +1,66 @@
 import { useState, useEffect, useMemo } from 'react';
 import { initialOfficialGames, initialMockUsers, initialMockUserLibraries, initialReports } from './data/mockGames';
+import { db } from './firebase';
+import { 
+  doc, 
+  getDoc, 
+  setDoc, 
+  updateDoc, 
+  deleteDoc, 
+  collection, 
+  getDocs 
+} from 'firebase/firestore';
 
 // --- HELPER FUNCTIONS OUTSIDE COMPONENT ---
 function generateId() {
   return 'id-' + Math.random().toString(36).substring(2, 11);
+}
+
+// CRC16 Checksum for EMVCo PromptPay
+function crc16(data) {
+  let crc = 0xffff;
+  for (let i = 0; i < data.length; i++) {
+    let x = ((crc >> 8) ^ data.charCodeAt(i)) & 0xff;
+    x ^= x >> 4;
+    crc = ((crc << 8) ^ (x << 12) ^ (x << 5) ^ x) & 0xffff;
+  }
+  return crc.toString(16).toUpperCase().padStart(4, '0');
+}
+
+// Generate PromptPay EMVCo string for scannable QR
+function generatePromptPayQR(target, amount) {
+  if (!target) return '';
+  const cleanTarget = target.replace(/\D/g, '');
+  let targetType = '';
+  let formattedTarget = '';
+  
+  if (cleanTarget.length === 13) {
+    targetType = '02'; // Tax ID / National ID
+    formattedTarget = cleanTarget;
+  } else if (cleanTarget.length === 10 || cleanTarget.length === 9) {
+    targetType = '01'; // Mobile Phone
+    const mobileNo = cleanTarget.startsWith('0') ? cleanTarget.substring(1) : cleanTarget;
+    formattedTarget = '0066' + mobileNo;
+  } else {
+    return '';
+  }
+  
+  const targetLength = formattedTarget.length.toString().padStart(2, '0');
+  const guid = '0016A000000677010111';
+  const targetField = `${targetType}${targetLength}${formattedTarget}`;
+  const merchantAccountInfoVal = `${guid}${targetField}`;
+  const merchantAccountInfoLength = merchantAccountInfoVal.length.toString().padStart(2, '0');
+  const merchantAccountInfo = `30${merchantAccountInfoLength}${merchantAccountInfoVal}`;
+  
+  const currency = '5303764'; // THB
+  const formattedAmount = Number(amount).toFixed(2);
+  const amountLength = formattedAmount.length.toString().padStart(2, '0');
+  const amountField = `54${amountLength}${formattedAmount}`;
+  const country = '5802TH';
+  
+  const payloadWithoutCrc = `000201010212${merchantAccountInfo}${country}${currency}${amountField}6304`;
+  const crc = crc16(payloadWithoutCrc);
+  return payloadWithoutCrc + crc;
 }
 
 function getIsoTimestamp() {
@@ -323,6 +380,19 @@ export default function App() {
     return saved ? JSON.parse(saved) : true;
   });
 
+  // --- DATABASE & PAYMENT STATES ---
+  const isFirebaseEnabled = !!import.meta.env.VITE_FIREBASE_PROJECT_ID;
+  const [isDbLoaded, setIsDbLoaded] = useState(false);
+  const [promptPayId, setPromptPayId] = useState(() => {
+    return localStorage.getItem('avn_promptpay_id') || import.meta.env.VITE_PROMPTPAY_ID || '0812345678';
+  });
+  const [slipOkApiKey, setSlipOkApiKey] = useState(() => {
+    return localStorage.getItem('avn_slipok_api_key') || import.meta.env.VITE_SLIPOK_API_KEY || '';
+  });
+  const [slipOkBranchId, setSlipOkBranchId] = useState(() => {
+    return localStorage.getItem('avn_slipok_branch_id') || import.meta.env.VITE_SLIPOK_BRANCH_ID || '';
+  });
+
 
 
   // --- UI STATE ---
@@ -390,7 +460,12 @@ export default function App() {
         setUserRoles((prev) => {
           if (prev[email]) return prev;
           const isAdminEmail = email === 'pattarasak.raksanrong@gmail.com' || email === 'admin@gmail.com';
-          return { ...prev, [email]: isAdminEmail ? 'admin' : 'free' };
+          const newRole = isAdminEmail ? 'admin' : 'free';
+          if (isFirebaseEnabled) {
+            setDoc(doc(db, 'user_roles', email), { role: newRole })
+              .catch(err => console.error('Error saving new user role:', err));
+          }
+          return { ...prev, [email]: newRole };
         });
         
         setCurrentUser(email);
@@ -472,6 +547,161 @@ export default function App() {
   const isAdmin = subscriptionRole === 'admin';
   const isGuest = currentUser === 'Guest';
 
+  const promptPayPayload = useMemo(() => {
+    return generatePromptPayQR(promptPayId, selectedPackage === 'monthly' ? 49 : 499);
+  }, [promptPayId, selectedPackage]);
+
+  const qrCodeUrl = useMemo(() => {
+    if (!promptPayPayload) return '';
+    return `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(promptPayPayload)}`;
+  }, [promptPayPayload]);
+
+  // --- FIRESTORE HELPER & LIFE CYCLES ---
+  const saveSystemConfig = async (subKey, data) => {
+    if (!isFirebaseEnabled) return;
+    try {
+      const configRef = doc(db, 'system_config', subKey);
+      await setDoc(configRef, data, { merge: true });
+    } catch (err) {
+      console.error('Error saving config to Firestore:', err);
+    }
+  };
+
+  // Mount Effect: Load Firestore Data
+  useEffect(() => {
+    if (!isFirebaseEnabled) {
+      setIsDbLoaded(true);
+      return;
+    }
+
+    const loadAllFirestoreData = async () => {
+      try {
+        // 1. Fetch official games
+        const gamesSnap = await getDocs(collection(db, 'official_games'));
+        if (gamesSnap.empty) {
+          // If firestore is brand new, populate it with mock data
+          for (const game of initialOfficialGames) {
+            await setDoc(doc(db, 'official_games', game.id), game);
+          }
+          console.log('Populated Firestore with mock games');
+        } else {
+          const gamesList = [];
+          gamesSnap.forEach(doc => {
+            gamesList.push(doc.data());
+          });
+          setOfficialGames(gamesList);
+        }
+
+        // 2. Fetch system configurations (website, payment, tags)
+        const webConfig = await getDoc(doc(db, 'system_config', 'website'));
+        if (webConfig.exists()) {
+          const data = webConfig.data();
+          if (data.webTitle) setWebTitle(data.webTitle);
+          if (data.webMetaDescription) setWebMetaDescription(data.webMetaDescription);
+          if (data.webTagline) setWebTagline(data.webTagline);
+          if (data.webLogo) setWebLogo(data.webLogo);
+          if (data.webLogoType) setWebLogoType(data.webLogoType);
+          if (data.tickerMessage) setTickerMessage(data.tickerMessage);
+          if (data.showTicker !== undefined) setShowTicker(data.showTicker);
+        }
+
+        const payConfig = await getDoc(doc(db, 'system_config', 'payment'));
+        if (payConfig.exists()) {
+          const data = payConfig.data();
+          if (data.promptPayId) {
+            setPromptPayId(data.promptPayId);
+            localStorage.setItem('avn_promptpay_id', data.promptPayId);
+          }
+          if (data.slipOkApiKey) {
+            setSlipOkApiKey(data.slipOkApiKey);
+            localStorage.setItem('avn_slipok_api_key', data.slipOkApiKey);
+          }
+          if (data.slipOkBranchId) {
+            setSlipOkBranchId(data.slipOkBranchId);
+            localStorage.setItem('avn_slipok_branch_id', data.slipOkBranchId);
+          }
+        }
+
+        const tagsConfig = await getDoc(doc(db, 'system_config', 'tags'));
+        if (tagsConfig.exists()) {
+          setGlobalTags(tagsConfig.data().tags || []);
+        }
+
+        // 3. Fetch user roles & premium dates
+        const rolesSnap = await getDocs(collection(db, 'user_roles'));
+        const rolesObj = { ...userRoles };
+        rolesSnap.forEach(doc => {
+          rolesObj[doc.id] = doc.data().role;
+        });
+        setUserRoles(rolesObj);
+
+        const premiumSnap = await getDocs(collection(db, 'user_premium_dates'));
+        const premiumObj = { ...userPremiumDates };
+        premiumSnap.forEach(doc => {
+          premiumObj[doc.id] = doc.data();
+        });
+        setUserPremiumDates(premiumObj);
+
+        // 4. Fetch revenue transactions
+        const txSnap = await getDocs(collection(db, 'revenue_transactions'));
+        const txList = [];
+        txSnap.forEach(doc => {
+          txList.push(doc.data());
+        });
+        txList.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        setRevenueTransactions(txList);
+
+        // 5. Fetch reports
+        const reportsSnap = await getDocs(collection(db, 'reports'));
+        const reportsList = [];
+        reportsSnap.forEach(doc => {
+          reportsList.push(doc.data());
+        });
+        setReports(reportsList);
+
+        setIsDbLoaded(true);
+      } catch (err) {
+        console.error('Error loading Firestore data:', err);
+        setIsDbLoaded(true); // Fallback to localStorage gracefully
+      }
+    };
+
+    loadAllFirestoreData();
+  }, []);
+
+  // Sync Current User's Library from Firestore on user change
+  useEffect(() => {
+    if (!isFirebaseEnabled || currentUser === 'Guest') return;
+
+    const syncUserLibrary = async () => {
+      try {
+        const libDoc = await getDoc(doc(db, 'user_libraries', currentUser));
+        if (libDoc.exists()) {
+          const data = libDoc.data().library || [];
+          setUserLibraries(prev => ({
+            ...prev,
+            [currentUser]: data.map(item => ({
+              ...item,
+              status: normalizeStatus(item.status),
+              screenshots: item.screenshots || []
+            }))
+          }));
+        } else {
+          // Sync local data to Firestore if Firestore library does not exist yet
+          const currentLocalLib = userLibraries[currentUser] || [];
+          if (currentLocalLib.length > 0) {
+            await setDoc(doc(db, 'user_libraries', currentUser), { library: currentLocalLib });
+            console.log('Migrated local library to Firestore for', currentUser);
+          }
+        }
+      } catch (err) {
+        console.error('Error syncing user library:', err);
+      }
+    };
+
+    syncUserLibrary();
+  }, [currentUser, isDbLoaded]);
+
   // --- SYNC STATE TO STORAGE ---
   useEffect(() => {
     localStorage.setItem('avn_current_user_v7', currentUser);
@@ -547,7 +777,12 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem('avn_user_libraries_v7', JSON.stringify(userLibraries));
-  }, [userLibraries]);
+    if (isFirebaseEnabled && isDbLoaded && currentUser !== 'Guest') {
+      const currentLib = userLibraries[currentUser] || [];
+      setDoc(doc(db, 'user_libraries', currentUser), { library: currentLib })
+        .catch(err => console.error('Error saving library to Firestore:', err));
+    }
+  }, [userLibraries, currentUser, isDbLoaded]);
 
   useEffect(() => {
     localStorage.setItem('avn_reports_v7', JSON.stringify(reports));
@@ -608,6 +843,10 @@ export default function App() {
         if (today > expiry) {
           setTimeout(() => {
             setUserRoles(prev => ({ ...prev, [currentUser]: 'free' }));
+            if (isFirebaseEnabled) {
+              setDoc(doc(db, 'user_roles', currentUser), { role: 'free' })
+                .catch(err => console.error('Error auto-downgrading expired premium user:', err));
+            }
           }, 0);
            // Format date for Thai notice
           const parts = sub.expiryDate.split('-');
@@ -925,6 +1164,10 @@ export default function App() {
         setOfficialGames(officialGames.filter((g) => g.id !== gameId));
         setSelectedAdminGameIds((prev) => prev.filter((id) => id !== gameId));
         setToastMessage('ลบเกมออกจากแคตตาล็อกระบบแล้ว');
+        if (isFirebaseEnabled) {
+          deleteDoc(doc(db, 'official_games', gameId))
+            .catch(err => console.error('Error deleting official game:', err));
+        }
       }
     });
   };
@@ -932,6 +1175,13 @@ export default function App() {
   const handleIgnoreReport = (reportId) => {
     setReports(reports.map((r) => (r.id === reportId ? { ...r, status: 'ignored' } : r)));
     setToastMessage('ปฏิเสธ/ละเว้น รายงานแล้ว');
+    if (isFirebaseEnabled) {
+      const found = reports.find(r => r.id === reportId);
+      if (found) {
+        setDoc(doc(db, 'reports', reportId), { ...found, status: 'ignored' })
+          .catch(err => console.error('Error ignoring report in Firestore:', err));
+      }
+    }
   };
 
   const handleSendUpdateNotification = (game) => {
@@ -1023,7 +1273,7 @@ export default function App() {
     }));
   };
 
-  const handleAdminApproveTx = (tx) => {
+  const handleAdminApproveTx = async (tx) => {
     const username = tx.username;
     setUserRoles(prev => ({
       ...prev,
@@ -1053,13 +1303,31 @@ export default function App() {
     );
 
     setToastMessage(`✔️ อนุมัติสิทธิ์ Premium ให้แก่ผู้ใช้ ${tx.email} สำเร็จ!`);
+
+    if (isFirebaseEnabled) {
+      try {
+        await setDoc(doc(db, 'user_roles', username), { role: 'premium' });
+        await setDoc(doc(db, 'user_premium_dates', username), { signupDate: signupStr, expiryDate: expiryStr });
+        await setDoc(doc(db, 'revenue_transactions', tx.id), { ...tx, status: 'success' });
+      } catch (err) {
+        console.error('Error approving transaction in Firestore:', err);
+      }
+    }
   };
 
-  const handleAdminRejectTx = (tx) => {
+  const handleAdminRejectTx = async (tx) => {
     setRevenueTransactions(prev => 
       prev.map(t => t.id === tx.id ? { ...t, status: 'failed', reason: 'แอดมินปฏิเสธการตรวจสอบ' } : t)
     );
     setToastMessage(`❌ ปฏิเสธรายการชำระเงินของ ${tx.email} แล้ว`);
+
+    if (isFirebaseEnabled) {
+      try {
+        await setDoc(doc(db, 'revenue_transactions', tx.id), { ...tx, status: 'failed', reason: 'แอดมินปฏิเสธการตรวจสอบ' });
+      } catch (err) {
+        console.error('Error rejecting transaction in Firestore:', err);
+      }
+    }
   };
 
   const handleAddGmailUser = (gmail) => {
@@ -1409,6 +1677,10 @@ export default function App() {
     };
 
     setReports([newReport, ...reports]);
+    if (isFirebaseEnabled) {
+      setDoc(doc(db, 'reports', newReport.id), newReport)
+        .catch(err => console.error('Error saving report to Firestore:', err));
+    }
     setIsReportingGame(null);
     setToastMessage('ส่งรายงานเรียบร้อยแล้ว แอดมินจะตรวจสอบเร็วๆ นี้');
   };
@@ -1462,6 +1734,10 @@ export default function App() {
       console.warn("FormSubmit fetch failed, falling back gracefully", err);
     } finally {
       setReports([newReport, ...reports]);
+      if (isFirebaseEnabled) {
+        setDoc(doc(db, 'reports', newReport.id), newReport)
+          .catch(err => console.error('Error saving suggestion to Firestore:', err));
+      }
       setIsSendingSuggestion(false);
       setIsSuggestingNew(false);
       setToastMessage('ส่งข้อเสนอเข้า Gmail แอดมินและตู้ Inbox แอดมินเรียบร้อยแล้ว!');
@@ -1593,26 +1869,29 @@ export default function App() {
 
     if (adminFormMode === 'edit') {
       // Edit mode
+      const updatedGame = {
+        id: adminFormGameId,
+        title: adminTitle,
+        developer: adminDeveloper,
+        version: adminVersion,
+        overview: adminOverview,
+        coverUrl: adminCoverUrl,
+        patreonUrl: adminPatreonUrl,
+        buyUrl: adminBuyUrl,
+        socialUrl: adminSocialUrl,
+        tags: tagsArray,
+        rating: parseFloat(adminRating) || 5.0,
+        screenshots: adminScreenshots
+      };
+
       setOfficialGames((prev) =>
-        prev.map((g) =>
-          g.id === adminFormGameId
-            ? {
-                ...g,
-                title: adminTitle,
-                developer: adminDeveloper,
-                version: adminVersion,
-                overview: adminOverview,
-                coverUrl: adminCoverUrl,
-                patreonUrl: adminPatreonUrl,
-                buyUrl: adminBuyUrl,
-                socialUrl: adminSocialUrl,
-                tags: tagsArray,
-                rating: parseFloat(adminRating) || g.rating,
-                screenshots: adminScreenshots
-              }
-            : g
-        )
+        prev.map((g) => g.id === adminFormGameId ? updatedGame : g)
       );
+
+      if (isFirebaseEnabled) {
+        setDoc(doc(db, 'official_games', adminFormGameId), updatedGame)
+          .catch(err => console.error('Error updating official game:', err));
+      }
 
       // Sync changes with user libraries
       setUserLibraries((prev) => {
@@ -1662,6 +1941,12 @@ export default function App() {
       };
 
       setOfficialGames((prev) => [newGame, ...prev]);
+
+      if (isFirebaseEnabled) {
+        setDoc(doc(db, 'official_games', slug), newGame)
+          .catch(err => console.error('Error adding new game:', err));
+      }
+
       setToastMessage(`เพิ่มเกม "${adminTitle}" เข้าระบบแคตตาล็อกเรียบร้อย`);
       setAdminAddGameOpen(false);
     }
@@ -1671,6 +1956,11 @@ export default function App() {
       setReports((prev) =>
         prev.map((r) => (r.id === activeApprovingReport.id ? { ...r, status: 'approved' } : r))
       );
+      if (isFirebaseEnabled) {
+        const approvedRep = { ...activeApprovingReport, status: 'approved' };
+        setDoc(doc(db, 'reports', activeApprovingReport.id), approvedRep)
+          .catch(err => console.error('Error updating report status:', err));
+      }
       setActiveApprovingReport(null);
     }
 
@@ -3523,6 +3813,11 @@ export default function App() {
                                     } else {
                                       merged.push(mapped);
                                       addedCount++;
+                                    }
+
+                                    if (isFirebaseEnabled) {
+                                      setDoc(doc(db, 'official_games', mapped.id), mapped)
+                                        .catch(err => console.error('Error saving imported game to Firestore:', err));
                                     }
                                   });
                                   
