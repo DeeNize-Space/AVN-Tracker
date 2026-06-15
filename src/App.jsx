@@ -226,6 +226,7 @@ export default function App() {
       'Dave': 'free',
       'Admin': 'admin',
       'pattarasak.raksanrong@gmail.com': 'admin',
+      'pattarasak.raksanarong@gmail.com': 'admin',
       'Guest': 'free'
     };
   });
@@ -238,7 +239,8 @@ export default function App() {
       'Charlie': { signupDate: '', expiryDate: '' },
       'Dave': { signupDate: '', expiryDate: '' },
       'Admin': { signupDate: '', expiryDate: '' },
-      'pattarasak.raksanrong@gmail.com': { signupDate: '', expiryDate: '' }
+      'pattarasak.raksanrong@gmail.com': { signupDate: '', expiryDate: '' },
+      'pattarasak.raksanarong@gmail.com': { signupDate: '', expiryDate: '' }
     };
   });
 
@@ -387,10 +389,10 @@ export default function App() {
     return localStorage.getItem('avn_promptpay_id') || import.meta.env.VITE_PROMPTPAY_ID || '0812345678';
   });
   const [slipOkApiKey, setSlipOkApiKey] = useState(() => {
-    return localStorage.getItem('avn_slipok_api_key') || import.meta.env.VITE_SLIPOK_API_KEY || '';
+    return localStorage.getItem('avn_slipok_api_key') || import.meta.env.VITE_SLIPOK_API_KEY || 'SLIPOKK60C5VA';
   });
   const [slipOkBranchId, setSlipOkBranchId] = useState(() => {
-    return localStorage.getItem('avn_slipok_branch_id') || import.meta.env.VITE_SLIPOK_BRANCH_ID || '';
+    return localStorage.getItem('avn_slipok_branch_id') || import.meta.env.VITE_SLIPOK_BRANCH_ID || '68919';
   });
 
 
@@ -459,7 +461,7 @@ export default function App() {
         
         setUserRoles((prev) => {
           if (prev[email]) return prev;
-          const isAdminEmail = email === 'pattarasak.raksanrong@gmail.com' || email === 'admin@gmail.com';
+          const isAdminEmail = email === 'pattarasak.raksanrong@gmail.com' || email === 'pattarasak.raksanarong@gmail.com' || email === 'admin@gmail.com';
           const newRole = isAdminEmail ? 'admin' : 'free';
           if (isFirebaseEnabled) {
             setDoc(doc(db, 'user_roles', email), { role: newRole })
@@ -5519,13 +5521,22 @@ export default function App() {
         </div>
       )}
 
-      {/* SIMULATED GOOGLE LOGIN MODAL */}
+      {/* GOOGLE LOGIN MODAL */}
       {isGoogleLoginOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
           <div 
-            className="w-full max-w-md bg-white text-slate-800 rounded-3xl overflow-hidden shadow-2xl border border-slate-200 animate-scale-in"
+            className="w-full max-w-md bg-white text-slate-800 rounded-3xl overflow-hidden shadow-2xl border border-slate-200 animate-scale-in relative"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Close button top right */}
+            <button
+              onClick={() => setIsGoogleLoginOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer text-xs"
+              title="ปิด"
+            >
+              ✕
+            </button>
+
             {/* Header: Google Branded logo & title */}
             <div className="p-6 pb-4 flex flex-col items-center border-b border-slate-100">
               <svg className="w-10 h-10 mb-3" viewBox="0 0 24 24">
@@ -5550,7 +5561,7 @@ export default function App() {
               <p className="text-xs text-slate-500 mt-1">เพื่อดำเนินการต่อยัง {webTitle}</p>
             </div>
 
-            {/* Content area: Account Selector */}
+            {/* Content area */}
             <div className="p-6 flex flex-col gap-4">
               {isLoggingIn ? (
                 <div className="py-12 flex flex-col items-center justify-center gap-4">
@@ -5560,105 +5571,22 @@ export default function App() {
               ) : (
                 <>
                   {/* Google OAuth Standard Button */}
-                  <div className="flex flex-col items-center justify-center gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-inner">
-                    <div className="text-xs font-black text-slate-500 uppercase tracking-wider">
-                      ลงชื่อเข้าใช้งานจริงผ่าน Google
+                  <div className="flex flex-col items-center justify-center gap-3 p-6 bg-slate-50 rounded-2xl border border-slate-100 shadow-inner">
+                    <div className="text-xs font-black text-slate-500 uppercase tracking-wider mb-1">
+                      กรุณากดปุ่มด้านล่างเพื่อเข้าใช้งานจริง
                     </div>
                     {/* Google API will render the button here */}
                     <div id="google-signin-btn-container" className="min-h-[40px] flex items-center justify-center"></div>
                   </div>
 
-                  <div className="flex items-center gap-2 my-2 text-slate-400 text-[10px] justify-center">
-                    <span className="h-[1px] bg-slate-200 flex-1"></span>
-                    <span>หรือ ใช้บัญชีจำลองทดสอบ</span>
-                    <span className="h-[1px] bg-slate-200 flex-1"></span>
-                  </div>
-
-                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
-                    เลือกบัญชีผู้ใช้จำลอง
-                  </div>
-                  
-                  <div className="flex flex-col gap-2 max-h-60 overflow-y-auto pr-1">
-                    {MOCK_GOOGLE_ACCOUNTS.map((acc) => (
-                      <button
-                        key={acc.email}
-                        type="button"
-                        onClick={() => {
-                          setIsLoggingIn(true);
-                          setTimeout(() => {
-                            setCurrentUser(acc.role);
-                            setIsLoggingIn(false);
-                            setIsGoogleLoginOpen(false);
-                            setToastMessage(`ลงชื่อเข้าใช้ในฐานะ ${acc.name} สำเร็จ!`);
-                          }, 800);
-                        }}
-                        className="flex items-center gap-3.5 p-3 rounded-2xl border border-slate-100 hover:border-blue-500/20 hover:bg-blue-50/20 text-left cursor-pointer transition-all group animate-fade-in"
-                      >
-                        <img src={acc.avatar} alt={acc.name} className="w-9 h-9 rounded-full object-cover border border-slate-100 group-hover:scale-105 transition-transform" />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-bold text-slate-800 group-hover:text-blue-600 transition-colors">
-                            {acc.name}
-                          </div>
-                          <div className="text-xs text-slate-500 truncate">{acc.email}</div>
-                        </div>
-                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                          userRoles[acc.role] === 'admin' 
-                            ? 'text-rose-600 bg-rose-50' 
-                            : userRoles[acc.role] === 'premium'
-                            ? 'text-amber-600 bg-amber-50'
-                            : 'text-blue-600 bg-blue-50'
-                        }`}>
-                          {userRoles[acc.role] === 'admin' ? 'แอดมิน' : userRoles[acc.role] === 'premium' ? 'พรีเมียม' : 'ทั่วไป'}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="border-t border-slate-100 my-2"></div>
-
-                  {/* Use another account button */}
-                  <div className="flex flex-col gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const email = prompt('ระบุอีเมล Google ที่คุณต้องการเข้าใช้:');
-                        if (email && email.trim() !== '') {
-                          if (!email.includes('@') || !email.includes('.')) {
-                            alert('กรุณากรอกรูปแบบอีเมลให้ถูกต้อง');
-                            return;
-                          }
-                          setIsLoggingIn(true);
-                          setTimeout(() => {
-                            const trimmedEmail = email.trim();
-                            setUserRoles(prev => {
-                              if (prev[trimmedEmail]) return prev;
-                              return { ...prev, [trimmedEmail]: 'free' };
-                            });
-                            setCurrentUser(trimmedEmail);
-                            setIsLoggingIn(false);
-                            setIsGoogleLoginOpen(false);
-                            setToastMessage(`ลงชื่อเข้าใช้ด้วยบัญชี "${trimmedEmail}" สำเร็จ!`);
-                          }, 800);
-                        }
-                      }}
-                      className="flex items-center gap-3.5 p-3 rounded-2xl border border-dashed border-slate-200 hover:border-slate-350 hover:bg-slate-50 text-left cursor-pointer transition-all text-slate-600 text-sm font-bold"
-                    >
-                      <span className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-lg text-slate-500">
-                        👤
-                      </span>
-                      <span>ใช้บัญชี Google อื่นๆ</span>
-                    </button>
-                  </div>
-
-                  <div className="mt-4 flex justify-between items-center">
+                  <div className="mt-4 flex justify-end items-center">
                     <button
                       type="button"
                       onClick={() => setIsGoogleLoginOpen(false)}
-                      className="text-xs font-bold text-slate-500 hover:text-slate-800 px-4 py-2 rounded-xl transition-colors cursor-pointer"
+                      className="bg-slate-150 hover:bg-slate-200 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl transition-colors cursor-pointer"
                     >
                       ยกเลิก
                     </button>
-                    <span className="text-[10px] text-slate-400">ระบบเข้าสู่ระบบจำลองสำหรับการทดสอบ</span>
                   </div>
                 </>
               )}
