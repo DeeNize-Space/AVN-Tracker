@@ -1300,8 +1300,9 @@ export default function App() {
     if (!gmail || !gmail.trim()) return;
     const email = gmail.trim().toLowerCase();
     
-    if (!email.includes('@') || email.length < 5) {
-      alert('กรุณากรอกรูปแบบ Gmail ที่ถูกต้อง');
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(email)) {
+      alert('รูปแบบ Gmail ไม่ถูกต้อง กรุณากรอกอีเมลจริง (เช่น example@gmail.com)');
       return;
     }
 
@@ -5689,7 +5690,12 @@ export default function App() {
                       return;
                     }
 
-                    const email = loginEmail.trim();
+                    const email = loginEmail.trim().toLowerCase();
+                    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+                    if (!emailRegex.test(email)) {
+                      alert('รูปแบบอีเมลไม่ถูกต้อง กรุณากรอกอีเมลจริง (เช่น example@gmail.com)');
+                      return;
+                    }
 
                     if (loginMode === 'login') {
                       // Login flow
