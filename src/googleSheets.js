@@ -100,7 +100,26 @@ export async function deleteUser(email) {
 // User Library Management
 export async function getUserLibrary(email) {
   const res = await apiCall('getUserLibrary', { email });
-  return res.data || [];
+  const list = res.data || [];
+  return list.map(g => ({
+    email: g.email || "",
+    gameId: g.gameId || g.gameid || "",
+    status: g.status || "วางแผนจะเล่น",
+    notes: g.notes || "",
+    playTime: parseFloat(g.playTime) || parseFloat(g.playtime) || 0,
+    rating: parseFloat(g.rating) || 5.0,
+    isCustom: g.isCustom === true || g.iscustom === "true" || g.iscustom === true,
+    title: g.title || "",
+    developer: g.developer || "",
+    version: g.version || "",
+    coverUrl: g.coverUrl || g.coverurl || "",
+    overview: g.overview || "",
+    patreonUrl: g.patreonUrl || g.patreonurl || "",
+    buyUrl: g.buyUrl || g.buyurl || "",
+    socialUrl: g.socialUrl || g.socialurl || "",
+    screenshots: Array.isArray(g.screenshots) ? g.screenshots : (g.screenshots ? JSON.parse(g.screenshots) : []),
+    updatedAt: g.updatedAt || g.updatedat || ""
+  }));
 }
 
 export async function updateLibraryItem(email, item) {
@@ -114,7 +133,23 @@ export async function deleteLibraryItem(email, gameId) {
 // Catalog (Official Games) Management
 export async function getOfficialGames() {
   const res = await apiCall('getOfficialGames', {}, 'GET');
-  return res.data || [];
+  const list = res.data || [];
+  return list.map(g => ({
+    id: g.id || "",
+    title: g.title || "",
+    developer: g.developer || "",
+    version: g.version || "",
+    overview: g.overview || "",
+    coverUrl: g.coverUrl || g.coverurl || "",
+    patreonUrl: g.patreonUrl || g.patreonurl || "",
+    buyUrl: g.buyUrl || g.buyurl || "",
+    socialUrl: g.socialUrl || g.socialurl || "",
+    rating: parseFloat(g.rating) || 5.0,
+    tags: Array.isArray(g.tags) ? g.tags : (g.tags ? g.tags.split(',').map(t => t.trim()) : []),
+    screenshots: Array.isArray(g.screenshots) ? g.screenshots : (g.screenshots ? JSON.parse(g.screenshots) : []),
+    updatedAt: g.updatedAt || g.updatedat || "",
+    isCustom: false
+  }));
 }
 
 export async function saveOfficialGame(game) {
@@ -138,7 +173,20 @@ export async function saveSystemConfig(config) {
 // Transaction Management
 export async function getTransactions() {
   const res = await apiCall('getTransactions', {}, 'GET');
-  return res.data || [];
+  const list = res.data || [];
+  return list.map(tx => ({
+    id: tx.id || "",
+    email: tx.email || "",
+    username: tx.username || "",
+    amount: parseFloat(tx.amount) || 0,
+    packageName: tx.packageName || tx.packagename || "",
+    timestamp: tx.timestamp || "",
+    status: tx.status || "",
+    slipUrl: tx.slipUrl || tx.slipurl || "",
+    refNo: tx.refNo || tx.refno || "",
+    reason: tx.reason || "",
+    updatedAt: tx.updatedAt || tx.updatedat || ""
+  }));
 }
 
 export async function saveTransaction(tx) {
@@ -152,7 +200,21 @@ export async function submitReport(report) {
 
 export async function getReports() {
   const res = await apiCall('getReports', {}, 'GET');
-  return res.data || [];
+  const list = res.data || [];
+  return list.map(r => ({
+    id: r.id || "",
+    email: r.email || "",
+    type: r.type || "",
+    gameTitle: r.gameTitle || r.gametitle || "",
+    reportedVersion: r.reportedVersion || r.reportedversion || "",
+    description: r.description || "",
+    changelog: r.changelog || "",
+    developerUrl: r.developerUrl || r.developerurl || "",
+    reportTags: r.reportTags || r.reporttags || "",
+    errorStatus: r.errorStatus || r.errorstatus || "",
+    timestamp: r.timestamp || "",
+    status: r.status || ""
+  }));
 }
 
 export async function updateReportStatus(reportId, status) {
