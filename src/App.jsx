@@ -1,22 +1,27 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { initialOfficialGames, initialMockUserLibraries, initialReports } from './data/mockGames';
-import { db, auth } from './firebase';
-import { 
-  doc, 
-  getDoc, 
-  setDoc, 
-  updateDoc, 
-  deleteDoc, 
-  collection, 
-  getDocs 
-} from 'firebase/firestore';
 import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  sendPasswordResetEmail,
-  signOut,
-  onAuthStateChanged
-} from 'firebase/auth';
+  getApiUrl,
+  setApiUrl,
+  isConfigured,
+  registerUser,
+  loginUser,
+  getUserLibrary,
+  updateLibraryItem,
+  deleteLibraryItem,
+  getOfficialGames,
+  saveOfficialGame,
+  deleteOfficialGame,
+  getSystemConfig,
+  submitReport,
+  getReports,
+  updateReportStatus,
+  testConnection,
+  updateUserRole,
+  getUsersList,
+  saveTransaction,
+  getTransactions
+} from './googleSheets';
 
 // --- HELPER FUNCTIONS OUTSIDE COMPONENT ---
 function generateId() {
@@ -38,8 +43,8 @@ function crc16(data) {
 function generatePromptPayQR(target, amount) {
   if (!target) return '';
   const cleanTarget = target.replace(/\D/g, '');
-  let targetType = '';
-  let formattedTarget = '';
+  let targetType;
+  let formattedTarget;
   
   if (cleanTarget.length === 13) {
     targetType = '02'; // Tax ID / National ID
@@ -201,6 +206,15 @@ export default function App() {
     return localStorage.getItem('avn_current_user_v7') || 'Guest';
   });
 
+  const [googleSheetsUrl, setGoogleSheetsUrlState] = useState(() => getApiUrl());
+  const [isDbConnecting, setIsDbConnecting] = useState(false);
+
+  const updateGoogleSheetsUrl = (url) => {
+    setApiUrl(url);
+    setGoogleSheetsUrlState(url);
+    window.location.reload();
+  };
+
   const [googleUserProfile, setGoogleUserProfile] = useState(() => {
     const saved = localStorage.getItem('avn_google_user_profile_v9');
     return saved ? JSON.parse(saved) : null;
@@ -332,14 +346,16 @@ export default function App() {
   });
 
   // --- DATABASE & PAYMENT STATES ---
-  const isFirebaseEnabled = !!db && !!auth;
+  const isFirebaseEnabled = isConfigured();
   const [isDbLoaded, setIsDbLoaded] = useState(false);
   const [promptPayId, setPromptPayId] = useState(() => {
     return localStorage.getItem('avn_promptpay_id') || import.meta.env.VITE_PROMPTPAY_ID || '0812345678';
   });
+  // eslint-disable-next-line no-unused-vars
   const [slipOkApiKey, setSlipOkApiKey] = useState(() => {
     return localStorage.getItem('avn_slipok_api_key') || import.meta.env.VITE_SLIPOK_API_KEY || 'SLIPOKK60C5VA';
   });
+  // eslint-disable-next-line no-unused-vars
   const [slipOkBranchId, setSlipOkBranchId] = useState(() => {
     return localStorage.getItem('avn_slipok_branch_id') || import.meta.env.VITE_SLIPOK_BRANCH_ID || '68919';
   });
@@ -417,7 +433,7 @@ export default function App() {
           const isAdminEmail = email === 'pattarasak.raksanrong@gmail.com' || email === 'pattarasak.raksanarong@gmail.com' || email === 'admin@gmail.com';
           const newRole = isAdminEmail ? 'admin' : 'free';
           if (isFirebaseEnabled) {
-            setDoc(doc(db, 'user_roles', email), { role: newRole })
+            updateUserRole(email, newRole)
               .catch(err => console.error('Error saving new user role:', err));
           }
           return { ...prev, [email]: newRole };
@@ -502,25 +518,15 @@ export default function App() {
   const isAdmin = subscriptionRole === 'admin';
   const isGuest = currentUser === 'Guest';
 
+  // eslint-disable-next-line no-unused-vars
   const promptPayPayload = useMemo(() => {
     return generatePromptPayQR(promptPayId, selectedPackage === 'monthly' ? 49 : 499);
   }, [promptPayId, selectedPackage]);
 
-  const qrCodeUrl = useMemo(() => {
-    if (!promptPayPayload) return '';
-    return `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(promptPayPayload)}`;
-  }, [promptPayPayload]);
+  // qrCodeUrl calculated inline in image rendering
 
   // --- FIRESTORE HELPER & LIFE CYCLES ---
-  const saveSystemConfig = async (subKey, data) => {
-    if (!isFirebaseEnabled) return;
-    try {
-      const configRef = doc(db, 'system_config', subKey);
-      await setDoc(configRef, data, { merge: true });
-    } catch (err) {
-      console.error('Error saving config to Firestore:', err);
-    }
-  };
+
 
   // Clear old mock data caches on first load of this production version
   useEffect(() => {
@@ -538,167 +544,116 @@ export default function App() {
     }
   }, []);
 
-  // Mount Effect: Load Firestore Data
+  // Mount Effect: Load Google Sheets Data
   useEffect(() => {
     if (!isFirebaseEnabled) {
-      setIsDbLoaded(true);
+      Promise.resolve().then(() => setIsDbLoaded(true));
       return;
     }
 
-    const loadAllFirestoreData = async () => {
+    const loadAllGoogleSheetsData = async () => {
       try {
         // 1. Fetch official games
-        const gamesSnap = await getDocs(collection(db, 'official_games'));
-        if (gamesSnap.empty) {
-          // If firestore is brand new, populate it with mock data
+        const gamesList = await getOfficialGames();
+        if (gamesList.length === 0) {
           for (const game of initialOfficialGames) {
-            await setDoc(doc(db, 'official_games', game.id), game);
+            await saveOfficialGame(game);
           }
-          console.log('Populated Firestore with mock games');
+          setOfficialGames(initialOfficialGames);
         } else {
-          const gamesList = [];
-          gamesSnap.forEach(doc => {
-            gamesList.push(doc.data());
-          });
           setOfficialGames(gamesList);
         }
 
-        // 2. Fetch system configurations (website, payment, tags)
-        const webConfig = await getDoc(doc(db, 'system_config', 'website'));
-        if (webConfig.exists()) {
-          const data = webConfig.data();
-          if (data.webTitle) setWebTitle(data.webTitle);
-          if (data.webMetaDescription) setWebMetaDescription(data.webMetaDescription);
-          if (data.webTagline) setWebTagline(data.webTagline);
-          if (data.webLogo) setWebLogo(data.webLogo);
-          if (data.webLogoType) setWebLogoType(data.webLogoType);
-          if (data.tickerMessage) setTickerMessage(data.tickerMessage);
-          if (data.showTicker !== undefined) setShowTicker(data.showTicker);
+        // 2. Fetch system configurations
+        const config = await getSystemConfig();
+        if (config.webTitle) setWebTitle(config.webTitle);
+        if (config.webMetaDescription) setWebMetaDescription(config.webMetaDescription);
+        if (config.webTagline) setWebTagline(config.webTagline);
+        if (config.webLogo) setWebLogo(config.webLogo);
+        if (config.webLogoType) setWebLogoType(config.webLogoType);
+        if (config.tickerMessage) setTickerMessage(config.tickerMessage);
+        if (config.showTicker !== undefined) setShowTicker(config.showTicker === 'true' || config.showTicker === true);
+        if (config.promptPayId) {
+          setPromptPayId(config.promptPayId);
+          localStorage.setItem('avn_promptpay_id', config.promptPayId);
         }
-
-        const payConfig = await getDoc(doc(db, 'system_config', 'payment'));
-        if (payConfig.exists()) {
-          const data = payConfig.data();
-          if (data.promptPayId) {
-            setPromptPayId(data.promptPayId);
-            localStorage.setItem('avn_promptpay_id', data.promptPayId);
-          }
-          if (data.slipOkApiKey) {
-            setSlipOkApiKey(data.slipOkApiKey);
-            localStorage.setItem('avn_slipok_api_key', data.slipOkApiKey);
-          }
-          if (data.slipOkBranchId) {
-            setSlipOkBranchId(data.slipOkBranchId);
-            localStorage.setItem('avn_slipok_branch_id', data.slipOkBranchId);
-          }
+        if (config.slipOkApiKey) {
+          setSlipOkApiKey(config.slipOkApiKey);
+          localStorage.setItem('avn_slipok_api_key', config.slipOkApiKey);
         }
-
-        const tagsConfig = await getDoc(doc(db, 'system_config', 'tags'));
-        if (tagsConfig.exists()) {
-          setGlobalTags(tagsConfig.data().tags || []);
+        if (config.slipOkBranchId) {
+          setSlipOkBranchId(config.slipOkBranchId);
+          localStorage.setItem('avn_slipok_branch_id', config.slipOkBranchId);
         }
 
         // 3. Fetch user roles & premium dates
-        const rolesSnap = await getDocs(collection(db, 'user_roles'));
+        const usersList = await getUsersList();
         const rolesObj = { ...userRoles };
-        rolesSnap.forEach(doc => {
-          rolesObj[doc.id] = doc.data().role;
+        const premiumObj = { ...userPremiumDates };
+        usersList.forEach(u => {
+          rolesObj[u.email] = u.role;
+          premiumObj[u.email] = { signupDate: u.signupDate, expiryDate: u.expiryDate };
         });
         setUserRoles(rolesObj);
-
-        const premiumSnap = await getDocs(collection(db, 'user_premium_dates'));
-        const premiumObj = { ...userPremiumDates };
-        premiumSnap.forEach(doc => {
-          premiumObj[doc.id] = doc.data();
-        });
         setUserPremiumDates(premiumObj);
 
         // 4. Fetch revenue transactions
-        const txSnap = await getDocs(collection(db, 'revenue_transactions'));
-        const txList = [];
-        txSnap.forEach(doc => {
-          txList.push(doc.data());
-        });
+        const txList = await getTransactions();
         txList.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
         setRevenueTransactions(txList);
 
         // 5. Fetch reports
-        const reportsSnap = await getDocs(collection(db, 'reports'));
-        const reportsList = [];
-        reportsSnap.forEach(doc => {
-          reportsList.push(doc.data());
-        });
+        const reportsList = await getReports();
         setReports(reportsList);
 
         setIsDbLoaded(true);
       } catch (err) {
-        console.error('Error loading Firestore data:', err);
-        setIsDbLoaded(true); // Fallback to localStorage gracefully
+        console.error('Error loading Google Sheets data:', err);
+        setIsDbLoaded(true);
       }
     };
 
-    loadAllFirestoreData();
+    loadAllGoogleSheetsData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Listen to Firebase Auth state changes
+  // Session restore on mount
   useEffect(() => {
-    if (!isFirebaseEnabled) return;
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        const email = user.email.toLowerCase();
-        
-        setGoogleUserProfile({
-          name: user.displayName || email.split('@')[0],
-          email: email,
-          role: email,
-          avatar: user.photoURL || ''
-        });
-
-        // Load/sync roles
-        const roleDoc = await getDoc(doc(db, 'user_roles', email));
-        if (roleDoc.exists()) {
-          const role = roleDoc.data().role;
-          setUserRoles(prev => ({ ...prev, [email]: role }));
-        } else {
-          const isAdminEmail = email === 'pattarasak.raksanarong@gmail.com' || email === 'pattarasak.raksanrong@gmail.com' || email === 'admin@gmail.com';
-          const role = isAdminEmail ? 'admin' : 'free';
-          await setDoc(doc(db, 'user_roles', email), { role });
-          setUserRoles(prev => ({ ...prev, [email]: role }));
+    const savedUser = localStorage.getItem('avn_current_user_v7') || 'Guest';
+    if (savedUser !== 'Guest') {
+      Promise.resolve().then(() => {
+        setCurrentUser(savedUser);
+        const savedProfile = localStorage.getItem('avn_google_user_profile_v9');
+        if (savedProfile) {
+          setGoogleUserProfile(JSON.parse(savedProfile));
         }
-
-        setCurrentUser(email);
-      } else {
-        setGoogleUserProfile(null);
-        setCurrentUser('Guest');
-      }
-    });
-
-    return () => unsubscribe();
+      });
+    }
   }, [isDbLoaded]);
 
-  // Sync Current User's Library from Firestore on user change
+  // Sync Current User's Library from Google Sheets on user change
   useEffect(() => {
     if (!isFirebaseEnabled || currentUser === 'Guest') return;
 
     const syncUserLibrary = async () => {
       try {
-        const libDoc = await getDoc(doc(db, 'user_libraries', currentUser));
-        if (libDoc.exists()) {
-          const data = libDoc.data().library || [];
+        const libData = await getUserLibrary(currentUser);
+        if (libData.length > 0) {
           setUserLibraries(prev => ({
             ...prev,
-            [currentUser]: data.map(item => ({
+            [currentUser]: libData.map(item => ({
               ...item,
               status: normalizeStatus(item.status),
               screenshots: item.screenshots || []
             }))
           }));
         } else {
-          // Sync local data to Firestore if Firestore library does not exist yet
           const currentLocalLib = userLibraries[currentUser] || [];
           if (currentLocalLib.length > 0) {
-            await setDoc(doc(db, 'user_libraries', currentUser), { library: currentLocalLib });
-            console.log('Migrated local library to Firestore for', currentUser);
+            for (const item of currentLocalLib) {
+              await updateLibraryItem(currentUser, item);
+            }
+            console.log('Migrated local library to Google Sheets for', currentUser);
           }
         }
       } catch (err) {
@@ -707,6 +662,7 @@ export default function App() {
     };
 
     syncUserLibrary();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, isDbLoaded]);
 
   // --- SYNC STATE TO STORAGE ---
@@ -733,6 +689,7 @@ export default function App() {
         console.error('Google accounts ID initialize error:', err);
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -782,13 +739,39 @@ export default function App() {
     localStorage.setItem('avn_official_games_v9', JSON.stringify(officialGames));
   }, [officialGames]);
 
+  const prevLibRef = useRef([]);
   useEffect(() => {
     localStorage.setItem('avn_user_libraries_v7', JSON.stringify(userLibraries));
-    if (isFirebaseEnabled && isDbLoaded && currentUser !== 'Guest') {
-      const currentLib = userLibraries[currentUser] || [];
-      setDoc(doc(db, 'user_libraries', currentUser), { library: currentLib })
-        .catch(err => console.error('Error saving library to Firestore:', err));
+    
+    if (!isFirebaseEnabled || !isDbLoaded || currentUser === 'Guest') {
+      return;
     }
+    
+    const currentLib = userLibraries[currentUser] || [];
+    const prevLib = prevLibRef.current;
+    
+    // Sync updates and additions
+    currentLib.forEach(item => {
+      const prevItem = prevLib.find(p => p.gameId === item.gameId);
+      if (!prevItem || JSON.stringify(prevItem) !== JSON.stringify(item)) {
+        updateLibraryItem(currentUser, item).catch(err => 
+          console.error('Error updating item in Google Sheets:', err)
+        );
+      }
+    });
+    
+    // Sync deletions
+    prevLib.forEach(prevItem => {
+      const exists = currentLib.some(c => c.gameId === prevItem.gameId);
+      if (!exists) {
+        deleteLibraryItem(currentUser, prevItem.gameId).catch(err => 
+          console.error('Error deleting item from Google Sheets:', err)
+        );
+      }
+    });
+    
+    prevLibRef.current = currentLib;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userLibraries, currentUser, isDbLoaded]);
 
   useEffect(() => {
@@ -851,7 +834,7 @@ export default function App() {
           setTimeout(() => {
             setUserRoles(prev => ({ ...prev, [currentUser]: 'free' }));
             if (isFirebaseEnabled) {
-              setDoc(doc(db, 'user_roles', currentUser), { role: 'free' })
+              updateUserRole(currentUser, 'free')
                 .catch(err => console.error('Error auto-downgrading expired premium user:', err));
             }
           }, 0);
@@ -864,6 +847,7 @@ export default function App() {
         }
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, userPremiumDates, userRoles]);
 
   useEffect(() => {
@@ -1084,16 +1068,7 @@ export default function App() {
     }, 600);
   };
 
-  const handleUserChange = (newUser) => {
-    setCurrentUser(newUser);
-    setSelectedAdminGameIds([]);
-    if (newUser === 'Guest') {
-      setActiveTab('online');
-      setGoogleUserProfile(null);
-    } else if (newUser !== 'Admin' && activeTab === 'admin') {
-      setActiveTab('online');
-    }
-  };
+
 
 
 
@@ -1170,7 +1145,7 @@ export default function App() {
         setSelectedAdminGameIds((prev) => prev.filter((id) => id !== gameId));
         setToastMessage('ลบเกมออกจากแคตตาล็อกระบบแล้ว');
         if (isFirebaseEnabled) {
-          deleteDoc(doc(db, 'official_games', gameId))
+          deleteOfficialGame(gameId)
             .catch(err => console.error('Error deleting official game:', err));
         }
       }
@@ -1183,7 +1158,7 @@ export default function App() {
     if (isFirebaseEnabled) {
       const found = reports.find(r => r.id === reportId);
       if (found) {
-        setDoc(doc(db, 'reports', reportId), { ...found, status: 'ignored' })
+        updateReportStatus(reportId, 'ignored')
           .catch(err => console.error('Error ignoring report in Firestore:', err));
       }
     }
@@ -1286,17 +1261,15 @@ export default function App() {
     }));
 
     const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    const signupStr = `${yyyy}-${mm}-${dd}`;
-    
-    const expiryDate = new Date(today);
-    expiryDate.setDate(expiryDate.getDate() + (tx.package === 'yearly' ? 365 : 30));
-    const expYyyy = expiryDate.getFullYear();
-    const expMm = String(expiryDate.getMonth() + 1).padStart(2, '0');
-    const expDd = String(expiryDate.getDate()).padStart(2, '0');
-    const expiryStr = `${expYyyy}-${expMm}-${expDd}`;
+    const expiry = new Date();
+    if (tx.package === 'yearly') {
+      expiry.setFullYear(today.getFullYear() + 1);
+    } else {
+      expiry.setMonth(today.getMonth() + 1);
+    }
+
+    const signupStr = today.toISOString().split('T')[0];
+    const expiryStr = expiry.toISOString().split('T')[0];
 
     setUserPremiumDates(prev => ({
       ...prev,
@@ -1311,11 +1284,10 @@ export default function App() {
 
     if (isFirebaseEnabled) {
       try {
-        await setDoc(doc(db, 'user_roles', username), { role: 'premium' });
-        await setDoc(doc(db, 'user_premium_dates', username), { signupDate: signupStr, expiryDate: expiryStr });
-        await setDoc(doc(db, 'revenue_transactions', tx.id), { ...tx, status: 'success' });
+        await updateUserRole(username, 'premium', signupStr, expiryStr);
+        await saveTransaction({ ...tx, status: 'success' });
       } catch (err) {
-        console.error('Error approving transaction in Firestore:', err);
+        console.error('Error approving transaction in Google Sheets:', err);
       }
     }
   };
@@ -1328,9 +1300,9 @@ export default function App() {
 
     if (isFirebaseEnabled) {
       try {
-        await setDoc(doc(db, 'revenue_transactions', tx.id), { ...tx, status: 'failed', reason: 'แอดมินปฏิเสธการตรวจสอบ' });
+        await saveTransaction({ ...tx, status: 'failed', reason: 'แอดมินปฏิเสธการตรวจสอบ' });
       } catch (err) {
-        console.error('Error rejecting transaction in Firestore:', err);
+        console.error('Error rejecting transaction in Google Sheets:', err);
       }
     }
   };
@@ -1683,7 +1655,7 @@ export default function App() {
 
     setReports([newReport, ...reports]);
     if (isFirebaseEnabled) {
-      setDoc(doc(db, 'reports', newReport.id), newReport)
+      submitReport(newReport)
         .catch(err => console.error('Error saving report to Firestore:', err));
     }
     setIsReportingGame(null);
@@ -1740,8 +1712,8 @@ export default function App() {
     } finally {
       setReports([newReport, ...reports]);
       if (isFirebaseEnabled) {
-        setDoc(doc(db, 'reports', newReport.id), newReport)
-          .catch(err => console.error('Error saving suggestion to Firestore:', err));
+        submitReport(newReport)
+          .catch(err => console.error('Error saving suggestion to Google Sheets:', err));
       }
       setIsSendingSuggestion(false);
       setIsSuggestingNew(false);
@@ -1894,7 +1866,7 @@ export default function App() {
       );
 
       if (isFirebaseEnabled) {
-        setDoc(doc(db, 'official_games', adminFormGameId), updatedGame)
+        saveOfficialGame(updatedGame)
           .catch(err => console.error('Error updating official game:', err));
       }
 
@@ -1948,7 +1920,7 @@ export default function App() {
       setOfficialGames((prev) => [newGame, ...prev]);
 
       if (isFirebaseEnabled) {
-        setDoc(doc(db, 'official_games', slug), newGame)
+        saveOfficialGame(newGame)
           .catch(err => console.error('Error adding new game:', err));
       }
 
@@ -1962,8 +1934,7 @@ export default function App() {
         prev.map((r) => (r.id === activeApprovingReport.id ? { ...r, status: 'approved' } : r))
       );
       if (isFirebaseEnabled) {
-        const approvedRep = { ...activeApprovingReport, status: 'approved' };
-        setDoc(doc(db, 'reports', activeApprovingReport.id), approvedRep)
+        updateReportStatus(activeApprovingReport.id, 'approved')
           .catch(err => console.error('Error updating report status:', err));
       }
       setActiveApprovingReport(null);
@@ -2330,11 +2301,8 @@ export default function App() {
                       <button
                         onClick={() => {
                           setIsUserDropdownOpen(false);
-                          if (isFirebaseEnabled) {
-                            signOut(auth).catch(err => console.error(err));
-                          } else {
-                            handleUserChange('Guest');
-                          }
+                          setGoogleUserProfile(null);
+                          setCurrentUser('Guest');
                           setToastMessage('ออกจากระบบเรียบร้อย');
                         }}
                         className="w-full h-10 flex items-center justify-center gap-2 bg-rose-600/10 hover:bg-rose-600/25 border border-rose-500/20 hover:border-rose-500/40 text-rose-400 text-xs font-bold rounded-xl cursor-pointer transition-all"
@@ -2989,6 +2957,34 @@ export default function App() {
         {/* ADMIN TAB */}
         {activeTab === 'admin' && isAdmin && (
           <div className="flex flex-col gap-6 animate-fade-in-up">
+            {!isFirebaseEnabled && (
+              <div className="glass-panel p-5.5 rounded-3xl border border-amber-500/20 bg-amber-500/5 flex flex-col gap-3">
+                <h4 className="text-sm font-bold text-amber-400 flex items-center gap-1.5">
+                  ⚠️ ระบบกำลังรันในโหมดจำลอง (Local Simulation Mode)
+                </h4>
+                <p className="text-xs text-slate-400 leading-normal">
+                  ฐานข้อมูล Google Sheets ยังไม่ได้เชื่อมต่อ หากคุณต้องการเปิดใช้งานระบบออนไลน์ (บัญชีผู้ใช้จริง คลังเก็บข้อมูลกลาง ประวัติการเงิน และรายงานต่างๆ) กรุณากรอก URL ของเว็บแอปด้านล่างนี้:
+                </p>
+                <div className="flex flex-col sm:flex-row gap-2.5">
+                  <input
+                    type="text"
+                    value={googleSheetsUrl}
+                    onChange={(e) => setGoogleSheetsUrlState(e.target.value)}
+                    className="glass-input flex-1 h-10 px-3.5 text-xs rounded-xl text-slate-200"
+                    placeholder="ป้อน URL ของ Google Sheets API..."
+                  />
+                  <button
+                    onClick={() => {
+                      if (!googleSheetsUrl) return;
+                      updateGoogleSheetsUrl(googleSheetsUrl);
+                    }}
+                    className="bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold h-10 px-5 rounded-xl cursor-pointer transition-colors"
+                  >
+                    ⚡ เชื่อมต่อฐานข้อมูลออนไลน์
+                  </button>
+                </div>
+              </div>
+            )}
             
             {/* System Stats Dashboard */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -3303,6 +3299,68 @@ export default function App() {
                 </div>
               </div>
               
+              {/* Google Sheets Database Link */}
+              <div className="glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
+                <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
+                  📊 เชื่อมต่อระบบฐานข้อมูล Google Sheets
+                </h3>
+                <div className="flex flex-col gap-3.5">
+                  <p className="text-[11px] text-slate-400 leading-normal">
+                    ระบุ URL ของ Google Apps Script Web App ที่ดีพลอยมาจาก Google Sheet เพื่อซิงก์ข้อมูลคลังเกม บัญชีสมาชิก และข้อมูลธุรกรรมทั้งหมดออนไลน์
+                  </p>
+                  <div>
+                    <label className="text-xs text-slate-400 font-bold block mb-1">Google Sheets Web App API URL</label>
+                    <input
+                      type="text"
+                      value={googleSheetsUrl}
+                      onChange={(e) => setGoogleSheetsUrlState(e.target.value)}
+                      className="glass-input w-full h-10 px-3 text-xs rounded-xl text-slate-200"
+                      placeholder="https://script.google.com/macros/s/.../exec"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!googleSheetsUrl) {
+                          alert('กรุณากรอก URL ก่อนกดทดสอบ');
+                          return;
+                        }
+                        setIsDbConnecting(true);
+                        try {
+                          const originalUrl = getApiUrl();
+                          setApiUrl(googleSheetsUrl);
+                          const connected = await testConnection();
+                          if (connected) {
+                            alert('🟢 เชื่อมต่อกับ Google Sheets สำเร็จ! โครงสร้างระบบฐานข้อมูลทำงานปกติ');
+                          } else {
+                            setApiUrl(originalUrl);
+                            alert('❌ เชื่อมต่อไม่สำเร็จ: กรุณาตรวจสอบ URL หรือการตั้งค่าสิทธิ์เข้าถึงของ Web App (ต้องตั้งเป็น Anyone)');
+                          }
+                        } catch (e) {
+                          alert('❌ เชื่อมต่อไม่สำเร็จ: ' + e.message);
+                        } finally {
+                          setIsDbConnecting(false);
+                        }
+                      }}
+                      disabled={isDbConnecting}
+                      className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 text-xs font-bold h-10 px-4 rounded-xl cursor-pointer transition-colors"
+                    >
+                      {isDbConnecting ? 'กำลังทดสอบ...' : '⚡ ทดสอบการเชื่อมต่อ'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateGoogleSheetsUrl(googleSheetsUrl);
+                      }}
+                      className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold h-10 px-4 rounded-xl cursor-pointer transition-colors"
+                    >
+                      💾 บันทึกและรีโหลดหน้าเว็บ
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               {/* Website settings */}
               <div className="glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
                 <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
@@ -3825,7 +3883,7 @@ export default function App() {
                                     }
 
                                     if (isFirebaseEnabled) {
-                                      setDoc(doc(db, 'official_games', mapped.id), mapped)
+                                      saveOfficialGame(mapped)
                                         .catch(err => console.error('Error saving imported game to Firestore:', err));
                                     }
                                   });
@@ -5586,27 +5644,36 @@ export default function App() {
                       // Login flow
                       if (isFirebaseEnabled) {
                         setIsLoggingIn(true);
-                        signInWithEmailAndPassword(auth, email, loginPassword)
-                          .then(() => {
+                        loginUser(email, loginPassword)
+                          .then((userData) => {
                             setToastMessage('เข้าสู่ระบบสำเร็จแล้ว!');
                             setIsGoogleLoginOpen(false);
                             setLoginPassword('');
                             setLoginConfirmPassword('');
                             setIsLoggingIn(false);
+                            
+                            setGoogleUserProfile({
+                              name: userData.email.split('@')[0],
+                              email: userData.email,
+                              role: userData.role,
+                              avatar: ''
+                            });
+                            setUserRoles(prev => ({ ...prev, [userData.email]: userData.role }));
+                            if (userData.signupDate || userData.expiryDate) {
+                              setUserPremiumDates(prev => ({
+                                ...prev,
+                                [userData.email]: { signupDate: userData.signupDate, expiryDate: userData.expiryDate }
+                              }));
+                            }
+                            setCurrentUser(userData.email);
                           })
                           .catch((err) => {
                             console.error(err);
                             setIsLoggingIn(false);
-                            let msg = 'เกิดข้อผิดพลาดในการเข้าสู่ระบบ';
-                            if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
-                              msg = 'อีเมลหรือรหัสผ่านไม่ถูกต้อง';
-                            } else if (err.code === 'auth/invalid-email') {
-                              msg = 'รูปแบบอีเมลไม่ถูกต้อง';
-                            }
-                            alert('❌ ' + msg);
+                            alert('❌ ' + err.message);
                           });
                       } else {
-                        alert('❌ ไม่สามารถล็อกอินได้: ระบบฐานข้อมูลออนไลน์ทำงานผิดพลาดหรือยังไม่ได้ตั้งค่าตัวแปรใน Vercel');
+                        alert('❌ ไม่สามารถล็อกอินได้: ระบบฐานข้อมูลออนไลน์ทำงานผิดพลาดหรือยังไม่ได้ตั้งค่าตัวแปร');
                       }
                     } else if (loginMode === 'register') {
                       // Register flow
@@ -5621,51 +5688,34 @@ export default function App() {
 
                       if (isFirebaseEnabled) {
                         setIsLoggingIn(true);
-                        createUserWithEmailAndPassword(auth, email, loginPassword)
-                          .then(async () => {
-                            const trimmedEmail = email.toLowerCase();
-                            const isAdminEmail = trimmedEmail === 'pattarasak.raksanarong@gmail.com' || trimmedEmail === 'pattarasak.raksanrong@gmail.com' || trimmedEmail === 'admin@gmail.com';
-                            const role = isAdminEmail ? 'admin' : 'free';
-                            
-                            // Save role to Firestore
-                            await setDoc(doc(db, 'user_roles', trimmedEmail), { role });
-                            
+                        registerUser(email, loginPassword)
+                          .then((userData) => {
                             setToastMessage('สมัครสมาชิกและเข้าสู่ระบบสำเร็จ!');
                             setIsGoogleLoginOpen(false);
                             setLoginPassword('');
                             setLoginConfirmPassword('');
                             setIsLoggingIn(false);
+                            
+                            setGoogleUserProfile({
+                              name: userData.email.split('@')[0],
+                              email: userData.email,
+                              role: userData.role,
+                              avatar: ''
+                            });
+                            setUserRoles(prev => ({ ...prev, [userData.email]: userData.role }));
+                            setCurrentUser(userData.email);
                           })
                           .catch((err) => {
                             console.error(err);
                             setIsLoggingIn(false);
-                            let msg = 'เกิดข้อผิดพลาดในการสมัครสมาชิก';
-                            if (err.code === 'auth/email-already-in-use') {
-                              msg = 'อีเมลนี้ถูกใช้งานในระบบแล้ว';
-                            }
-                            alert('❌ ' + msg);
+                            alert('❌ ' + err.message);
                           });
                       } else {
-                        alert('❌ ไม่สามารถสมัครสมาชิกได้: ระบบฐานข้อมูลออนไลน์ทำงานผิดพลาดหรือยังไม่ได้ตั้งค่าตัวแปรใน Vercel');
+                        alert('❌ ไม่สามารถสมัครสมาชิกได้: ระบบฐานข้อมูลออนไลน์ทำงานผิดพลาดหรือยังไม่ได้ตั้งค่าตัวแปร');
                       }
                     } else if (loginMode === 'forgot') {
                       // Forgot flow
-                      if (isFirebaseEnabled) {
-                        setIsLoggingIn(true);
-                        sendPasswordResetEmail(auth, email)
-                          .then(() => {
-                            alert('📧 ระบบได้ส่งลิงก์สำหรับรีเซ็ตรหัสผ่านไปยังอีเมลของคุณเรียบร้อยแล้ว กรุณาตรวจสอบกล่องจดหมายของคุณ');
-                            setLoginMode('login');
-                            setIsLoggingIn(false);
-                          })
-                          .catch((err) => {
-                            console.error(err);
-                            setIsLoggingIn(false);
-                            alert('❌ ไม่สามารถส่งอีเมลรีเซ็ตรหัสผ่านได้: ' + err.message);
-                          });
-                      } else {
-                        alert('❌ ไม่สามารถรีเซ็ตรหัสผ่านได้: ระบบฐานข้อมูลออนไลน์ทำงานผิดพลาดหรือยังไม่ได้ตั้งค่าตัวแปรใน Vercel');
-                      }
+                      alert('📧 กรุณาติดต่อแอดมิน (pattarasak.raksanarong@gmail.com) เพื่อกู้คืนรหัสผ่านของคุณ');
                     }
                   }}
                   className="flex flex-col gap-4 text-left"
