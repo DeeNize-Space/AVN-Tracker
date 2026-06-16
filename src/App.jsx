@@ -269,14 +269,14 @@ export default function App() {
   });
   const [isUpsellOpen, setIsUpsellOpen] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState('yearly');
-  const [isPaymentSimulating, setIsPaymentSimulating] = useState(false);
   const [isSendingSuggestion, setIsSendingSuggestion] = useState(false);
 
-  // --- SLIPOK SIMULATION STATES ---
+  // --- SLIP UPLOAD STATES ---
+  const [selectedSlipFile, setSelectedSlipFile] = useState(null);
+  const [selectedSlipFilePreview, setSelectedSlipFilePreview] = useState(null);
   const [uploadedSlipPreview, setUploadedSlipPreview] = useState(null);
   const [isSlipChecking, setIsSlipChecking] = useState(false);
   const [slipCheckLogs, setSlipCheckLogs] = useState([]);
-  const [simulateSlipError, setSimulateSlipError] = useState(false);
   const [selectedAdminTxSlip, setSelectedAdminTxSlip] = useState(null);
 
   // --- REVENUE STATE ---
@@ -1539,8 +1539,7 @@ export default function App() {
   };
 
   // Real Google Drive Payment Slip Upload
-  const handleVerifySlip = (e) => {
-    const file = e.target.files[0];
+  const handleVerifySlip = (file) => {
     if (!file) return;
 
     try {
@@ -1601,6 +1600,8 @@ export default function App() {
           setTimeout(() => {
             setIsSlipChecking(false);
             setUploadedSlipPreview(null);
+            setSelectedSlipFile(null);
+            setSelectedSlipFilePreview(null);
             setIsUpsellOpen(false);
             setToastMessage('⚠️ อัปโหลดเสร็จสิ้น ส่งเรื่องให้ผู้ดูแลระบบตรวจสอบและอนุมัติแล้ว');
           }, 1500);
@@ -5850,7 +5851,11 @@ export default function App() {
                 👑 อัปเกรดสถานะพรีเมียม (Premium Member)
               </h3>
               <button
-                onClick={() => setIsUpsellOpen(false)}
+                onClick={() => {
+                  setIsUpsellOpen(false);
+                  setSelectedSlipFile(null);
+                  setSelectedSlipFilePreview(null);
+                }}
                 className="text-slate-455 hover:text-white bg-slate-955 hover:bg-slate-855 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer text-xs"
               >
                 ✕
@@ -5969,92 +5974,64 @@ export default function App() {
               <div className="flex flex-col gap-2">
                 {!isSlipChecking && (
                   <>
-                    {/* Toggle Switch to simulate slip issue */}
-                    <div className="flex items-center justify-between bg-slate-950/40 p-2.5 rounded-xl border border-slate-900 mb-1">
-                      <div className="flex flex-col text-left">
-                        <span className="text-[11.5px] font-extrabold text-amber-400">⚠️ จำลองโอนเงินแล้วสลิปมีปัญหา</span>
-                        <span className="text-[9.5px] text-slate-400">สลิปจะติดสถานะ Pending เพื่อส่งให้แอดมินอนุมัติแมนนวล</span>
-                      </div>
-                      <input 
-                        type="checkbox" 
-                        checked={simulateSlipError} 
-                        onChange={(e) => setSimulateSlipError(e.target.checked)}
-                        className="w-4.5 h-4.5 rounded border-slate-800 bg-slate-950 text-amber-500 focus:ring-0 cursor-pointer"
+                    {/* Browse Slip File Input Area */}
+                    <div className="flex flex-col gap-2 mb-1">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        id="payment-slip-upload"
+                        onChange={(e) => {
+                          const file = e.target.files[0];
+                          if (file) {
+                            setSelectedSlipFile(file);
+                            setSelectedSlipFilePreview(URL.createObjectURL(file));
+                          }
+                        }}
+                        className="hidden"
                       />
+                      
+                      {selectedSlipFilePreview ? (
+                        <div className="flex flex-col items-center bg-slate-950/40 p-3 rounded-2xl border border-slate-800 gap-2 relative">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedSlipFile(null);
+                              setSelectedSlipFilePreview(null);
+                            }}
+                            className="absolute top-2 right-2 text-slate-500 hover:text-slate-200 bg-slate-900 w-6 h-6 rounded-full flex items-center justify-center cursor-pointer text-[10px]"
+                          >
+                            ✕
+                          </button>
+                          <div className="w-16 h-24 rounded-lg overflow-hidden border border-slate-700 bg-slate-900">
+                            <img src={selectedSlipFilePreview} alt="Selected Slip" className="w-full h-full object-cover" />
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-bold truncate max-w-[220px]">
+                            {selectedSlipFile.name}
+                          </span>
+                        </div>
+                      ) : (
+                        <label
+                          htmlFor="payment-slip-upload"
+                          className="w-full h-16 flex flex-col items-center justify-center gap-1 border border-dashed border-slate-700 hover:border-slate-600 bg-slate-950/20 hover:bg-slate-950/40 rounded-2xl cursor-pointer transition-all text-slate-400 hover:text-slate-350"
+                        >
+                          <span className="text-lg">📁</span>
+                          <span className="text-[10px] font-black">คลิกเพื่อเลือกไฟล์รูปภาพสลิป (Browse...)</span>
+                        </label>
+                      )}
                     </div>
 
-                    <input
-                      type="file"
-                      accept="image/*"
-                      id="payment-slip-upload"
-                      onChange={handleVerifySlip}
-                      className="hidden"
-                    />
-                    <label
-                      htmlFor="payment-slip-upload"
-                      className="w-full h-11 flex items-center justify-center gap-2 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white text-xs font-black rounded-xl cursor-pointer transition-all shadow-lg shadow-amber-500/15"
-                    >
-                      📤 อัปโหลดสลิปธนาคารเพื่อสแกน (SlipOK)
-                    </label>
-
+                    {/* Submit Button */}
                     <button
                       type="button"
-                      onClick={() => {
-                        setIsPaymentSimulating(true);
-                        setTimeout(() => {
-                          setUserRoles(prev => ({
-                            ...prev,
-                            [currentUser]: 'premium'
-                          }));
-                          
-                          const today = new Date();
-                          const yyyy = today.getFullYear();
-                          const mm = String(today.getMonth() + 1).padStart(2, '0');
-                          const dd = String(today.getDate()).padStart(2, '0');
-                          const signupStr = `${yyyy}-${mm}-${dd}`;
-                          
-                          const expiryDate = new Date(today);
-                          expiryDate.setDate(expiryDate.getDate() + (selectedPackage === 'monthly' ? 30 : 365));
-                          const expYyyy = expiryDate.getFullYear();
-                          const expMm = String(expiryDate.getMonth() + 1).padStart(2, '0');
-                          const expDd = String(expiryDate.getDate()).padStart(2, '0');
-                          const expiryStr = `${expYyyy}-${expMm}-${expDd}`;
-
-                          setUserPremiumDates(prev => ({
-                            ...prev,
-                            [currentUser]: { signupDate: signupStr, expiryDate: expiryStr }
-                          }));
-
-                          const amountVal = selectedPackage === 'monthly' ? 49 : 499;
-                          const txEmail = getUserGmail(currentUser);
-                          const newTx = {
-                            id: 'tx-' + Date.now(),
-                            transRef: 'ref-20260612' + Math.floor(100000 + Math.random() * 900000),
-                            username: currentUser,
-                            email: txEmail,
-                            package: selectedPackage,
-                            amount: amountVal,
-                            timestamp: getIsoTimestamp(),
-                            status: 'success'
-                          };
-                          setRevenueTransactions(prev => [newTx, ...prev]);
-
-                          setIsPaymentSimulating(false);
-                          setIsUpsellOpen(false);
-                          setToastMessage(`ยินดีต้อนรับเข้าสู่ระดับ Premium สำเร็จ! หมดอายุในวันที่ ${expDd}-${expMm}-${expYyyy}`);
-                        }, 1500);
-                      }}
-                      disabled={isPaymentSimulating}
-                      className="w-full h-11 flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 text-xs font-bold rounded-xl cursor-pointer transition-all"
+                      disabled={!selectedSlipFile}
+                      onClick={() => handleVerifySlip(selectedSlipFile)}
+                      className={`w-full h-11 flex items-center justify-center gap-2 text-white text-xs font-black rounded-xl transition-all shadow-lg cursor-pointer ${
+                        selectedSlipFile 
+                          ? 'bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 shadow-amber-500/15'
+                          : 'bg-slate-900 border border-slate-800 text-slate-500 cursor-not-allowed shadow-none'
+                      }`}
                     >
-                      {isPaymentSimulating ? (
-                        <>
-                          <div className="w-3.5 h-3.5 border-2 border-slate-200 border-t-transparent rounded-full animate-spin"></div>
-                          <span>กำลังจำลองเปิดใช้งาน...</span>
-                        </>
-                      ) : (
-                        <span>⚡️ ข้ามการสแกนสลิป (อนุมัติ Premium ทันที)</span>
-                      )}
+                      📤 ส่งสลิปโอนเงินเพื่อตรวจสอบ
                     </button>
                   </>
                 )}
@@ -6062,7 +6039,11 @@ export default function App() {
                 <button
                   type="button"
                   disabled={isSlipChecking}
-                  onClick={() => setIsUpsellOpen(false)}
+                  onClick={() => {
+                    setIsUpsellOpen(false);
+                    setSelectedSlipFile(null);
+                    setSelectedSlipFilePreview(null);
+                  }}
                   className={`text-xs font-bold text-slate-500 hover:text-slate-350 py-1 transition-colors ${
                     isSlipChecking ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
                   }`}
