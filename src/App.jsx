@@ -20,7 +20,8 @@ import {
   updateUserRole,
   getUsersList,
   saveTransaction,
-  getTransactions
+  getTransactions,
+  deleteUser
 } from './googleSheets';
 
 // --- HELPER FUNCTIONS OUTSIDE COMPONENT ---
@@ -3252,6 +3253,150 @@ export default function App() {
                   </div>
                 );
               })()}
+            </div>
+
+            {/* User Management Table */}
+            <div className="glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
+              <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
+                👥 การจัดการบัญชีผู้ใช้งาน (User Management)
+              </h3>
+              <p className="text-[11px] text-slate-400 leading-normal">
+                แผงควบคุมสำหรับจัดการบทบาทสมาชิก (Admin, Premium, User) หรือลบผู้ใช้ที่ผิดกฎระเบียบออกจากระบบข้อมูล Google Sheets
+              </p>
+              
+              <div className="overflow-x-auto border border-slate-900 rounded-2xl bg-slate-955/20 max-h-60 scrollbar-thin">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-900 bg-slate-950/40 text-slate-400 font-bold sticky top-0 backdrop-blur">
+                      <th className="p-3 pl-4">อีเมลผู้ใช้งาน</th>
+                      <th className="p-3">บทบาทสิทธิ์ (Role)</th>
+                      <th className="p-3">วันสมัคร Premium</th>
+                      <th className="p-3">วันหมดอายุ Premium</th>
+                      <th className="p-3 text-right pr-4">การจัดการ</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-900/40">
+                    {Object.keys(userRoles)
+                      .filter(email => email !== 'Guest' && email !== 'Guest@guest.com')
+                      .map((email) => {
+                        const role = userRoles[email];
+                        const dates = userPremiumDates[email] || { signupDate: '', expiryDate: '' };
+                        const isMainAdmin = email.toLowerCase() === 'pattarasak.raksanarong@gmail.com' || email.toLowerCase() === 'pattarasak.raksanrong@gmail.com';
+                        
+                        return (
+                          <tr key={email} className="hover:bg-slate-900/20 transition-colors">
+                            <td className="p-3 pl-4 font-bold text-slate-200">{email}</td>
+                            <td className="p-3">
+                              {isMainAdmin ? (
+                                <span className="bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded text-[10px] font-bold">
+                                  ผู้ดูแลระบบหลัก (Admin)
+                                </span>
+                              ) : (
+                                <select
+                                  value={role}
+                                  onChange={async (e) => {
+                                    const newRole = e.target.value;
+                                    try {
+                                      await updateUserRole(email, newRole, dates.signupDate, dates.expiryDate);
+                                      setUserRoles(prev => ({ ...prev, [email]: newRole }));
+                                      setToastMessage(`เปลี่ยนบทบาท ${email} เป็น ${newRole} สำเร็จ!`);
+                                    } catch (err) {
+                                      alert(`❌ ไม่สามารถอัปเดตบทบาทได้: ${err.message}`);
+                                    }
+                                  }}
+                                  className="glass-input h-7 px-2 text-[11px] rounded-lg bg-black text-white cursor-pointer border border-slate-800"
+                                >
+                                  <option value="user" className="bg-black text-white">user (ทั่วไป)</option>
+                                  <option value="premium" className="bg-black text-white">premium (พรีเมียม)</option>
+                                  <option value="admin" className="bg-black text-white">admin (ผู้ดูแลระบบ)</option>
+                                </select>
+                              )}
+                            </td>
+                            <td className="p-3 text-slate-400 font-mono text-[11px]">
+                              {role === 'premium' ? (
+                                <input
+                                  type="date"
+                                  value={dates.signupDate ? dates.signupDate.split('T')[0] : ''}
+                                  onChange={async (e) => {
+                                    const newDate = e.target.value;
+                                    const signupDateIso = newDate ? new Date(newDate).toISOString() : '';
+                                    try {
+                                      await updateUserRole(email, role, signupDateIso, dates.expiryDate);
+                                      setUserPremiumDates(prev => ({
+                                        ...prev,
+                                        [email]: { ...dates, signupDate: signupDateIso }
+                                      }));
+                                      setToastMessage('อัปเดตวันสมัครพรีเมียมสำเร็จ!');
+                                    } catch (err) {
+                                      alert(`❌ ไม่สามารถอัปเดตวันที่ได้: ${err.message}`);
+                                    }
+                                  }}
+                                  className="glass-input px-2 py-0.5 text-[10px] rounded bg-slate-900 border border-slate-850 text-slate-200"
+                                />
+                              ) : (
+                                '-'
+                              )}
+                            </td>
+                            <td className="p-3 text-slate-400 font-mono text-[11px]">
+                              {role === 'premium' ? (
+                                <input
+                                  type="date"
+                                  value={dates.expiryDate ? dates.expiryDate.split('T')[0] : ''}
+                                  onChange={async (e) => {
+                                    const newDate = e.target.value;
+                                    const expiryDateIso = newDate ? new Date(newDate).toISOString() : '';
+                                    try {
+                                      await updateUserRole(email, role, dates.signupDate, expiryDateIso);
+                                      setUserPremiumDates(prev => ({
+                                        ...prev,
+                                        [email]: { ...dates, expiryDate: expiryDateIso }
+                                      }));
+                                      setToastMessage('อัปเดตวันหมดอายุพรีเมียมสำเร็จ!');
+                                    } catch (err) {
+                                      alert(`❌ ไม่สามารถอัปเดตวันที่ได้: ${err.message}`);
+                                    }
+                                  }}
+                                  className="glass-input px-2 py-0.5 text-[10px] rounded bg-slate-900 border border-slate-850 text-slate-200"
+                                />
+                              ) : (
+                                '-'
+                              )}
+                            </td>
+                            <td className="p-3 text-right pr-4">
+                              {!isMainAdmin && (
+                                <button
+                                  onClick={async () => {
+                                    if (window.confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบผู้ใช้งาน "${email}" ออกจากระบบถาวร? การลบนี้รวมถึงข้อมูลคลังเกมทั้งหมดของสมาชิกท่านนี้ด้วย`)) {
+                                      try {
+                                        await deleteUser(email);
+                                        setUserRoles(prev => {
+                                          const next = { ...prev };
+                                          delete next[email];
+                                          return next;
+                                        });
+                                        setUserPremiumDates(prev => {
+                                          const next = { ...prev };
+                                          delete next[email];
+                                          return next;
+                                        });
+                                        setToastMessage(`ลบผู้ใช้งาน ${email} เรียบร้อยแล้ว!`);
+                                      } catch (err) {
+                                        alert(`❌ ไม่สามารถลบผู้ใช้งานได้: ${err.message}`);
+                                      }
+                                    }
+                                  }}
+                                  className="px-2 py-1 bg-red-650 hover:bg-red-550 text-white font-bold rounded text-[10px] cursor-pointer transition-colors"
+                                >
+                                  🗑️ ลบผู้ใช้
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             {/* Announcement Ticker and Admin actions */}

@@ -83,6 +83,10 @@ export async function getUsersList() {
   return res.data || [];
 }
 
+export async function deleteUser(email) {
+  return await apiCall('deleteUser', { email });
+}
+
 // User Library Management
 export async function getUserLibrary(email) {
   const res = await apiCall('getUserLibrary', { email });
