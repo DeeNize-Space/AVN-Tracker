@@ -5606,26 +5606,7 @@ export default function App() {
                             alert('❌ ' + msg);
                           });
                       } else {
-                        // Local Simulation
-                        const trimmedEmail = email.toLowerCase();
-                        const isAdminEmail = trimmedEmail === 'pattarasak.raksanarong@gmail.com' || trimmedEmail === 'pattarasak.raksanrong@gmail.com' || trimmedEmail === 'admin@gmail.com';
-                        if (isAdminEmail && loginPassword !== 'Ro28062543') {
-                          alert('❌ รหัสผ่านไม่ถูกต้องสำหรับบัญชีผู้ดูแลระบบ (โหมดจำลอง)');
-                          return;
-                        }
-                        setIsLoggingIn(true);
-                        setTimeout(() => {
-                          setUserRoles((prev) => {
-                            if (prev[trimmedEmail]) return prev;
-                            return { ...prev, [trimmedEmail]: isAdminEmail ? 'admin' : 'free' };
-                          });
-                          setCurrentUser(trimmedEmail);
-                          setToastMessage('เข้าสู่ระบบสำเร็จ (โหมดจำลอง)');
-                          setIsGoogleLoginOpen(false);
-                          setLoginPassword('');
-                          setLoginConfirmPassword('');
-                          setIsLoggingIn(false);
-                        }, 600);
+                        alert('❌ ไม่สามารถล็อกอินได้: ระบบฐานข้อมูลออนไลน์ทำงานผิดพลาดหรือยังไม่ได้ตั้งค่าตัวแปรใน Vercel');
                       }
                     } else if (loginMode === 'register') {
                       // Register flow
@@ -5665,22 +5646,7 @@ export default function App() {
                             alert('❌ ' + msg);
                           });
                       } else {
-                        // Local Simulation
-                        const trimmedEmail = email.toLowerCase();
-                        setIsLoggingIn(true);
-                        setTimeout(() => {
-                          setUserRoles((prev) => {
-                            if (prev[trimmedEmail]) return prev;
-                            const isAdminEmail = trimmedEmail === 'pattarasak.raksanarong@gmail.com' || trimmedEmail === 'pattarasak.raksanrong@gmail.com' || trimmedEmail === 'admin@gmail.com';
-                            return { ...prev, [trimmedEmail]: isAdminEmail ? 'admin' : 'free' };
-                          });
-                          setCurrentUser(trimmedEmail);
-                          setToastMessage('สมัครสมาชิกสำเร็จ (โหมดจำลอง)');
-                          setIsGoogleLoginOpen(false);
-                          setLoginPassword('');
-                          setLoginConfirmPassword('');
-                          setIsLoggingIn(false);
-                        }, 600);
+                        alert('❌ ไม่สามารถสมัครสมาชิกได้: ระบบฐานข้อมูลออนไลน์ทำงานผิดพลาดหรือยังไม่ได้ตั้งค่าตัวแปรใน Vercel');
                       }
                     } else if (loginMode === 'forgot') {
                       // Forgot flow
@@ -5698,9 +5664,7 @@ export default function App() {
                             alert('❌ ไม่สามารถส่งอีเมลรีเซ็ตรหัสผ่านได้: ' + err.message);
                           });
                       } else {
-                        // Local Simulation
-                        alert('📧 [โหมดจำลอง] ส่งลิงก์รีเซ็ตรหัสผ่านไปยัง ' + email + ' สำเร็จ!');
-                        setLoginMode('login');
+                        alert('❌ ไม่สามารถรีเซ็ตรหัสผ่านได้: ระบบฐานข้อมูลออนไลน์ทำงานผิดพลาดหรือยังไม่ได้ตั้งค่าตัวแปรใน Vercel');
                       }
                     }
                   }}
