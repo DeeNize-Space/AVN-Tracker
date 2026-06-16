@@ -319,7 +319,7 @@ export default function App() {
   });
 
   const [googleClientId, setGoogleClientId] = useState(() => {
-    return localStorage.getItem('avn_google_client_id') || import.meta.env.VITE_GOOGLE_CLIENT_ID || '1023772242138-placeholder.apps.googleusercontent.com';
+    return localStorage.getItem('avn_google_client_id') || import.meta.env.VITE_GOOGLE_CLIENT_ID || '1018830906245-huo96tdbrce4h4dilcg0qo43sbsjdtl.apps.googleusercontent.com';
   });
 
   const [tempGoogleClientId, setTempGoogleClientId] = useState(googleClientId);
