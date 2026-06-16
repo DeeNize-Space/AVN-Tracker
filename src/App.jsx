@@ -417,6 +417,13 @@ export default function App() {
   const [selectedGameDetail, setSelectedGameDetail] = useState(null);
   const [activeScreenshotPreview, setActiveScreenshotPreview] = useState(null);
   const [activeScreenshotIndex, setActiveScreenshotIndex] = useState(0);
+  const [showAllScreenshots, setShowAllScreenshots] = useState(false);
+
+  useEffect(() => {
+    setActiveScreenshotIndex(0);
+    setShowAllScreenshots(false);
+  }, [selectedGameDetail]);
+
   const [isSuggestingNew, setIsSuggestingNew] = useState(false);
   const [isReportingGame, setIsReportingGame] = useState(null);
   const [editingLocalItem, setEditingLocalItem] = useState(null);
@@ -4499,20 +4506,50 @@ export default function App() {
                         {/* Thumbnail Navigation */}
                         {screenshotsList.length > 1 && (
                           <div className="flex gap-2 overflow-x-auto py-1 scrollbar-thin">
-                            {screenshotsList.map((src, idx) => (
-                              <button
-                                key={idx}
-                                type="button"
-                                onClick={() => setActiveScreenshotIndex(idx)}
-                                className={`w-16 sm:w-20 aspect-video rounded-lg overflow-hidden border shrink-0 transition-all ${
-                                  validIndex === idx
-                                    ? 'border-blue-500 scale-95 ring-1 ring-blue-500'
-                                    : 'border-slate-850 opacity-60 hover:opacity-100 hover:scale-95'
-                                }`}
-                              >
-                                <img src={src} className="w-full h-full object-cover" alt="" />
-                              </button>
-                            ))}
+                            {(() => {
+                              const maxThumbnails = 5;
+                              const hasMore = screenshotsList.length > maxThumbnails;
+                              const visibleList = (!showAllScreenshots && hasMore) 
+                                ? screenshotsList.slice(0, maxThumbnails) 
+                                : screenshotsList;
+
+                              return visibleList.map((src, idx) => {
+                                const isLastPlaceholder = !showAllScreenshots && hasMore && idx === maxThumbnails - 1;
+                                if (isLastPlaceholder) {
+                                  return (
+                                    <button
+                                      key={idx}
+                                      type="button"
+                                      onClick={() => {
+                                        setShowAllScreenshots(true);
+                                        setActiveScreenshotIndex(idx);
+                                      }}
+                                      className="w-16 sm:w-20 aspect-video rounded-lg overflow-hidden border shrink-0 transition-all border-slate-850 relative group bg-slate-950/60"
+                                    >
+                                      <img src={src} className="w-full h-full object-cover opacity-30" alt="" />
+                                      <div className="absolute inset-0 bg-slate-950/65 flex items-center justify-center text-xs font-bold text-white group-hover:bg-slate-950/50 transition-colors">
+                                        +{screenshotsList.length - (maxThumbnails - 1)}
+                                      </div>
+                                    </button>
+                                  );
+                                }
+
+                                return (
+                                  <button
+                                    key={idx}
+                                    type="button"
+                                    onClick={() => setActiveScreenshotIndex(idx)}
+                                    className={`w-16 sm:w-20 aspect-video rounded-lg overflow-hidden border shrink-0 transition-all ${
+                                      validIndex === idx
+                                        ? 'border-blue-500 scale-95 ring-1 ring-blue-500'
+                                        : 'border-slate-850 opacity-60 hover:opacity-100 hover:scale-95'
+                                    }`}
+                                  >
+                                    <img src={src} className="w-full h-full object-cover" alt="" />
+                                  </button>
+                                );
+                              });
+                            })()}
                           </div>
                         )}
                       </div>
