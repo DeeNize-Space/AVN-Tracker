@@ -1278,10 +1278,10 @@ export default function App() {
 
 
   const handleAdminApproveTx = async (tx) => {
-    const username = tx.username;
+    const email = tx.email;
     setUserRoles(prev => ({
       ...prev,
-      [username]: 'premium'
+      [email]: 'premium'
     }));
 
     const today = new Date();
@@ -1297,18 +1297,18 @@ export default function App() {
 
     setUserPremiumDates(prev => ({
       ...prev,
-      [username]: { signupDate: signupStr, expiryDate: expiryStr }
+      [email]: { signupDate: signupStr, expiryDate: expiryStr }
     }));
 
     setRevenueTransactions(prev => 
-      prev.map(t => t.id === tx.id ? { ...t, status: 'success' } : t)
+      prev.map(t => t.id === tx.id ? { ...t, status: 'success', slipUrl: '[อนุมัติแล้ว - ลบสลิปแล้ว]' } : t)
     );
 
     setToastMessage(`✔️ อนุมัติสิทธิ์ Premium ให้แก่ผู้ใช้ ${tx.email} สำเร็จ!`);
 
     if (isFirebaseEnabled) {
       try {
-        await updateUserRole(username, 'premium', signupStr, expiryStr);
+        await updateUserRole(email, 'premium', signupStr, expiryStr);
         await saveTransaction({ ...tx, status: 'success' });
       } catch (err) {
         console.error('Error approving transaction in Google Sheets:', err);
@@ -1318,7 +1318,7 @@ export default function App() {
 
   const handleAdminRejectTx = async (tx) => {
     setRevenueTransactions(prev => 
-      prev.map(t => t.id === tx.id ? { ...t, status: 'failed', reason: 'แอดมินปฏิเสธการตรวจสอบ' } : t)
+      prev.map(t => t.id === tx.id ? { ...t, status: 'failed', reason: 'แอดมินปฏิเสธการตรวจสอบ', slipUrl: '[ปฏิเสธแล้ว - ลบสลิปแล้ว]' } : t)
     );
     setToastMessage(`❌ ปฏิเสธรายการชำระเงินของ ${tx.email} แล้ว`);
 
@@ -1538,7 +1538,7 @@ export default function App() {
     }
   };
 
-  // Simulated SlipOK Verification (Method 1: Discards image immediately, stores only text transaction details)
+  // Real Google Drive Payment Slip Upload
   const handleVerifySlip = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -1547,94 +1547,80 @@ export default function App() {
       const previewUrl = URL.createObjectURL(file);
       setUploadedSlipPreview(previewUrl);
       setIsSlipChecking(true);
-      setSlipCheckLogs([]);
+      setSlipCheckLogs([
+        '🤖 [ระบบ] กำลังอ่านไฟล์รูปภาพสลิป...',
+        '🤖 [ระบบ] กำลังแปลงข้อมูลเป็นรูปแบบ Base64...'
+      ]);
 
-      const logsList = simulateSlipError ? [
-        '🤖 [SlipOK] กำลังสแกนหา Mini-QR ในรูปภาพสลิป...',
-        '🤖 [SlipOK] ตรวจพบรหัสอ้างอิงธุรกรรมธนาคาร: ref-20260612' + Math.floor(100000 + Math.random() * 900000),
-        '⚠️ [SlipOK] ตรวจพบปัญหา: ยอดเงินหรือสลิปซ้ำซ้อนกับการโอนครั้งก่อน',
-        '🤖 [SlipOK] ส่งข้อมูลไปยังคิว "รอการตรวจสอบ" เพื่อให้ผู้ดูแลระบบยืนยัน...'
-      ] : [
-        '🤖 [SlipOK] กำลังสแกนหา Mini-QR ในรูปภาพสลิป...',
-        '🤖 [SlipOK] ดึงข้อมูลรหัสอ้างอิงธุรกรรมธนาคารสำเร็จ...',
-        '🤖 [SlipOK] กำลังยื่นคำขอตรวจสอบข้อมูลกับ API ธนาคารพาณิชย์...',
-        '🤖 [SlipOK] ยืนยันสลิปถูกต้อง! ยอดโอนตรงกับราคาแพ็กเกจ (ชำระเงินสำเร็จ)'
-      ];
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64Data = reader.result.split(',')[1];
+        setSlipCheckLogs(prev => [
+          ...prev, 
+          '🤖 [ระบบ] กำลังตรวจสอบขนาดไฟล์และความละเอียด...',
+          '🤖 [ระบบ] กำลังอัปโหลดสลิปใบจริงเข้าสู่ Google Drive ของระบบ...'
+        ]);
 
-      logsList.forEach((log, index) => {
-        setTimeout(() => {
-          setSlipCheckLogs(prev => [...prev, log]);
-        }, (index + 1) * 500);
-      });
-
-      setTimeout(() => {
-        if (simulateSlipError) {
+        try {
           const amountVal = selectedPackage === 'monthly' ? 49 : 499;
           const txEmail = getUserGmail(currentUser);
+          const transRef = 'ref-' + Date.now() + Math.floor(1000 + Math.random() * 9000);
+          const txId = 'tx-' + Date.now();
+
           const newTx = {
-            id: 'tx-' + Date.now(),
-            transRef: 'ref-20260612' + Math.floor(100000 + Math.random() * 900000),
-            username: currentUser,
+            id: txId,
+            transRef: transRef,
+            username: currentUsername,
             email: txEmail,
             package: selectedPackage,
             amount: amountVal,
             timestamp: getIsoTimestamp(),
-            status: 'pending'
+            status: 'pending',
+            slipBase64: base64Data,
+            slipFileName: file.name
           };
-          setRevenueTransactions(prev => [newTx, ...prev]);
 
-          setIsSlipChecking(false);
-          setUploadedSlipPreview(null);
-          setIsUpsellOpen(false);
-          setToastMessage('⚠️ สลิปส่งเข้าระบบแอดมินเพื่อรอการตรวจสอบแบบแมนนวลแล้ว');
-        } else {
-          setUserRoles(prev => ({
-            ...prev,
-            [currentUser]: 'premium'
-          }));
+          const res = await saveTransaction(newTx);
           
-          const today = new Date();
-          const yyyy = today.getFullYear();
-          const mm = String(today.getMonth() + 1).padStart(2, '0');
-          const dd = String(today.getDate()).padStart(2, '0');
-          const signupStr = `${yyyy}-${mm}-${dd}`;
+          setSlipCheckLogs(prev => [...prev, '🟢 [ระบบ] อัปโหลดรูปภาพเสร็จสิ้นและบันทึกรายการสำเร็จ!']);
           
-          const expiryDate = new Date(today);
-          expiryDate.setDate(expiryDate.getDate() + (selectedPackage === 'monthly' ? 30 : 365));
-          const expYyyy = expiryDate.getFullYear();
-          const expMm = String(expiryDate.getMonth() + 1).padStart(2, '0');
-          const expDd = String(expiryDate.getDate()).padStart(2, '0');
-          const expiryStr = `${expYyyy}-${expMm}-${expDd}`;
-
-          setUserPremiumDates(prev => ({
-            ...prev,
-            [currentUser]: { signupDate: signupStr, expiryDate: expiryStr }
-          }));
-
-          const amountVal = selectedPackage === 'monthly' ? 49 : 499;
-          const txEmail = getUserGmail(currentUser);
-          const newTx = {
-            id: 'tx-' + Date.now(),
-            transRef: 'ref-20260612' + Math.floor(100000 + Math.random() * 900000),
-            username: currentUser,
+          const localTx = {
+            id: txId,
+            transRef: transRef,
+            username: currentUsername,
             email: txEmail,
             package: selectedPackage,
             amount: amountVal,
             timestamp: getIsoTimestamp(),
-            status: 'success'
+            status: 'pending',
+            slipUrl: res.slipUrl || previewUrl
           };
-          setRevenueTransactions(prev => [newTx, ...prev]);
+          
+          setRevenueTransactions(prev => [localTx, ...prev]);
 
-          setIsSlipChecking(false);
-          setUploadedSlipPreview(null);
-          setIsUpsellOpen(false);
-          setToastMessage(`ยินดีต้อนรับเข้าสู่ระดับ Premium สำเร็จ! หมดอายุในวันที่ ${expDd}-${expMm}-${expYyyy}`);
+          setTimeout(() => {
+            setIsSlipChecking(false);
+            setUploadedSlipPreview(null);
+            setIsUpsellOpen(false);
+            setToastMessage('⚠️ อัปโหลดเสร็จสิ้น ส่งเรื่องให้ผู้ดูแลระบบตรวจสอบและอนุมัติแล้ว');
+          }, 1500);
+
+        } catch (uploadErr) {
+          console.error(uploadErr);
+          setSlipCheckLogs(prev => [...prev, '❌ เกิดข้อผิดพลาด: ' + uploadErr.message]);
+          setTimeout(() => {
+            setIsSlipChecking(false);
+            setUploadedSlipPreview(null);
+            alert('ไม่สามารถอัปโหลดรูปสลิปได้: ' + uploadErr.message);
+          }, 2500);
         }
-      }, 2500);
+      };
+      
+      reader.readAsDataURL(file);
 
     } catch (err) {
       console.error(err);
-      alert('เกิดข้อผิดพลาดในการประมวลผลไฟล์สลิป');
+      alert('เกิดข้อผิดพลาดในการประมวลผลไฟล์รูปภาพ');
       setIsSlipChecking(false);
       setUploadedSlipPreview(null);
     }
@@ -5938,24 +5924,18 @@ export default function App() {
                 </div>
               </div>
 
-              {/* PromptPay SVG QR Generator */}
-              <div className="my-1">
-                <svg width="150" height="195" viewBox="0 0 220 280" className="mx-auto rounded-2xl bg-white p-3.5 shadow-lg border border-slate-200">
-                  <rect x="0" y="0" width="220" height="40" rx="6" fill="#003764" />
-                  <text x="110" y="25" textAnchor="middle" fill="white" fontSize="13" fontWeight="900" fontFamily="sans-serif">
-                    prompt pay
-                  </text>
-                  <rect x="15" y="55" width="190" height="190" rx="8" fill="#f8fafc" stroke="#e2e8f0" strokeWidth="1" />
-                  <path d="M25 65h40v40H25zm10 10h20v20H35zm90-10h40v40h-40zm10 10h20v20h-20zM25 155h40v40H25zm10 10h20v20H35z" fill="#0f172a" />
-                  <circle cx="110" cy="150" r="16" fill="#003764" />
-                  <text x="110" y="154" textAnchor="middle" fill="white" fontSize="10" fontWeight="900" fontFamily="sans-serif">
-                    TH
-                  </text>
-                  <path d="M80 65h10v10H80zm20 10h10v10h-10zm-10 20h10v10h-10zm30-20h10v10h-10zm-10 40h20v10h-20zm30 10h10v20h-10zm-60 20h20v10H80zm50 20h10v10h-10zm10 10h25v10H140zm-40 25h15v10h-15zm-20-10h10v25H80zm85-40h10v20h-10zm-25 10h10v10h-10zm25 30h10v10h-10zm-45-5h10v15h-10zm35 25h10v10h-10z" fill="#0f172a" />
-                  <text x="110" y="265" textAnchor="middle" fill="#64748b" fontSize="9" fontWeight="bold" fontFamily="sans-serif">
-                    ยอดโอน {selectedPackage === 'monthly' ? '49' : '499'} บาท
-                  </text>
-                </svg>
+              {/* Real PromptPay QR Code Image */}
+              <div className="my-2 flex flex-col items-center">
+                <div className="w-[185px] h-[245px] border border-slate-700 rounded-2xl overflow-hidden shadow-2xl p-2 bg-slate-900 flex flex-col items-center justify-center">
+                  <img 
+                    src="/payment_qr.jpg" 
+                    alt="PromptPay QR Code" 
+                    className="w-full h-full object-cover rounded-xl"
+                  />
+                </div>
+                <span className="text-[10px] font-black text-amber-400 mt-2 bg-slate-950/80 px-3 py-1 rounded-full border border-slate-800">
+                  Scan to Pay • DeeNize Games • ยอดโอน {selectedPackage === 'monthly' ? '49' : '499'} บาท
+                </span>
               </div>
 
               {/* SlipOK Scan Console & Image Preview */}
@@ -6219,83 +6199,96 @@ export default function App() {
             <div className="p-5 flex flex-col gap-4 text-center max-h-[80vh] overflow-y-auto">
               {/* Slip Image/Mockup container */}
               <div className="flex justify-center bg-slate-950/40 p-3 rounded-2xl border border-slate-800">
-                {/* Render simulated Bank Slip (Method 1: Discard image immediately, reconstruct receipt mockup from logs) */}
-                <div className="w-full max-w-[260px] bg-white text-slate-800 rounded-2xl p-5 text-left font-sans shadow-md border border-slate-200 relative select-none">
-                  {/* Bank branding */}
-                  <div className="flex items-center justify-between border-b border-dashed border-slate-300 pb-3 mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center text-white font-extrabold text-[9px] font-sans">
-                        KB
-                      </div>
-                      <div>
-                        <span className="text-[10px] font-black block text-slate-900 leading-none font-sans">ธนาคารกสิกรไทย</span>
-                        <span className="text-[7px] text-slate-500 block font-sans">KASIKORNBANK</span>
-                      </div>
-                    </div>
-                    <span className="text-[8px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-black font-sans">โอนเงินสำเร็จ</span>
+                {selectedAdminTxSlip.slipUrl && (selectedAdminTxSlip.slipUrl.startsWith('http') || selectedAdminTxSlip.slipUrl.startsWith('data:')) ? (
+                  <div className="w-full max-w-[280px] rounded-2xl overflow-hidden border border-slate-700 shadow-md">
+                    <img 
+                      src={selectedAdminTxSlip.slipUrl} 
+                      alt="Payment Slip" 
+                      className="w-full h-auto object-contain max-h-[350px] bg-slate-900 mx-auto"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.style.display = 'none';
+                      }}
+                    />
                   </div>
-
-                  {/* Receipt fields */}
-                  <div className="flex flex-col gap-2 text-[9px] font-sans">
-                    <div>
-                      <span className="text-slate-400 block text-[7px] font-sans">รหัสอ้างอิง (Ref ID)</span>
-                      <span className="font-mono font-bold text-slate-800 block text-[9.5px] break-all">{selectedAdminTxSlip.transRef || 'N/A'}</span>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 font-sans">
-                      <div>
-                        <span className="text-slate-400 block text-[7px] font-sans">ผู้โอน</span>
-                        <span className="font-bold text-slate-800 block truncate font-sans">{selectedAdminTxSlip.username}</span>
+                ) : (
+                  <div className="w-full max-w-[260px] bg-white text-slate-800 rounded-2xl p-5 text-left font-sans shadow-md border border-slate-200 relative select-none">
+                    {/* Bank branding */}
+                    <div className="flex items-center justify-between border-b border-dashed border-slate-300 pb-3 mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center text-white font-extrabold text-[9px] font-sans">
+                          KB
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-black block text-slate-900 leading-none font-sans">ธนาคารกสิกรไทย</span>
+                          <span className="text-[7px] text-slate-500 block font-sans">KASIKORNBANK</span>
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-slate-400 block text-[7px] font-sans">ผู้รับโอน</span>
-                        <span className="font-bold text-slate-800 block font-sans">AVN Star Hub</span>
-                      </div>
+                      <span className="text-[8px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-black font-sans">โอนเงินสำเร็จ</span>
                     </div>
 
-                    <div className="border-t border-slate-100 pt-2 font-sans">
-                      <span className="text-slate-400 block text-[7px] font-sans">บัญชีผู้สมัคร</span>
-                      <span className="font-semibold text-slate-700 block truncate font-sans">{selectedAdminTxSlip.email}</span>
+                    {/* Receipt fields */}
+                    <div className="flex flex-col gap-2 text-[9px] font-sans">
+                      <div>
+                        <span className="text-slate-400 block text-[7px] font-sans">รหัสอ้างอิง (Ref ID)</span>
+                        <span className="font-mono font-bold text-slate-800 block text-[9.5px] break-all">{selectedAdminTxSlip.transRef || 'N/A'}</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 font-sans">
+                        <div>
+                          <span className="text-slate-400 block text-[7px] font-sans">ผู้โอน</span>
+                          <span className="font-bold text-slate-800 block truncate font-sans">{selectedAdminTxSlip.username}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[7px] font-sans">ผู้รับโอน</span>
+                          <span className="font-bold text-slate-800 block font-sans">AVN Star Hub</span>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-100 pt-2 font-sans">
+                        <span className="text-slate-400 block text-[7px] font-sans">บัญชีผู้สมัคร</span>
+                        <span className="font-semibold text-slate-700 block truncate font-sans">{selectedAdminTxSlip.email}</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 font-sans">
+                        <div>
+                          <span className="text-slate-400 block text-[7px] font-sans">แพ็กเกจ</span>
+                          <span className="font-bold text-slate-800 block font-sans">{selectedAdminTxSlip.package === 'yearly' ? 'รายปี (Premium)' : 'รายเดือน (Premium)'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[7px] font-sans">จำนวนเงิน</span>
+                          <span className="font-black text-slate-900 block text-[10.5px] font-sans">{selectedAdminTxSlip.amount} บาท</span>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-100 pt-2 font-sans">
+                        <span className="text-slate-400 block text-[7px] font-sans">วันเวลาทำรายการ</span>
+                        <span className="text-slate-650 block font-sans">{formatThaiDate(selectedAdminTxSlip.timestamp)}</span>
+                      </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 font-sans">
-                      <div>
-                        <span className="text-slate-400 block text-[7px] font-sans">แพ็กเกจ</span>
-                        <span className="font-bold text-slate-800 block font-sans">{selectedAdminTxSlip.package === 'yearly' ? 'รายปี (Premium)' : 'รายเดือน (Premium)'}</span>
+                    {/* QR Code Simulation */}
+                    <div className="flex justify-center mt-3 pt-2.5 border-t border-slate-100">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 border border-slate-200 relative flex flex-wrap p-0.5 bg-white shrink-0">
+                          <div className="w-2.5 h-2.5 bg-slate-900"></div>
+                          <div className="w-2.5 h-2.5 bg-white flex-1"></div>
+                          <div className="w-2.5 h-2.5 bg-slate-900"></div>
+                          <div className="w-2.5 h-2.5 bg-white"></div>
+                          <div className="w-2.5 h-2.5 bg-slate-900"></div>
+                          <div className="w-2.5 h-2.5 bg-white"></div>
+                          <div className="w-2.5 h-2.5 bg-slate-900"></div>
+                          <div className="w-2.5 h-2.5 bg-white"></div>
+                          <div className="w-2.5 h-2.5 bg-slate-900"></div>
+                        </div>
+                        <div className="text-[7.5px] leading-tight text-slate-400 max-w-[150px] font-sans">
+                          <span className="font-bold text-slate-600 block font-sans">สลิปตรวจสอบแล้ว (Method 1)</span>
+                          ข้อมูลสลิปสแกนและบันทึกข้อความสำเร็จ (ภาพสลิปถูกลบทิ้งแล้ว)
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-slate-400 block text-[7px] font-sans">จำนวนเงิน</span>
-                        <span className="font-black text-slate-900 block text-[10.5px] font-sans">{selectedAdminTxSlip.amount} บาท</span>
-                      </div>
-                    </div>
-
-                    <div className="border-t border-slate-100 pt-2 font-sans">
-                      <span className="text-slate-400 block text-[7px] font-sans">วันเวลาทำรายการ</span>
-                      <span className="text-slate-650 block font-sans">{formatThaiDate(selectedAdminTxSlip.timestamp)}</span>
                     </div>
                   </div>
-
-                  {/* QR Code Simulation */}
-                  <div className="flex justify-center mt-3 pt-2.5 border-t border-slate-100">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 border border-slate-200 relative flex flex-wrap p-0.5 bg-white shrink-0">
-                        <div className="w-2.5 h-2.5 bg-slate-900"></div>
-                        <div className="w-2.5 h-2.5 bg-white flex-1"></div>
-                        <div className="w-2.5 h-2.5 bg-slate-900"></div>
-                        <div className="w-2.5 h-2.5 bg-white"></div>
-                        <div className="w-2.5 h-2.5 bg-slate-900"></div>
-                        <div className="w-2.5 h-2.5 bg-white"></div>
-                        <div className="w-2.5 h-2.5 bg-slate-900"></div>
-                        <div className="w-2.5 h-2.5 bg-white"></div>
-                        <div className="w-2.5 h-2.5 bg-slate-900"></div>
-                      </div>
-                      <div className="text-[7.5px] leading-tight text-slate-400 max-w-[150px] font-sans">
-                        <span className="font-bold text-slate-600 block font-sans">สลิปตรวจสอบแล้ว (Method 1)</span>
-                        ข้อมูลสลิปสแกนและบันทึกข้อความสำเร็จ (ภาพสลิปถูกลบทิ้งแล้ว)
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                )}
               </div>
 
               {/* Status Warning Details */}
