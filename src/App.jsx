@@ -587,7 +587,7 @@ export default function App() {
   const [tempShowTicker, setTempShowTicker] = useState(showTicker);
 
   // --- USER ROLE DERIVATIONS ---
-  const subscriptionRole = userRoles[currentUser] || 'free';
+  const subscriptionRole = (userRoles[currentUser] === 'admin' || userRoles[currentUser] === 'premium') ? userRoles[currentUser] : 'free';
   const isAdmin = subscriptionRole === 'admin';
   const isGuest = currentUser === 'Guest';
 
