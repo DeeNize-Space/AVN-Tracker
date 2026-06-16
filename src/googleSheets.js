@@ -64,14 +64,24 @@ async function apiCall(action, data = {}, method = 'POST') {
 }
 
 // User Authentication
-export async function registerUser(email, password) {
-  const res = await apiCall('register', { email, password });
-  return res.data; // { email, role, signupDate, expiryDate }
+export async function registerUser(username, email, password) {
+  const res = await apiCall('register', { username, email, password });
+  return res.data; // { username, email, role }
 }
 
-export async function loginUser(email, password) {
-  const res = await apiCall('login', { email, password });
-  return res.data; // { email, role, signupDate, expiryDate }
+export async function loginUser(username, password) {
+  const res = await apiCall('login', { username, password });
+  return res.data; // { username, email, role, signupDate, expiryDate }
+}
+
+export async function requestPasswordReset(email, resetUrlBase) {
+  const res = await apiCall('requestPasswordReset', { email, resetUrlBase });
+  return res; // { status, message }
+}
+
+export async function resetPassword(token, newPassword) {
+  const res = await apiCall('resetPassword', { token, newPassword });
+  return res; // { status, message }
 }
 
 export async function updateUserRole(email, role, signupDate, expiryDate) {

@@ -5,6 +5,9 @@ import {
   setApiUrl,
   isConfigured,
   registerUser,
+  loginUser,
+  requestPasswordReset,
+  resetPassword,
   getUserLibrary,
   updateLibraryItem,
   deleteLibraryItem,
@@ -152,21 +155,7 @@ function readFileAsBase64(file) {
   });
 }
 
-function decodeJwt(token) {
-  try {
-    const base64Url = token.split('.')[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(
-      atob(base64)
-        .split('')
-        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-        .join('')
-    );
-    return JSON.parse(jsonPayload);
-  } catch {
-    return null;
-  }
-}
+
 
 const OFFICIAL_SCREENSHOT_PLACEHOLDERS = [
   'https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=800&auto=format&fit=crop',
@@ -225,25 +214,28 @@ export default function App() {
         webTagline,
         webLogo,
         webLogoType,
-        googleClientId: tempGoogleClientId,
         promptPayId,
         slipOkApiKey,
         slipOkBranchId
       });
-      setGoogleClientId(tempGoogleClientId);
       setToastMessage('🟢 บันทึกการตั้งค่าระบบสำเร็จ!');
     } catch (err) {
       alert('❌ ไม่สามารถบันทึกการตั้งค่าระบบ: ' + err.message);
     }
   };
 
-  const [googleUserProfile, setGoogleUserProfile] = useState(() => {
-    const saved = localStorage.getItem('avn_google_user_profile_v9');
-    return saved ? JSON.parse(saved) : null;
-  });
-
-  // --- GOOGLE SIGN-IN SIMULATION STATE ---
-  const [isGoogleLoginOpen, setIsGoogleLoginOpen] = useState(false);
+  // --- AUTHENTICATION STATE ---
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authMode, setAuthMode] = useState('login'); // 'login', 'register', 'forgot_password', 'reset_password'
+  
+  // Auth Form Fields
+  const [authUsername, setAuthUsername] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authEmail, setAuthEmail] = useState('');
+  
+  // Reset Password Fields
+  const [resetToken, setResetToken] = useState('');
+  
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
 
@@ -318,15 +310,7 @@ export default function App() {
     return localStorage.getItem('avn_web_tagline_v9') || '★ พอร์ทัลแนะนำแนวและบันทึกเกมยอดนิยม';
   });
 
-  const [googleClientId, setGoogleClientId] = useState(() => {
-    const saved = localStorage.getItem('avn_google_client_id');
-    if (saved && saved.endsWith('.apps.googleusercontent.com') && !saved.includes('placeholder')) {
-      return saved;
-    }
-    return import.meta.env.VITE_GOOGLE_CLIENT_ID || '1018830906245-huo96tdbrce4h4dilcg0qo43sbsjdtl.apps.googleusercontent.com';
-  });
 
-  const [tempGoogleClientId, setTempGoogleClientId] = useState(googleClientId);
 
   // --- TAG MANAGER STATES ---
   const [globalTags, setGlobalTags] = useState(() => {
@@ -442,40 +426,94 @@ export default function App() {
     setCustomAlert({ message: msg, title: '🔔 แจ้งเตือนระบบ' });
   };
 
-  function handleGoogleLoginCallback(response) {
+  const handleLogin = async (e) => {
+    if (e) e.preventDefault();
+    if (!authUsername || !authPassword) {
+      alert('กรุณากรอกข้อมูลให้ครบถ้วน');
+      return;
+    }
     setIsLoggingIn(true);
-    setTimeout(() => {
-      const decoded = decodeJwt(response.credential);
-      if (decoded) {
-        const { email, name, picture } = decoded;
-        const profile = {
-          name: name,
-          email: email,
-          role: email,
-          avatar: picture
-        };
-        setGoogleUserProfile(profile);
-        
-        setUserRoles((prev) => {
-          if (prev[email]) return prev;
-          const isAdminEmail = email === 'pattarasak.raksanrong@gmail.com' || email === 'pattarasak.raksanarong@gmail.com' || email === 'admin@gmail.com';
-          const newRole = isAdminEmail ? 'admin' : 'free';
-          if (isFirebaseEnabled) {
-            updateUserRole(email, newRole)
-              .catch(err => console.error('Error saving new user role:', err));
-          }
-          return { ...prev, [email]: newRole };
-        });
-        
-        setCurrentUser(email);
-        setToastMessage(`ลงชื่อเข้าใช้ในฐานะ ${decoded.name} สำเร็จ!`);
-      } else {
-        setToastMessage('ไม่สามารถเชื่อมโยงบัญชี Google ได้');
-      }
+    try {
+      const user = await loginUser(authUsername, authPassword);
+      setCurrentUser(user.username);
+      setUserRoles((prev) => ({ ...prev, [user.username]: user.role }));
+      setUserPremiumDates((prev) => ({
+        ...prev,
+        [user.username]: { signupDate: user.signupDate, expiryDate: user.expiryDate }
+      }));
+      setToastMessage(`ยินดีต้อนรับกลับมา, คุณ ${user.username}!`);
+      setIsAuthModalOpen(false);
+      setAuthUsername('');
+      setAuthPassword('');
+    } catch (err) {
+      alert('ข้อผิดพลาดในการเข้าสู่ระบบ: ' + err.message);
+    } finally {
       setIsLoggingIn(false);
-      setIsGoogleLoginOpen(false);
-    }, 800);
-  }
+    }
+  };
+
+  const handleRegister = async (e) => {
+    if (e) e.preventDefault();
+    if (!authUsername || !authEmail || !authPassword) {
+      alert('กรุณากรอกข้อมูลให้ครบถ้วน');
+      return;
+    }
+    setIsLoggingIn(true);
+    try {
+      const user = await registerUser(authUsername, authEmail, authPassword);
+      setCurrentUser(user.username);
+      setUserRoles((prev) => ({ ...prev, [user.username]: user.role }));
+      setToastMessage(`สมัครสมาชิกสำเร็จ! ยินดีต้อนรับคุณ ${user.username}`);
+      setIsAuthModalOpen(false);
+      setAuthUsername('');
+      setAuthEmail('');
+      setAuthPassword('');
+    } catch (err) {
+      alert('ข้อผิดพลาดในการสมัครสมาชิก: ' + err.message);
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleForgotPassword = async (e) => {
+    if (e) e.preventDefault();
+    if (!authEmail) {
+      alert('กรุณากรอกอีเมลของคุณ');
+      return;
+    }
+    setIsLoggingIn(true);
+    try {
+      const resetUrlBase = window.location.origin + window.location.pathname;
+      const res = await requestPasswordReset(authEmail, resetUrlBase);
+      alert(res.message || 'ส่งอีเมลรีเซ็ตรหัสผ่านแล้ว กรุณาตรวจสอบกล่องจดหมายของคุณ');
+      setIsAuthModalOpen(false);
+      setAuthEmail('');
+    } catch (err) {
+      alert('ข้อผิดพลาด: ' + err.message);
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleResetPassword = async (e) => {
+    if (e) e.preventDefault();
+    if (!authPassword) {
+      alert('กรุณากรอกรหัสผ่านใหม่');
+      return;
+    }
+    setIsLoggingIn(true);
+    try {
+      const res = await resetPassword(resetToken, authPassword);
+      alert(res.message || 'รีเซ็ตรหัสผ่านเรียบร้อยแล้ว คุณสามารถเข้าสู่ระบบด้วยรหัสผ่านใหม่ได้ทันที');
+      setIsAuthModalOpen(false);
+      setAuthPassword('');
+      setResetToken('');
+    } catch (err) {
+      alert('ข้อผิดพลาด: ' + err.message);
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
 
 
   // Admin Modals
@@ -572,6 +610,8 @@ export default function App() {
     }
   }, []);
 
+
+
   // Mount Effect: Load Google Sheets Data
   useEffect(() => {
     if (!isFirebaseEnabled) {
@@ -613,11 +653,7 @@ export default function App() {
           setSlipOkBranchId(config.slipOkBranchId);
           localStorage.setItem('avn_slipok_branch_id', config.slipOkBranchId);
         }
-        if (config.googleClientId && config.googleClientId.endsWith('.apps.googleusercontent.com') && !config.googleClientId.includes('placeholder')) {
-          setGoogleClientId(config.googleClientId);
-          setTempGoogleClientId(config.googleClientId);
-          localStorage.setItem('avn_google_client_id', config.googleClientId);
-        }
+
 
         // 3. Fetch user roles & premium dates
         const usersList = await getUsersList();
@@ -663,10 +699,7 @@ export default function App() {
     if (savedUser !== 'Guest') {
       Promise.resolve().then(() => {
         setCurrentUser(savedUser);
-        const savedProfile = localStorage.getItem('avn_google_user_profile_v9');
-        if (savedProfile) {
-          setGoogleUserProfile(JSON.parse(savedProfile));
-        }
+        // No longer using Google user profile, currentUser is sufficient
       });
     }
   }, [isDbLoaded]);
@@ -711,45 +744,20 @@ export default function App() {
   }, [currentUser]);
 
   useEffect(() => {
-    if (googleUserProfile) {
-      localStorage.setItem('avn_google_user_profile_v9', JSON.stringify(googleUserProfile));
-    } else {
-      localStorage.removeItem('avn_google_user_profile_v9');
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('resetToken');
+    if (token) {
+      setTimeout(() => {
+        setResetToken(token);
+        setAuthMode('reset_password');
+        setIsAuthModalOpen(true);
+      }, 0);
+      // Clean up token from URL without reloading
+      const url = new URL(window.location);
+      url.searchParams.delete('resetToken');
+      window.history.replaceState({}, document.title, url.pathname);
     }
-  }, [googleUserProfile]);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined' && typeof window.google !== 'undefined' && googleClientId) {
-      try {
-        window.google.accounts.id.initialize({
-          client_id: googleClientId,
-          callback: handleGoogleLoginCallback
-        });
-      } catch (err) {
-        console.error('Google accounts ID initialize error:', err);
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [googleClientId]);
-
-  useEffect(() => {
-    if (isGoogleLoginOpen && typeof window !== 'undefined' && typeof window.google !== 'undefined') {
-      try {
-        const container = document.getElementById('google-signin-btn-container');
-        if (container) {
-          window.google.accounts.id.renderButton(container, {
-            theme: 'outline',
-            size: 'large',
-            width: '320',
-            text: 'signin_with',
-            shape: 'rectangular'
-          });
-        }
-      } catch (err) {
-        console.error('Google button rendering error:', err);
-      }
-    }
-  }, [isGoogleLoginOpen, googleClientId]);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('avn_user_roles_v9', JSON.stringify(userRoles));
@@ -842,9 +850,7 @@ export default function App() {
     localStorage.setItem('avn_web_logo_type_v8', webLogoType);
   }, [webLogoType]);
 
-  useEffect(() => {
-    localStorage.setItem('avn_google_client_id', googleClientId);
-  }, [googleClientId]);
+
 
   // DOM Updates for Title & Meta Description
   useEffect(() => {
@@ -939,18 +945,14 @@ export default function App() {
 
   const googleUser = useMemo(() => {
     if (isGuest) return null;
-    if (googleUserProfile && (googleUserProfile.email === currentUser || googleUserProfile.role === currentUser)) {
-      return googleUserProfile;
-    }
-    const username = currentUser.split('@')[0];
-    const capitalized = username.charAt(0).toUpperCase() + username.slice(1);
+    const capitalized = currentUser.charAt(0).toUpperCase() + currentUser.slice(1);
     return {
       name: capitalized,
       email: currentUser,
       role: currentUser,
       avatar: ''
     };
-  }, [currentUser, isGuest, googleUserProfile]);
+  }, [currentUser, isGuest]);
 
 
 
@@ -2182,28 +2184,16 @@ export default function App() {
             <div className="flex items-center">
               {isGuest ? (
                 <button
-                  onClick={() => setIsGoogleLoginOpen(true)}
-                  className="flex items-center gap-3 bg-white hover:bg-slate-50 text-slate-900 text-xs font-black h-11 px-4 rounded-xl transition-all shadow-md focus:outline-none border border-slate-200 cursor-pointer animate-fade-in"
+                  onClick={() => {
+                    setAuthMode('login');
+                    setIsAuthModalOpen(true);
+                  }}
+                  className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold h-10 px-4 rounded-xl transition-all shadow-md focus:outline-none border border-white/10 cursor-pointer animate-fade-in"
                 >
-                  <svg className="w-4.5 h-4.5" viewBox="0 0 24 24">
-                    <path
-                      fill="#4285F4"
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                    />
-                    <path
-                      fill="#34A853"
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                    />
-                    <path
-                      fill="#FBBC05"
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                    />
-                    <path
-                      fill="#EA4335"
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                    />
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h3a3 3 0 013 3v1" />
                   </svg>
-                  <span>ลงชื่อเข้าใช้ด้วย Google</span>
+                  <span>เข้าสู่ระบบ / สมัครสมาชิก</span>
                 </button>
               ) : (
                 <div className="relative user-profile-container">
@@ -2336,7 +2326,6 @@ export default function App() {
                       <button
                         onClick={() => {
                           setIsUserDropdownOpen(false);
-                          setGoogleUserProfile(null);
                           setCurrentUser('Guest');
                           setToastMessage('ออกจากระบบเรียบร้อย');
                         }}
@@ -2454,8 +2443,9 @@ export default function App() {
               <button
                 onClick={() => {
                   if (isGuest) {
-                    setIsGoogleLoginOpen(true);
-                    setToastMessage('กรุณาลงชื่อเข้าใช้ด้วย Google เพื่อเสนอแนะเกมใหม่');
+                    setAuthMode('login');
+                    setIsAuthModalOpen(true);
+                    setToastMessage('กรุณาลงชื่อเข้าใช้เพื่อเสนอแนะเกมใหม่');
                   } else {
                     openSuggestNew();
                   }
@@ -2528,8 +2518,9 @@ export default function App() {
                             {isGuest ? (
                               <button
                                 onClick={() => {
-                                  setIsGoogleLoginOpen(true);
-                                  setToastMessage('กรุณาลงชื่อเข้าใช้ด้วย Google เพื่อเพิ่มเกมเข้าคลัง');
+                                  setAuthMode('login');
+                                  setIsAuthModalOpen(true);
+                                  setToastMessage('กรุณาลงชื่อเข้าใช้เพื่อเพิ่มเกมเข้าคลัง');
                                 }}
                                 className="w-full h-9 bg-blue-600/10 hover:bg-blue-600 hover:text-white border border-blue-500/25 rounded-xl flex items-center justify-center text-xs text-blue-400 font-bold transition-all cursor-pointer animate-fade-in"
                               >
@@ -2631,33 +2622,21 @@ export default function App() {
               <div>
                 <h2 className="text-xl font-black text-slate-100 mb-2">เข้าสู่คลังส่วนตัวของคุณ</h2>
                 <p className="text-sm text-slate-400 leading-relaxed">
-                  กรุณาลงชื่อเข้าใช้ด้วยบัญชี Google เพื่อเปิดใช้งานพื้นที่บันทึกคลังประวัติเกมส่วนตัว การให้คะแนน และการบันทึกโน้ตย่อของคุณ
+                  กรุณาลงชื่อเข้าใช้เพื่อเปิดใช้งานพื้นที่บันทึกคลังประวัติเกมส่วนตัว การให้คะแนน และการบันทึกโน้ตย่อของคุณ
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => setIsGoogleLoginOpen(true)}
-                className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-50 text-slate-900 text-sm font-extrabold h-12 px-6 rounded-2xl transition-all shadow-lg focus:outline-none border border-slate-200 cursor-pointer"
+                onClick={() => {
+                  setAuthMode('login');
+                  setIsAuthModalOpen(true);
+                }}
+                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-extrabold h-12 px-6 rounded-2xl transition-all shadow-lg focus:outline-none border border-white/10 cursor-pointer"
               >
-                <svg className="w-5 h-5" viewBox="0 0 24 24">
-                  <path
-                    fill="#4285F4"
-                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                  />
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h3a3 3 0 013 3v1" />
                 </svg>
-                <span>ลงชื่อเข้าใช้ด้วย Google เพื่อเปิดสิทธิ์</span>
+                <span>ลงชื่อเข้าใช้งานระบบ</span>
               </button>
             </div>
           ) : (
@@ -2778,8 +2757,9 @@ export default function App() {
                   <button
                     onClick={() => {
                       if (isGuest) {
-                        setIsGoogleLoginOpen(true);
-                        setToastMessage('กรุณาลงชื่อเข้าใช้ด้วย Google เพื่อส่งคำขอเพิ่มเกม');
+                        setAuthMode('login');
+                        setIsAuthModalOpen(true);
+                        setToastMessage('กรุณาลงชื่อเข้าใช้เพื่อส่งคำขอเพิ่มเกม');
                       } else {
                         openSuggestNew();
                       }
@@ -3663,19 +3643,7 @@ export default function App() {
                       </div>
                     </div>
                   )}
-                  <div>
-                    <label className="text-xs text-slate-400 font-bold block mb-1">Google OAuth Client ID</label>
-                    <input
-                      type="text"
-                      value={tempGoogleClientId}
-                      onChange={(e) => setTempGoogleClientId(e.target.value)}
-                      className="glass-input w-full h-10 px-3 text-xs rounded-xl text-slate-200"
-                      placeholder="พิมพ์ Google OAuth Client ID..."
-                    />
-                    <p className="text-[10px] text-slate-500 mt-1 leading-normal">
-                      * จำเป็นสำหรับระบบ Google Sign-In คุณสามารถสร้าง Client ID ได้จาก Google Cloud Console
-                    </p>
-                  </div>
+
                 </div>
                 <button
                   type="button"
@@ -5658,48 +5626,64 @@ export default function App() {
         </div>
       )}
 
-      {/* GOOGLE ONLY SIGN-IN MODAL */}
-      {isGoogleLoginOpen && (
+      {/* CUSTOM AUTHENTICATION MODAL */}
+      {isAuthModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
           <div 
-            className="w-full max-w-md bg-white text-slate-800 rounded-3xl overflow-hidden shadow-2xl border border-slate-200 animate-scale-in relative"
+            className="w-full max-w-md bg-slate-900 text-slate-100 rounded-3xl overflow-hidden shadow-2xl border border-slate-800 animate-scale-in relative p-6 flex flex-col gap-4"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Close button top right */}
             <button
               onClick={() => {
-                setIsGoogleLoginOpen(false);
+                setIsAuthModalOpen(false);
+                setAuthUsername('');
+                setAuthEmail('');
+                setAuthPassword('');
               }}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer text-xs"
+              className="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-850 hover:bg-slate-800 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer text-xs"
               title="ปิด"
             >
               ✕
             </button>
 
-            {/* Header: Title */}
-            <div className="p-6 pb-4 flex flex-col items-center border-b border-slate-100">
-              <span className="text-3xl mb-1">🔑</span>
-              <h2 className="text-xl font-extrabold text-slate-900">
-                ลงชื่อเข้าใช้งานระบบ
+            {/* Header */}
+            <div className="flex flex-col items-center text-center pb-2 border-b border-slate-850">
+              <span className="text-3xl mb-1">
+                {authMode === 'login' && '🔑'}
+                {authMode === 'register' && '📝'}
+                {authMode === 'forgot_password' && '📧'}
+                {authMode === 'reset_password' && '🔄'}
+              </span>
+              <h2 className="text-lg font-extrabold text-slate-100">
+                {authMode === 'login' && 'เข้าสู่ระบบ'}
+                {authMode === 'register' && 'สมัครสมาชิกใหม่'}
+                {authMode === 'forgot_password' && 'ลืมรหัสผ่าน'}
+                {authMode === 'reset_password' && 'ตั้งรหัสผ่านใหม่'}
               </h2>
-              <p className="text-xs text-slate-500 mt-1">เพื่อดำเนินการต่อยัง {webTitle}</p>
+              <p className="text-xs text-slate-400 mt-1">
+                {authMode === 'login' && `กรุณากรอกบัญชีของคุณสำหรับ ${webTitle}`}
+                {authMode === 'register' && 'สร้างบัญชีใหม่เพื่อเปิดใช้งานคลังส่วนตัว'}
+                {authMode === 'forgot_password' && 'กรอกอีเมลที่สมัครเพื่อรับลิงก์รีเซ็ตรหัสผ่าน'}
+                {authMode === 'reset_password' && 'กำหนดรหัสผ่านใหม่สำหรับเข้าใช้งาน'}
+              </p>
             </div>
 
-            {/* Database Config Banner if not configured */}
+            {/* DB Configuration for Offline Sandbox */}
             {!isFirebaseEnabled && (
-              <div className="mx-6 mt-4 p-4 rounded-2xl bg-amber-50 border border-amber-200 flex flex-col gap-2.5">
-                <h4 className="text-xs font-black text-amber-800 flex items-center gap-1.5 text-left">
+              <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex flex-col gap-2">
+                <h4 className="text-xs font-black text-amber-400 flex items-center gap-1.5 text-left">
                   ⚠️ ระบบฐานข้อมูลจำลอง (ยังไม่ได้เชื่อมต่อ Sheets)
                 </h4>
-                <p className="text-[10px] text-amber-700 leading-normal text-left">
-                  กรุณาระบุ URL ของ Google Apps Script Web App ด้านล่างนี้เพื่อเปิดระบบฐานข้อมูลออนไลน์และเริ่มลงชื่อเข้าใช้งานจริง:
+                <p className="text-[10px] text-slate-400 leading-normal text-left">
+                  กรุณาระบุ URL ของ Google Apps Script Web App ด้านล่างนี้เพื่อเปิดระบบฐานข้อมูลออนไลน์และสมัครสมาชิก/ล็อกอินจริง:
                 </p>
-                <div className="flex flex-col gap-2">
+                <div className="flex gap-2">
                   <input
                     type="text"
                     value={googleSheetsUrl}
                     onChange={(e) => setGoogleSheetsUrlState(e.target.value)}
-                    className="w-full h-9 px-3.5 text-[11px] rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 bg-white text-slate-800"
+                    className="flex-1 h-9 px-3 text-[11px] rounded-xl border border-slate-800 bg-slate-950 text-slate-200 focus:outline-none focus:border-blue-500"
                     placeholder="https://script.google.com/macros/s/.../exec"
                   />
                   <button
@@ -5711,57 +5695,151 @@ export default function App() {
                       }
                       updateGoogleSheetsUrl(googleSheetsUrl);
                       alert('🟢 บันทึก URL และกำลังเชื่อมต่อฐานข้อมูล...');
-                      window.location.reload();
                     }}
-                    className="w-full bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-black h-9 rounded-xl cursor-pointer transition-colors"
+                    className="bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-black px-3 rounded-xl cursor-pointer transition-colors"
                   >
-                    ⚡ เชื่อมต่อฐานข้อมูลออนไลน์
+                    เชื่อมต่อ
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Content area */}
-            <div className="p-6">
-              {isLoggingIn ? (
-                <div className="py-12 flex flex-col items-center justify-center gap-4">
-                  <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                  <span className="text-sm font-semibold text-slate-600">กำลังเข้าสู่ระบบผ่านบัญชี Google...</span>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-6 gap-4 text-center">
-                  <p className="text-xs text-slate-500 max-w-xs leading-normal">
-                    กรุณาลงชื่อเข้าใช้งานด้วยบัญชี Google เพื่อบันทึกข้อมูลคลังส่วนตัวและซิงก์ประวัติการเล่นกับระบบ Google Sheets
-                  </p>
-                  
-                  {isFirebaseEnabled ? (
-                    <div id="google-signin-btn-container" className="flex justify-center w-full min-h-[50px] mt-2"></div>
-                  ) : (
-                    <div className="text-xs text-red-500 font-bold mt-2">
-                      ⚠️ กรุณาเชื่อมต่อฐานข้อมูล Google Sheets ด้านบนก่อน
-                    </div>
-                  )}
+            {/* Form */}
+            {isLoggingIn ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-4">
+                <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                <span className="text-sm font-semibold text-slate-400">กำลังดำเนินการ...</span>
+              </div>
+            ) : (
+              <form 
+                onSubmit={
+                  authMode === 'login' ? handleLogin :
+                  authMode === 'register' ? handleRegister :
+                  authMode === 'forgot_password' ? handleForgotPassword :
+                  handleResetPassword
+                }
+                className="flex flex-col gap-4"
+              >
+                {/* Username Input (Only login/register) */}
+                {(authMode === 'login' || authMode === 'register') && (
+                  <div>
+                    <label className="text-xs text-slate-400 font-bold block mb-1 text-left">Username</label>
+                    <input
+                      type="text"
+                      required
+                      value={authUsername}
+                      onChange={(e) => setAuthUsername(e.target.value)}
+                      className="w-full h-10 px-3.5 text-xs rounded-xl border border-slate-800 bg-slate-955 text-slate-200 focus:outline-none focus:border-blue-500"
+                      placeholder="พิมพ์ Username..."
+                    />
+                  </div>
+                )}
 
-                  {/* Reset DB connection button (only shown if a URL is already configured) */}
-                  {isFirebaseEnabled && (
-                    <div className="border-t border-slate-100 w-full pt-4 flex justify-center mt-2">
+                {/* Email Input (Only register/forgot_password) */}
+                {(authMode === 'register' || authMode === 'forgot_password') && (
+                  <div>
+                    <label className="text-xs text-slate-400 font-bold block mb-1 text-left">Email</label>
+                    <input
+                      type="email"
+                      required
+                      value={authEmail}
+                      onChange={(e) => setAuthEmail(e.target.value)}
+                      className="w-full h-10 px-3.5 text-xs rounded-xl border border-slate-800 bg-slate-955 text-slate-200 focus:outline-none focus:border-blue-500"
+                      placeholder="พิมพ์อีเมล เช่น example@gmail.com"
+                    />
+                  </div>
+                )}
+
+                {/* Password Input (Only login/register/reset_password) */}
+                {(authMode === 'login' || authMode === 'register' || authMode === 'reset_password') && (
+                  <div>
+                    <label className="text-xs text-slate-400 font-bold block mb-1 text-left">
+                      {authMode === 'reset_password' ? 'รหัสผ่านใหม่' : 'Password'}
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      value={authPassword}
+                      onChange={(e) => setAuthPassword(e.target.value)}
+                      className="w-full h-10 px-3.5 text-xs rounded-xl border border-slate-800 bg-slate-955 text-slate-200 focus:outline-none focus:border-blue-500"
+                      placeholder="พิมพ์รหัสผ่าน..."
+                    />
+                  </div>
+                )}
+
+                {/* Submit button */}
+                <button
+                  type="submit"
+                  disabled={!isFirebaseEnabled}
+                  className={`w-full h-11 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold text-xs rounded-xl transition-all shadow-md focus:outline-none border border-white/10 ${!isFirebaseEnabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                >
+                  {authMode === 'login' && 'เข้าสู่ระบบ'}
+                  {authMode === 'register' && 'สมัครสมาชิก'}
+                  {authMode === 'forgot_password' && 'ขอลิงก์รีเซ็ตรหัสผ่าน'}
+                  {authMode === 'reset_password' && 'บันทึกรหัสผ่านใหม่'}
+                </button>
+
+                {/* Links */}
+                <div className="flex justify-between items-center text-xs mt-1">
+                  {authMode === 'login' && (
+                    <>
                       <button
                         type="button"
-                        onClick={() => {
-                          if (window.confirm('คุณต้องการยกเลิกการเชื่อมต่อฐานข้อมูลปัจจุบันเพื่อกรอก URL ใหม่ใช่หรือไม่?')) {
-                            localStorage.removeItem('AVN_GS_API_URL');
-                            window.location.reload();
-                          }
-                        }}
-                        className="text-[10px] text-slate-400 hover:text-red-500 font-bold transition-colors cursor-pointer"
+                        onClick={() => setAuthMode('forgot_password')}
+                        className="text-slate-400 hover:text-white transition-colors cursor-pointer"
                       >
-                        ⚙️ ล้างการตั้งค่าเชื่อมต่อฐานข้อมูล (Reset DB Link)
+                        ลืมรหัสผ่าน?
                       </button>
-                    </div>
+                      <button
+                        type="button"
+                        onClick={() => setAuthMode('register')}
+                        className="text-blue-400 hover:text-blue-300 font-extrabold transition-colors cursor-pointer"
+                      >
+                        สมัครสมาชิกใหม่
+                      </button>
+                    </>
+                  )}
+
+                  {authMode === 'register' && (
+                    <button
+                      type="button"
+                      onClick={() => setAuthMode('login')}
+                      className="text-slate-400 hover:text-white transition-colors cursor-pointer mx-auto"
+                    >
+                      มีบัญชีอยู่แล้ว? <span className="text-blue-400 hover:text-blue-300 font-extrabold">เข้าสู่ระบบ</span>
+                    </button>
+                  )}
+
+                  {authMode === 'forgot_password' && (
+                    <button
+                      type="button"
+                      onClick={() => setAuthMode('login')}
+                      className="text-slate-400 hover:text-white transition-colors cursor-pointer mx-auto"
+                    >
+                      กลับไปหน้า <span className="text-blue-400 hover:text-blue-300 font-extrabold">เข้าสู่ระบบ</span>
+                    </button>
                   )}
                 </div>
-              )}
-            </div>
+
+                {/* Reset DB connection button (only shown if configured) */}
+                {isFirebaseEnabled && (
+                  <div className="border-t border-slate-850 w-full pt-3 flex justify-center mt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm('คุณต้องการยกเลิกการเชื่อมต่อฐานข้อมูลปัจจุบันเพื่อกรอก URL ใหม่ใช่หรือไม่?')) {
+                          localStorage.removeItem('AVN_GS_API_URL');
+                          window.location.reload();
+                        }
+                      }}
+                      className="text-[10px] text-slate-500 hover:text-red-400 font-bold transition-colors cursor-pointer"
+                    >
+                      ⚙️ ล้างการตั้งค่าเชื่อมต่อฐานข้อมูล (Reset DB Link)
+                    </button>
+                  </div>
+                )}
+              </form>
+            )}
           </div>
         </div>
       )}
