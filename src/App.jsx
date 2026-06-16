@@ -5618,6 +5618,42 @@ export default function App() {
               <p className="text-xs text-slate-500 mt-1">เพื่อดำเนินการต่อยัง {webTitle}</p>
             </div>
 
+            {/* Database Config Banner if not configured */}
+            {!isFirebaseEnabled && (
+              <div className="mx-6 mt-4 p-4 rounded-2xl bg-amber-50 border border-amber-200 flex flex-col gap-2.5">
+                <h4 className="text-xs font-black text-amber-800 flex items-center gap-1.5 text-left">
+                  ⚠️ ระบบฐานข้อมูลจำลอง (ยังไม่ได้เชื่อมต่อ Sheets)
+                </h4>
+                <p className="text-[10px] text-amber-700 leading-normal text-left">
+                  กรุณาระบุ URL ของ Google Apps Script Web App ด้านล่างนี้เพื่อเปิดระบบฐานข้อมูลออนไลน์และเริ่มสมัครสมาชิก/ล็อกอินจริง:
+                </p>
+                <div className="flex flex-col gap-2">
+                  <input
+                    type="text"
+                    value={googleSheetsUrl}
+                    onChange={(e) => setGoogleSheetsUrlState(e.target.value)}
+                    className="w-full h-9 px-3.5 text-[11px] rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 bg-white text-slate-800"
+                    placeholder="https://script.google.com/macros/s/.../exec"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!googleSheetsUrl) {
+                        alert('กรุณากรอก URL ก่อนกดเชื่อมต่อ');
+                        return;
+                      }
+                      updateGoogleSheetsUrl(googleSheetsUrl);
+                      alert('🟢 บันทึก URL และกำลังเชื่อมต่อฐานข้อมูล...');
+                      window.location.reload();
+                    }}
+                    className="w-full bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-black h-9 rounded-xl cursor-pointer transition-colors"
+                  >
+                    ⚡ เชื่อมต่อฐานข้อมูลออนไลน์
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Content area */}
             <div className="p-6 flex flex-col gap-4">
               {isLoggingIn ? (
