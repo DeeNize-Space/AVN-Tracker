@@ -5,7 +5,6 @@ import {
   setApiUrl,
   isConfigured,
   registerUser,
-  loginUser,
   getUserLibrary,
   updateLibraryItem,
   deleteLibraryItem,
@@ -364,10 +363,6 @@ export default function App() {
 
 
   // --- UI STATE ---
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
-  const [loginConfirmPassword, setLoginConfirmPassword] = useState('');
-  const [loginMode, setLoginMode] = useState('login'); // 'login', 'register', 'forgot'
   const [activeTab, setActiveTab] = useState('online'); // 'online', 'local', 'admin'
   const [searchQuery, setSearchQuery] = useState('');
   const [catalogPage, setCatalogPage] = useState(1);
@@ -5602,7 +5597,7 @@ export default function App() {
         </div>
       )}
 
-      {/* EMAIL & PASSWORD LOGIN/REGISTER MODAL */}
+      {/* GOOGLE ONLY SIGN-IN MODAL */}
       {isGoogleLoginOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
           <div 
@@ -5613,9 +5608,6 @@ export default function App() {
             <button
               onClick={() => {
                 setIsGoogleLoginOpen(false);
-                setLoginPassword('');
-                setLoginConfirmPassword('');
-                setLoginMode('login');
               }}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer text-xs"
               title="ปิด"
@@ -5627,9 +5619,7 @@ export default function App() {
             <div className="p-6 pb-4 flex flex-col items-center border-b border-slate-100">
               <span className="text-3xl mb-1">🔑</span>
               <h2 className="text-xl font-extrabold text-slate-900">
-                {loginMode === 'login' && 'เข้าสู่ระบบ'}
-                {loginMode === 'register' && 'สมัครสมาชิกใหม่'}
-                {loginMode === 'forgot' && 'ลืมรหัสผ่าน'}
+                ลงชื่อเข้าใช้งานระบบ
               </h2>
               <p className="text-xs text-slate-500 mt-1">เพื่อดำเนินการต่อยัง {webTitle}</p>
             </div>
@@ -5641,7 +5631,7 @@ export default function App() {
                   ⚠️ ระบบฐานข้อมูลจำลอง (ยังไม่ได้เชื่อมต่อ Sheets)
                 </h4>
                 <p className="text-[10px] text-amber-700 leading-normal text-left">
-                  กรุณาระบุ URL ของ Google Apps Script Web App ด้านล่างนี้เพื่อเปิดระบบฐานข้อมูลออนไลน์และเริ่มสมัครสมาชิก/ล็อกอินจริง:
+                  กรุณาระบุ URL ของ Google Apps Script Web App ด้านล่างนี้เพื่อเปิดระบบฐานข้อมูลออนไลน์และเริ่มลงชื่อเข้าใช้งานจริง:
                 </p>
                 <div className="flex flex-col gap-2">
                   <input
@@ -5671,224 +5661,29 @@ export default function App() {
             )}
 
             {/* Content area */}
-            <div className="p-6 flex flex-col gap-4">
+            <div className="p-6">
               {isLoggingIn ? (
                 <div className="py-12 flex flex-col items-center justify-center gap-4">
                   <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                  <span className="text-sm font-semibold text-slate-600">กำลังดำเนินการระบบความปลอดภัย...</span>
+                  <span className="text-sm font-semibold text-slate-600">กำลังเข้าสู่ระบบผ่านบัญชี Google...</span>
                 </div>
               ) : (
-                <form 
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (!loginEmail.trim()) {
-                      alert('กรุณากรอกอีเมลของคุณ');
-                      return;
-                    }
-                    if (loginMode !== 'forgot' && !loginPassword) {
-                      alert('กรุณากรอกรหัสผ่าน');
-                      return;
-                    }
-
-                    const email = loginEmail.trim().toLowerCase();
-                    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-                    if (!emailRegex.test(email)) {
-                      alert('รูปแบบอีเมลไม่ถูกต้อง กรุณากรอกอีเมลจริง (เช่น example@gmail.com)');
-                      return;
-                    }
-
-                    if (loginMode === 'login') {
-                      // Login flow
-                      if (isFirebaseEnabled) {
-                        setIsLoggingIn(true);
-                        loginUser(email, loginPassword)
-                          .then((userData) => {
-                            setToastMessage('เข้าสู่ระบบสำเร็จแล้ว!');
-                            setIsGoogleLoginOpen(false);
-                            setLoginPassword('');
-                            setLoginConfirmPassword('');
-                            setIsLoggingIn(false);
-                            
-                            setGoogleUserProfile({
-                              name: userData.email.split('@')[0],
-                              email: userData.email,
-                              role: userData.role,
-                              avatar: ''
-                            });
-                            setUserRoles(prev => ({ ...prev, [userData.email]: userData.role }));
-                            if (userData.signupDate || userData.expiryDate) {
-                              setUserPremiumDates(prev => ({
-                                ...prev,
-                                [userData.email]: { signupDate: userData.signupDate, expiryDate: userData.expiryDate }
-                              }));
-                            }
-                            setCurrentUser(userData.email);
-                          })
-                          .catch((err) => {
-                            console.error(err);
-                            setIsLoggingIn(false);
-                            alert('❌ ' + err.message);
-                          });
-                      } else {
-                        alert('❌ ไม่สามารถล็อกอินได้: ระบบฐานข้อมูลออนไลน์ทำงานผิดพลาดหรือยังไม่ได้ตั้งค่าตัวแปร');
-                      }
-                    } else if (loginMode === 'register') {
-                      // Register flow
-                      if (loginPassword !== loginConfirmPassword) {
-                        alert('รหัสผ่านไม่ตรงกัน');
-                        return;
-                      }
-                      if (loginPassword.length < 6) {
-                        alert('รหัสผ่านต้องมีความยาวอย่างน้อย 6 ตัวอักษร');
-                        return;
-                      }
-
-                      if (isFirebaseEnabled) {
-                        setIsLoggingIn(true);
-                        registerUser(email, loginPassword)
-                          .then((userData) => {
-                            setToastMessage('สมัครสมาชิกและเข้าสู่ระบบสำเร็จ!');
-                            setIsGoogleLoginOpen(false);
-                            setLoginPassword('');
-                            setLoginConfirmPassword('');
-                            setIsLoggingIn(false);
-                            
-                            setGoogleUserProfile({
-                              name: userData.email.split('@')[0],
-                              email: userData.email,
-                              role: userData.role,
-                              avatar: ''
-                            });
-                            setUserRoles(prev => ({ ...prev, [userData.email]: userData.role }));
-                            setCurrentUser(userData.email);
-                          })
-                          .catch((err) => {
-                            console.error(err);
-                            setIsLoggingIn(false);
-                            alert('❌ ' + err.message);
-                          });
-                      } else {
-                        alert('❌ ไม่สามารถสมัครสมาชิกได้: ระบบฐานข้อมูลออนไลน์ทำงานผิดพลาดหรือยังไม่ได้ตั้งค่าตัวแปร');
-                      }
-                    } else if (loginMode === 'forgot') {
-                      // Forgot flow
-                      alert('📧 กรุณาติดต่อแอดมิน (pattarasak.raksanarong@gmail.com) เพื่อกู้คืนรหัสผ่านของคุณ');
-                    }
-                  }}
-                  className="flex flex-col gap-4 text-left"
-                >
-                  {/* Email field */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                      อีเมลบัญชีผู้ใช้
-                    </label>
-                    <input
-                      type="email"
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
-                      placeholder="example@gmail.com"
-                      className="w-full h-11 px-3.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all bg-white text-slate-800"
-                      required
-                    />
-                  </div>
-
-                  {/* Password field */}
-                  {loginMode !== 'forgot' && (
-                    <div className="flex flex-col gap-1.5">
-                      <div className="flex justify-between items-center">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                          รหัสผ่าน
-                        </label>
-                        {loginMode === 'login' && (
-                          <button
-                            type="button"
-                            onClick={() => setLoginMode('forgot')}
-                            className="text-xs font-bold text-blue-600 hover:text-blue-700 focus:outline-none cursor-pointer"
-                          >
-                            ลืมรหัสผ่าน?
-                          </button>
-                        )}
-                      </div>
-                      <input
-                        type="password"
-                        value={loginPassword}
-                        onChange={(e) => setLoginPassword(e.target.value)}
-                        placeholder="••••••"
-                        className="w-full h-11 px-3.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all bg-white text-slate-800"
-                        required
-                      />
+                <div className="flex flex-col items-center justify-center py-6 gap-4 text-center">
+                  <p className="text-xs text-slate-500 max-w-xs leading-normal">
+                    กรุณาลงชื่อเข้าใช้งานด้วยบัญชี Google เพื่อบันทึกข้อมูลคลังส่วนตัวและซิงก์ประวัติการเล่นกับระบบ Google Sheets
+                  </p>
+                  
+                  {isFirebaseEnabled ? (
+                    <div id="google-signin-btn-container" className="flex justify-center w-full min-h-[50px] mt-2"></div>
+                  ) : (
+                    <div className="text-xs text-red-500 font-bold mt-2">
+                      ⚠️ กรุณาเชื่อมต่อฐานข้อมูล Google Sheets ด้านบนก่อน
                     </div>
                   )}
 
-                  {/* Confirm Password field */}
-                  {loginMode === 'register' && (
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                        ยืนยันรหัสผ่านอีกครั้ง
-                      </label>
-                      <input
-                        type="password"
-                        value={loginConfirmPassword}
-                        onChange={(e) => setLoginConfirmPassword(e.target.value)}
-                        placeholder="••••••"
-                        className="w-full h-11 px-3.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all bg-white text-slate-800"
-                        required
-                      />
-                    </div>
-                  )}
-
-                  {/* Submit Button */}
-                  <button
-                    type="submit"
-                    className="w-full bg-[#1e293b] hover:bg-[#334155] text-white text-xs font-extrabold h-11 rounded-xl cursor-pointer transition-colors flex items-center justify-center gap-2 mt-2"
-                  >
-                    <span>
-                      {loginMode === 'login' && 'เข้าสู่ระบบ'}
-                      {loginMode === 'register' && 'สร้างบัญชีและเข้าสู่ระบบ'}
-                      {loginMode === 'forgot' && 'ส่งลิงก์รีเซ็ตรหัสผ่าน'}
-                    </span>
-                  </button>
-
-                  {/* Mode switcher links */}
-                  <div className="border-t border-slate-100 pt-4 flex flex-col gap-2.5 text-center text-xs text-slate-500">
-                    {loginMode === 'login' && (
-                      <p>
-                        ยังไม่มีบัญชีใช่หรือไม่?{' '}
-                        <button
-                          type="button"
-                          onClick={() => setLoginMode('register')}
-                          className="font-bold text-blue-600 hover:text-blue-700 cursor-pointer"
-                        >
-                          สมัครสมาชิกที่นี่
-                        </button>
-                      </p>
-                    )}
-                    {loginMode === 'register' && (
-                      <p>
-                        มีบัญชีอยู่แล้วใช่หรือไม่?{' '}
-                        <button
-                          type="button"
-                          onClick={() => setLoginMode('login')}
-                          className="font-bold text-blue-600 hover:text-blue-700 cursor-pointer"
-                        >
-                          ลงชื่อเข้าใช้ที่นี่
-                        </button>
-                      </p>
-                    )}
-                    {loginMode === 'forgot' && (
-                      <p>
-                        <button
-                          type="button"
-                          onClick={() => setLoginMode('login')}
-                          className="font-bold text-blue-600 hover:text-blue-700 cursor-pointer flex items-center justify-center gap-1 mx-auto"
-                        >
-                          ↩ ย้อนกลับไปหน้าเข้าสู่ระบบ
-                        </button>
-                      </p>
-                    )}
-                    
-                    {/* Reset DB connection button (only shown if a URL is already configured) */}
-                    {isFirebaseEnabled && (
+                  {/* Reset DB connection button (only shown if a URL is already configured) */}
+                  {isFirebaseEnabled && (
+                    <div className="border-t border-slate-100 w-full pt-4 flex justify-center mt-2">
                       <button
                         type="button"
                         onClick={() => {
@@ -5897,13 +5692,13 @@ export default function App() {
                             window.location.reload();
                           }
                         }}
-                        className="text-[10px] text-slate-400 hover:text-red-500 font-bold transition-colors cursor-pointer mt-2"
+                        className="text-[10px] text-slate-400 hover:text-red-500 font-bold transition-colors cursor-pointer"
                       >
                         ⚙️ ล้างการตั้งค่าเชื่อมต่อฐานข้อมูล (Reset DB Link)
                       </button>
-                    )}
-                  </div>
-                </form>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </div>
