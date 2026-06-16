@@ -278,6 +278,7 @@ export default function App() {
   const [isSlipChecking, setIsSlipChecking] = useState(false);
   const [slipCheckLogs, setSlipCheckLogs] = useState([]);
   const [selectedAdminTxSlip, setSelectedAdminTxSlip] = useState(null);
+  const [slipImageLoadError, setSlipImageLoadError] = useState(false);
 
   // --- REVENUE STATE ---
   const [revenueTransactions, setRevenueTransactions] = useState(() => {
@@ -902,6 +903,10 @@ export default function App() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setActiveScreenshotIndex(0);
   }, [selectedGameDetail]);
+
+  useEffect(() => {
+    setSlipImageLoadError(false);
+  }, [selectedAdminTxSlip]);
 
   useEffect(() => {
     if (toastMessage) {
@@ -6180,17 +6185,24 @@ export default function App() {
             <div className="p-5 flex flex-col gap-4 text-center max-h-[80vh] overflow-y-auto">
               {/* Slip Image/Mockup container */}
               <div className="flex justify-center bg-slate-950/40 p-3 rounded-2xl border border-slate-800">
-                {selectedAdminTxSlip.slipUrl && (selectedAdminTxSlip.slipUrl.startsWith('http') || selectedAdminTxSlip.slipUrl.startsWith('data:')) ? (
-                  <div className="w-full max-w-[280px] rounded-2xl overflow-hidden border border-slate-700 shadow-md">
+                {selectedAdminTxSlip.slipUrl && (selectedAdminTxSlip.slipUrl.startsWith('http') || selectedAdminTxSlip.slipUrl.startsWith('data:')) && !slipImageLoadError ? (
+                  <div className="w-full max-w-[280px] rounded-2xl overflow-hidden border border-slate-700 shadow-md flex flex-col gap-2 p-1 bg-slate-900">
                     <img 
                       src={selectedAdminTxSlip.slipUrl} 
                       alt="Payment Slip" 
-                      className="w-full h-auto object-contain max-h-[350px] bg-slate-900 mx-auto"
-                      onError={(e) => {
-                        e.target.onerror = null;
-                        e.target.style.display = 'none';
+                      className="w-full h-auto object-contain max-h-[320px] mx-auto rounded-xl"
+                      onError={() => {
+                        setSlipImageLoadError(true);
                       }}
                     />
+                    <a 
+                      href={selectedAdminTxSlip.slipUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-[10px] text-blue-400 hover:text-blue-300 font-bold underline py-1 block text-center"
+                    >
+                      🔗 เปิดดูรูปภาพสลิปในหน้าต่างใหม่
+                    </a>
                   </div>
                 ) : (
                   <div className="w-full max-w-[260px] bg-white text-slate-800 rounded-2xl p-5 text-left font-sans shadow-md border border-slate-200 relative select-none">
