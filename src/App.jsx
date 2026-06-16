@@ -5865,6 +5865,22 @@ export default function App() {
                         </button>
                       </p>
                     )}
+                    
+                    {/* Reset DB connection button (only shown if a URL is already configured) */}
+                    {isFirebaseEnabled && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm('คุณต้องการยกเลิกการเชื่อมต่อฐานข้อมูลปัจจุบันเพื่อกรอก URL ใหม่ใช่หรือไม่?')) {
+                            localStorage.removeItem('AVN_GS_API_URL');
+                            window.location.reload();
+                          }
+                        }}
+                        className="text-[10px] text-slate-400 hover:text-red-500 font-bold transition-colors cursor-pointer mt-2"
+                      >
+                        ⚙️ ล้างการตั้งค่าเชื่อมต่อฐานข้อมูล (Reset DB Link)
+                      </button>
+                    )}
                   </div>
                 </form>
               )}
