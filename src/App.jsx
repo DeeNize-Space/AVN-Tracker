@@ -589,8 +589,15 @@ export default function App() {
 
         // 3. Fetch user roles & premium dates
         const usersList = await getUsersList();
-        const rolesObj = { ...userRoles };
-        const premiumObj = { ...userPremiumDates };
+        const rolesObj = {
+          'pattarasak.raksanarong@gmail.com': 'admin',
+          'pattarasak.raksanrong@gmail.com': 'admin',
+          'Guest': 'free'
+        };
+        const premiumObj = {
+          'pattarasak.raksanarong@gmail.com': { signupDate: '', expiryDate: '' },
+          'pattarasak.raksanrong@gmail.com': { signupDate: '', expiryDate: '' }
+        };
         usersList.forEach(u => {
           rolesObj[u.email] = u.role;
           premiumObj[u.email] = { signupDate: u.signupDate, expiryDate: u.expiryDate };
@@ -1234,25 +1241,6 @@ export default function App() {
     setToastMessage(`📢 ส่งแจ้งเตือนอัปเดตเกมให้เฉพาะสมาชิก Premium (${premiumUsers.length} คน) สำเร็จแล้ว!`);
   };
 
-  const handleUpdatePremiumSignupDate = (username, dateStr) => {
-    setUserPremiumDates((prev) => ({
-      ...prev,
-      [username]: {
-        ...prev[username],
-        signupDate: dateStr
-      }
-    }));
-  };
-
-  const handleUpdatePremiumExpiryDate = (username, dateStr) => {
-    setUserPremiumDates((prev) => ({
-      ...prev,
-      [username]: {
-        ...prev[username],
-        expiryDate: dateStr
-      }
-    }));
-  };
 
   const handleAdminApproveTx = async (tx) => {
     const username = tx.username;
@@ -1308,7 +1296,7 @@ export default function App() {
     }
   };
 
-  const handleAddGmailUser = (gmail) => {
+  const handleAddGmailUser = async (gmail) => {
     if (!gmail || !gmail.trim()) return;
     const email = gmail.trim().toLowerCase();
     
@@ -1320,6 +1308,15 @@ export default function App() {
     if (userRoles[email] !== undefined) {
       alert('บัญชีอีเมลนี้มีอยู่ในระบบแล้ว');
       return;
+    }
+
+    if (isFirebaseEnabled) {
+      try {
+        await registerUser(email, '123456');
+      } catch (err) {
+        alert(`❌ ไม่สามารถเพิ่มผู้ใช้ลงฐานข้อมูลได้: ${err.message}`);
+        return;
+      }
     }
 
     setUserRoles((prev) => ({
@@ -1337,7 +1334,7 @@ export default function App() {
       [email]: []
     }));
 
-    setToastMessage(`➕ เพิ่มบัญชี ${email} เข้าสู่ระบบสำเร็จ!`);
+    setToastMessage(`➕ เพิ่มบัญชี ${email} เข้าสู่ระบบสำเร็จ! (รหัสผ่านเริ่มต้น: 123456)`);
   };
 
   // Inline library row modifications
@@ -3264,6 +3261,38 @@ export default function App() {
                 แผงควบคุมสำหรับจัดการบทบาทสมาชิก (Admin, Premium, User) หรือลบผู้ใช้ที่ผิดกฎระเบียบออกจากระบบข้อมูล Google Sheets
               </p>
               
+              {/* Form to add Gmail user and Search User */}
+              <div className="flex flex-col sm:flex-row gap-2.5 justify-between">
+                <div className="flex gap-2 flex-1 max-w-sm">
+                  <input
+                    type="text"
+                    value={newGmailInput}
+                    onChange={(e) => setNewGmailInput(e.target.value)}
+                    className="glass-input flex-1 h-10 px-3.5 text-xs rounded-xl text-slate-200"
+                    placeholder="ป้อน Gmail เช่น member.test@gmail.com..."
+                  />
+                  <button
+                    onClick={() => {
+                      handleAddGmailUser(newGmailInput);
+                      setNewGmailInput('');
+                    }}
+                    className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 rounded-xl cursor-pointer transition-colors whitespace-nowrap shrink-0 flex items-center justify-center"
+                  >
+                    ➕ เพิ่มผู้ใช้
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={adminUserSearch}
+                    onChange={(e) => setAdminUserSearch(e.target.value)}
+                    className="glass-input w-full sm:w-48 h-10 pl-9 pr-3.5 text-xs rounded-xl text-slate-200"
+                    placeholder="ค้นหาสมาชิก/Gmail..."
+                  />
+                  <span className="absolute left-3.5 top-3.5 text-slate-500 text-xs">🔍</span>
+                </div>
+              </div>
+              
               <div className="overflow-x-auto border border-slate-900 rounded-2xl bg-slate-955/20 max-h-60 scrollbar-thin">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
@@ -3277,7 +3306,7 @@ export default function App() {
                   </thead>
                   <tbody className="divide-y divide-slate-900/40">
                     {Object.keys(userRoles)
-                      .filter(email => email !== 'Guest' && email !== 'Guest@guest.com')
+                      .filter(email => email !== 'Guest' && email !== 'Guest@guest.com' && email.toLowerCase().includes(adminUserSearch.toLowerCase()))
                       .map((email) => {
                         const role = userRoles[email];
                         const dates = userPremiumDates[email] || { signupDate: '', expiryDate: '' };
@@ -4163,216 +4192,57 @@ export default function App() {
               </div>
             </div>
 
-            {/* Grid for User Management and Tag Management */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* User Management Panel */}
-              <div className="glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
-                <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
-                  👥 การจัดการสถานะผู้ใช้งาน
-                </h3>
-                <p className="text-[11px] text-slate-400">
-                  ปรับเปลี่ยนบทบาทผู้ใช้งานระบบจำลองเพื่อทดสอบการเข้าถึงหน้าแอดมินหรือโควตาคลังเกม (Free: 7 เกม / Premium: ไม่จำกัด / Admin: สิทธิ์แอดมิน)
-                </p>
-                {/* Form to add Gmail user and Search User */}
-                <div className="flex flex-col sm:flex-row gap-2 justify-between">
-                  <div className="flex gap-2 flex-1 max-w-sm">
-                    <input
-                      type="text"
-                      value={newGmailInput}
-                      onChange={(e) => setNewGmailInput(e.target.value)}
-                      className="glass-input flex-1 h-9 px-3 text-xs rounded-xl text-slate-200"
-                      placeholder="ป้อน Gmail เช่น member.test@gmail.com..."
-                    />
+            {/* Tag Management Panel */}
+            <div className="glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
+              <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
+                🏷️ การจัดการแท็กระบบ (#Tag Manager)
+              </h3>
+              <p className="text-[11px] text-slate-400">
+                เพิ่มหรือลบแท็กหมวดหมู่ระบบเพื่อใช้เป็นปุ่มแท็กด่วนในการเพิ่ม/แก้ไขระบบของแอดมิน
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newTagInput}
+                  onChange={(e) => setNewTagInput(e.target.value)}
+                  className="glass-input flex-1 h-9 px-3 text-xs rounded-xl text-slate-200"
+                  placeholder="พิมพ์แท็กใหม่ เช่น Sandbox..."
+                />
+                <button
+                  onClick={() => {
+                    if (!newTagInput.trim()) return;
+                    const formatted = newTagInput.trim();
+                    if (globalTags.some(t => t.toLowerCase() === formatted.toLowerCase())) {
+                      setToastMessage('มีแท็กนี้ในระบบอยู่แล้ว');
+                      return;
+                    }
+                    setGlobalTags(prev => [...prev, formatted].sort());
+                    setNewTagInput('');
+                    setToastMessage(`เพิ่มแท็ก #${formatted} สำเร็จ!`);
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 rounded-xl cursor-pointer transition-all shrink-0"
+                >
+                  เพิ่มแท็ก
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2 overflow-y-auto max-h-56 pr-1 mt-1 scrollbar-thin">
+                {globalTags.map((tag) => (
+                  <div
+                    key={tag}
+                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold bg-slate-900 border border-slate-800 rounded-lg text-slate-300"
+                  >
+                    <span>#{tag}</span>
                     <button
                       onClick={() => {
-                        handleAddGmailUser(newGmailInput);
-                        setNewGmailInput('');
+                        setGlobalTags(prev => prev.filter(t => t !== tag));
+                        setToastMessage(`ลบแท็ก #${tag} แล้ว`);
                       }}
-                      className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded-xl cursor-pointer transition-colors whitespace-nowrap shrink-0"
+                      className="text-red-400 hover:text-red-500 cursor-pointer font-bold focus:outline-none"
                     >
-                      ➕ เพิ่มผู้ใช้
+                      ✕
                     </button>
                   </div>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={adminUserSearch}
-                      onChange={(e) => setAdminUserSearch(e.target.value)}
-                      className="glass-input w-full sm:w-44 h-9 pl-8 pr-3 text-xs rounded-xl text-slate-200"
-                      placeholder="ค้นหาสมาชิก/Gmail..."
-                    />
-                    <span className="absolute left-2.5 top-2.5 text-slate-500 text-xs">🔍</span>
-                  </div>
-                </div>
-
-                <div className="overflow-x-auto max-h-72 scrollbar-thin">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="border-b border-slate-900 text-slate-400 font-bold">
-                        <th className="pb-3 pl-2">Gmail ของผู้ใช้</th>
-                        <th className="pb-3">บทบาท</th>
-                        <th className="pb-3">วันที่สมัคร Premium</th>
-                        <th className="pb-3">วันที่หมดอายุ Premium</th>
-                        <th className="pb-3 text-right pr-2">ปรับระดับ</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-900/60">
-                      {Object.keys(userRoles)
-                        .filter((username) =>
-                          username.toLowerCase().includes(adminUserSearch.toLowerCase())
-                        )
-                        .map((username) => (
-                        <tr key={username} className="hover:bg-slate-900/30 transition-colors">
-                          <td className="py-3 pl-2 font-bold text-slate-200 truncate max-w-[180px]" title={getUserGmail(username)}>
-                            {getUserGmail(username)}
-                          </td>
-                          <td className="py-3">
-                            <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${
-                              userRoles[username] === 'admin'
-                                ? 'text-rose-400 border-rose-500/20 bg-rose-500/10'
-                                : userRoles[username] === 'premium'
-                                ? 'text-amber-400 border-amber-500/20 bg-amber-500/10'
-                                : 'text-blue-400 border-blue-500/20 bg-blue-500/10'
-                            }`}>
-                              {userRoles[username] === 'admin' ? '🛡️ Admin' : userRoles[username] === 'premium' ? '👑 Premium' : '👥 Free'}
-                            </span>
-                          </td>
-                          <td className="py-3">
-                            {userRoles[username] === 'free' ? (
-                              <span className="text-slate-650 italic">-</span>
-                            ) : (
-                              <input
-                                type="date"
-                                value={userPremiumDates[username]?.signupDate || ''}
-                                onChange={(e) => handleUpdatePremiumSignupDate(username, e.target.value)}
-                                className="bg-black text-slate-200 border border-slate-800 rounded px-1.5 py-0.5 text-[10px] w-28 focus:outline-none"
-                              />
-                            )}
-                          </td>
-                          <td className="py-3">
-                            {userRoles[username] === 'free' ? (
-                              <span className="text-slate-650 italic">-</span>
-                            ) : (
-                              <input
-                                type="date"
-                                value={userPremiumDates[username]?.expiryDate || ''}
-                                onChange={(e) => handleUpdatePremiumExpiryDate(username, e.target.value)}
-                                className="bg-black text-slate-200 border border-slate-800 rounded px-1.5 py-0.5 text-[10px] w-28 focus:outline-none"
-                              />
-                            )}
-                          </td>
-                          <td className="py-3 text-right pr-2">
-                            <select
-                              value={userRoles[username]}
-                              onChange={(e) => {
-                                const newRole = e.target.value;
-                                setUserRoles(prev => ({
-                                  ...prev,
-                                  [username]: newRole
-                                }));
-                                
-                                // Auto-fill dates if upgraded to premium
-                                if (newRole === 'premium') {
-                                  const today = new Date();
-                                  const yyyy = today.getFullYear();
-                                  const mm = String(today.getMonth() + 1).padStart(2, '0');
-                                  const dd = String(today.getDate()).padStart(2, '0');
-                                  const signupStr = `${yyyy}-${mm}-${dd}`;
-                                  
-                                  const expiryDate = new Date(today);
-                                  expiryDate.setDate(expiryDate.getDate() + 30);
-                                  const expYyyy = expiryDate.getFullYear();
-                                  const expMm = String(expiryDate.getMonth() + 1).padStart(2, '0');
-                                  const expDd = String(expiryDate.getDate()).padStart(2, '0');
-                                  const expiryStr = `${expYyyy}-${expMm}-${expDd}`;
-                                  
-                                  setUserPremiumDates(prev => ({
-                                    ...prev,
-                                    [username]: { signupDate: signupStr, expiryDate: expiryStr }
-                                  }));
-
-                                  // Add mock transaction for admin upgrade
-                                  const txEmail = getUserGmail(username);
-                                  const newTx = {
-                                    id: 'tx-manual-' + Date.now(),
-                                    username: username,
-                                    email: txEmail,
-                                    package: 'monthly',
-                                    amount: 49,
-                                    timestamp: getIsoTimestamp(),
-                                    status: 'success'
-                                  };
-                                  setRevenueTransactions(prev => [newTx, ...prev]);
-                                }
-                                
-                                setToastMessage(`ปรับบทบาทของ ${username} เป็น ${newRole.toUpperCase()} แล้ว`);
-                              }}
-                              className="bg-black text-white border border-slate-800 text-xs rounded-lg px-2 py-1 cursor-pointer focus:outline-none"
-                            >
-                              <option value="free" className="bg-black text-white">Free</option>
-                              <option value="premium" className="bg-black text-white">Premium</option>
-                              <option value="admin" className="bg-black text-white">Admin</option>
-                            </select>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Tag Management Panel */}
-              <div className="glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
-                <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
-                  🏷️ การจัดการแท็กระบบ (#Tag Manager)
-                </h3>
-                <p className="text-[11px] text-slate-400">
-                  เพิ่มหรือลบแท็กหมวดหมู่ระบบเพื่อใช้เป็นปุ่มแท็กด่วนในการเพิ่ม/แก้ไขระบบของแอดมิน
-                </p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newTagInput}
-                    onChange={(e) => setNewTagInput(e.target.value)}
-                    className="glass-input flex-1 h-9 px-3 text-xs rounded-xl text-slate-200"
-                    placeholder="พิมพ์แท็กใหม่ เช่น Sandbox..."
-                  />
-                  <button
-                    onClick={() => {
-                      if (!newTagInput.trim()) return;
-                      const formatted = newTagInput.trim();
-                      if (globalTags.some(t => t.toLowerCase() === formatted.toLowerCase())) {
-                        setToastMessage('มีแท็กนี้ในระบบอยู่แล้ว');
-                        return;
-                      }
-                      setGlobalTags(prev => [...prev, formatted].sort());
-                      setNewTagInput('');
-                      setToastMessage(`เพิ่มแท็ก #${formatted} สำเร็จ!`);
-                    }}
-                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 rounded-xl cursor-pointer transition-all shrink-0"
-                  >
-                    เพิ่มแท็ก
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-2 overflow-y-auto max-h-56 pr-1 mt-1 scrollbar-thin">
-                  {globalTags.map((tag) => (
-                    <div
-                      key={tag}
-                      className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold bg-slate-900 border border-slate-800 rounded-lg text-slate-300"
-                    >
-                      <span>#{tag}</span>
-                      <button
-                        onClick={() => {
-                          setGlobalTags(prev => prev.filter(t => t !== tag));
-                          setToastMessage(`ลบแท็ก #${tag} แล้ว`);
-                        }}
-                        className="text-red-400 hover:text-red-500 cursor-pointer font-bold focus:outline-none"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                ))}
               </div>
             </div>
 
