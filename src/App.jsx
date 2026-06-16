@@ -234,8 +234,7 @@ export default function App() {
   const [authPassword, setAuthPassword] = useState('');
   const [authEmail, setAuthEmail] = useState('');
   
-  // Reset Password Fields
-  const [resetToken, setResetToken] = useState('');
+  const [authOtp, setAuthOtp] = useState('');
   
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
@@ -486,11 +485,11 @@ export default function App() {
     }
     setIsLoggingIn(true);
     try {
-      const resetUrlBase = window.location.origin + window.location.pathname;
-      const res = await requestPasswordReset(authEmail, resetUrlBase);
-      alert(res.message || 'ส่งอีเมลรีเซ็ตรหัสผ่านแล้ว กรุณาตรวจสอบกล่องจดหมายของคุณ');
-      setIsAuthModalOpen(false);
-      setAuthEmail('');
+      const res = await requestPasswordReset(authEmail);
+      alert(res.message || 'ส่งรหัส OTP เรียบร้อยแล้ว โปรดตรวจสอบกล่องข้อความในอีเมลของคุณ');
+      setAuthOtp('');
+      setAuthPassword('');
+      setAuthMode('reset_password');
     } catch (err) {
       alert('ข้อผิดพลาด: ' + err.message);
     } finally {
@@ -500,17 +499,22 @@ export default function App() {
 
   const handleResetPassword = async (e) => {
     if (e) e.preventDefault();
+    if (!authOtp) {
+      alert('กรุณากรอกรหัส OTP 6 หลัก');
+      return;
+    }
     if (!authPassword) {
       alert('กรุณากรอกรหัสผ่านใหม่');
       return;
     }
     setIsLoggingIn(true);
     try {
-      const res = await resetPassword(resetToken, authPassword);
+      const res = await resetPassword(authEmail, authOtp, authPassword);
       alert(res.message || 'รีเซ็ตรหัสผ่านเรียบร้อยแล้ว คุณสามารถเข้าสู่ระบบด้วยรหัสผ่านใหม่ได้ทันที');
-      setIsAuthModalOpen(false);
+      setAuthMode('login');
       setAuthPassword('');
-      setResetToken('');
+      setAuthOtp('');
+      setAuthUsername('');
     } catch (err) {
       alert('ข้อผิดพลาด: ' + err.message);
     } finally {
@@ -751,21 +755,7 @@ export default function App() {
     localStorage.setItem('avn_current_username_v7', currentUsername);
   }, [currentUsername]);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get('resetToken');
-    if (token) {
-      setTimeout(() => {
-        setResetToken(token);
-        setAuthMode('reset_password');
-        setIsAuthModalOpen(true);
-      }, 0);
-      // Clean up token from URL without reloading
-      const url = new URL(window.location);
-      url.searchParams.delete('resetToken');
-      window.history.replaceState({}, document.title, url.pathname);
-    }
-  }, []);
+
 
   useEffect(() => {
     localStorage.setItem('avn_user_roles_v9', JSON.stringify(userRoles));
@@ -5671,8 +5661,8 @@ export default function App() {
               <p className="text-xs text-slate-400 mt-1">
                 {authMode === 'login' && `กรุณากรอกบัญชีของคุณสำหรับ ${webTitle}`}
                 {authMode === 'register' && 'สร้างบัญชีใหม่เพื่อเปิดใช้งานคลังส่วนตัว'}
-                {authMode === 'forgot_password' && 'กรอกอีเมลที่สมัครเพื่อรับลิงก์รีเซ็ตรหัสผ่าน'}
-                {authMode === 'reset_password' && 'กำหนดรหัสผ่านใหม่สำหรับเข้าใช้งาน'}
+                {authMode === 'forgot_password' && 'กรอกอีเมลที่สมัครไว้เพื่อรับรหัส OTP สำหรับรีเซ็ตรหัสผ่าน'}
+                {authMode === 'reset_password' && 'กรอกรหัส OTP ที่ได้รับทางอีเมลและกำหนดรหัสผ่านใหม่'}
               </p>
             </div>
 
@@ -5690,7 +5680,7 @@ export default function App() {
                     type="text"
                     value={googleSheetsUrl}
                     onChange={(e) => setGoogleSheetsUrlState(e.target.value)}
-                    className="flex-1 h-9 px-3 text-[11px] rounded-xl border border-slate-800 bg-slate-950 text-slate-200 focus:outline-none focus:border-blue-500"
+                    className="flex-1 h-9 px-3 text-[11px] rounded-xl border border-slate-800 bg-slate-955 text-slate-200 focus:outline-none focus:border-blue-500"
                     placeholder="https://script.google.com/macros/s/.../exec"
                   />
                   <button
@@ -5757,6 +5747,22 @@ export default function App() {
                   </div>
                 )}
 
+                {/* OTP Input (Only reset_password) */}
+                {authMode === 'reset_password' && (
+                  <div>
+                    <label className="text-xs text-slate-400 font-bold block mb-1 text-left">รหัส OTP 6 หลัก</label>
+                    <input
+                      type="text"
+                      required
+                      maxLength={6}
+                      value={authOtp}
+                      onChange={(e) => setAuthOtp(e.target.value.replace(/\D/g, ''))}
+                      className="w-full h-10 px-3.5 text-xs rounded-xl border border-slate-800 bg-slate-955 text-slate-200 focus:outline-none focus:border-blue-500 text-center tracking-[0.25em] font-extrabold text-sm"
+                      placeholder="XXXXXX"
+                    />
+                  </div>
+                )}
+
                 {/* Password Input (Only login/register/reset_password) */}
                 {(authMode === 'login' || authMode === 'register' || authMode === 'reset_password') && (
                   <div>
@@ -5782,8 +5788,8 @@ export default function App() {
                 >
                   {authMode === 'login' && 'เข้าสู่ระบบ'}
                   {authMode === 'register' && 'สมัครสมาชิก'}
-                  {authMode === 'forgot_password' && 'ขอลิงก์รีเซ็ตรหัสผ่าน'}
-                  {authMode === 'reset_password' && 'บันทึกรหัสผ่านใหม่'}
+                  {authMode === 'forgot_password' && 'ขอรหัส OTP'}
+                  {authMode === 'reset_password' && 'ยืนยันตั้งรหัสผ่านใหม่'}
                 </button>
 
                 {/* Links */}
@@ -5824,6 +5830,16 @@ export default function App() {
                       className="text-slate-400 hover:text-white transition-colors cursor-pointer mx-auto"
                     >
                       กลับไปหน้า <span className="text-blue-400 hover:text-blue-300 font-extrabold">เข้าสู่ระบบ</span>
+                    </button>
+                  )}
+
+                  {authMode === 'reset_password' && (
+                    <button
+                      type="button"
+                      onClick={() => setAuthMode('forgot_password')}
+                      className="text-slate-400 hover:text-white transition-colors cursor-pointer mx-auto"
+                    >
+                      ต้องการขอ OTP ใหม่? <span className="text-blue-400 hover:text-blue-300 font-extrabold">ส่งรหัสอีกครั้ง</span>
                     </button>
                   )}
                 </div>

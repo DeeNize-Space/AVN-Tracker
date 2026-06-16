@@ -74,13 +74,13 @@ export async function loginUser(username, password) {
   return res.data; // { username, email, role, signupDate, expiryDate }
 }
 
-export async function requestPasswordReset(email, resetUrlBase) {
-  const res = await apiCall('requestPasswordReset', { email, resetUrlBase });
+export async function requestPasswordReset(email) {
+  const res = await apiCall('forgotPasswordRequest', { email });
   return res; // { status, message }
 }
 
-export async function resetPassword(token, newPassword) {
-  const res = await apiCall('resetPassword', { token, newPassword });
+export async function resetPassword(email, otp, newPassword) {
+  const res = await apiCall('forgotPasswordVerify', { email, otp, newPassword });
   return res; // { status, message }
 }
 
