@@ -320,7 +320,7 @@ export default function App() {
 
   const [googleClientId, setGoogleClientId] = useState(() => {
     const saved = localStorage.getItem('avn_google_client_id');
-    if (saved && !saved.includes('placeholder')) {
+    if (saved && saved.endsWith('.apps.googleusercontent.com') && !saved.includes('placeholder')) {
       return saved;
     }
     return import.meta.env.VITE_GOOGLE_CLIENT_ID || '1018830906245-huo96tdbrce4h4dilcg0qo43sbsjdtl.apps.googleusercontent.com';
@@ -613,7 +613,7 @@ export default function App() {
           setSlipOkBranchId(config.slipOkBranchId);
           localStorage.setItem('avn_slipok_branch_id', config.slipOkBranchId);
         }
-        if (config.googleClientId && !config.googleClientId.includes('placeholder')) {
+        if (config.googleClientId && config.googleClientId.endsWith('.apps.googleusercontent.com') && !config.googleClientId.includes('placeholder')) {
           setGoogleClientId(config.googleClientId);
           setTempGoogleClientId(config.googleClientId);
           localStorage.setItem('avn_google_client_id', config.googleClientId);
