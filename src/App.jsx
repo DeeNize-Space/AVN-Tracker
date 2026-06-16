@@ -1380,6 +1380,11 @@ export default function App() {
 
   // Inline library row modifications
   const handleUpdateItemStatus = (gameId, newStatus) => {
+    const currentLib = userLibraries[currentUser] || [];
+    if (subscriptionRole === 'free' && currentUser !== 'Admin' && currentLib.length > 7) {
+      setToastMessage('🔒 โควตาคลังเกมฟรีเกิน 7 เกม กรุณาสมัคร Premium เพื่อแก้ไขข้อมูล');
+      return;
+    }
     setUserLibraries((prev) => {
       const updated = { ...prev };
       if (updated[currentUser]) {
@@ -1395,6 +1400,11 @@ export default function App() {
   };
 
   const handleUpdateItemNotes = (gameId, newNotes) => {
+    const currentLib = userLibraries[currentUser] || [];
+    if (subscriptionRole === 'free' && currentUser !== 'Admin' && currentLib.length > 7) {
+      setToastMessage('🔒 โควตาคลังเกมฟรีเกิน 7 เกม กรุณาสมัคร Premium เพื่อแก้ไขข้อมูล');
+      return;
+    }
     setUserLibraries((prev) => {
       const updated = { ...prev };
       if (updated[currentUser]) {
@@ -1409,6 +1419,11 @@ export default function App() {
   };
 
   const handleUpdateItemPlayTime = (gameId, newPlayTime) => {
+    const currentLib = userLibraries[currentUser] || [];
+    if (subscriptionRole === 'free' && currentUser !== 'Admin' && currentLib.length > 7) {
+      setToastMessage('🔒 โควตาคลังเกมฟรีเกิน 7 เกม กรุณาสมัคร Premium เพื่อแก้ไขข้อมูล');
+      return;
+    }
     const hours = parseFloat(newPlayTime) || 0;
     setUserLibraries((prev) => {
       const updated = { ...prev };
@@ -1424,6 +1439,11 @@ export default function App() {
   };
 
   const handleUpdateItemRating = (gameId, newRating) => {
+    const currentLib = userLibraries[currentUser] || [];
+    if (subscriptionRole === 'free' && currentUser !== 'Admin' && currentLib.length > 7) {
+      setToastMessage('🔒 โควตาคลังเกมฟรีเกิน 7 เกม กรุณาสมัคร Premium เพื่อแก้ไขข้อมูล');
+      return;
+    }
     setUserLibraries((prev) => {
       const updated = { ...prev };
       if (updated[currentUser]) {
@@ -2277,7 +2297,14 @@ export default function App() {
                                       alert('ไฟล์ดังกล่าวไม่ใช่ประวัติคลังเกมนอนุมัติของระบบ AVN Star Hub');
                                       return;
                                     }
-                                    
+
+                                    if (subscriptionRole === 'free' && currentUser !== 'Admin' && parsed.library.length > 7) {
+                                      setIsUpsellOpen(true);
+                                      setToastMessage('❌ โควตาคลังฟรีจำกัด 7 เกม ไม่สามารถนำเข้าข้อมูลที่มีเกมมากกว่า 7 เกมได้');
+                                      setIsUserDropdownOpen(false);
+                                      return;
+                                    }
+
                                     setCustomConfirm({
                                       title: 'นำเข้าข้อมูลคลังประวัติส่วนตัว',
                                       message: `คุณต้องการกู้คืนประวัติคลังเกมจำนวน ${parsed.library.length} เกมมาทับข้อมูลปัจจุบันของคุณหรือไม่?`,
