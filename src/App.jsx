@@ -154,13 +154,6 @@ function readFileAsBase64(file) {
     reader.readAsDataURL(file);
   });
 }
-function mapCoverUrlFallback(coverUrl, id) {
-  if (!coverUrl) return `/covers/${id}.jpg`;
-  if (coverUrl.includes('images.gamestorylog.com')) {
-    return `/covers/${id}.jpg`;
-  }
-  return coverUrl;
-}
 
 const OFFICIAL_SCREENSHOT_PLACEHOLDERS = [
   'https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=800&auto=format&fit=crop',
@@ -632,22 +625,14 @@ export default function App() {
     const loadAllGoogleSheetsData = async () => {
       try {
         // 1. Fetch official games
-        let gamesList = await getOfficialGames();
+        const gamesList = await getOfficialGames();
         if (gamesList.length === 0) {
-          const mappedInitials = initialOfficialGames.map(game => ({
-            ...game,
-            coverUrl: mapCoverUrlFallback(game.coverUrl, game.id)
-          }));
-          for (const game of mappedInitials) {
+          for (const game of initialOfficialGames) {
             await saveOfficialGame(game);
           }
-          setOfficialGames(mappedInitials);
+          setOfficialGames(initialOfficialGames);
         } else {
-          const mappedGames = gamesList.map(game => ({
-            ...game,
-            coverUrl: mapCoverUrlFallback(game.coverUrl, game.id)
-          }));
-          setOfficialGames(mappedGames);
+          setOfficialGames(gamesList);
         }
 
         // 2. Fetch system configurations
@@ -735,7 +720,6 @@ export default function App() {
             ...prev,
             [currentUser]: libData.map(item => ({
               ...item,
-              coverUrl: mapCoverUrlFallback(item.coverUrl, item.gameId),
               status: normalizeStatus(item.status),
               screenshots: item.screenshots || []
             }))
