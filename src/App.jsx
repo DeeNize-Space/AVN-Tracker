@@ -12,6 +12,7 @@ import {
   saveOfficialGame,
   deleteOfficialGame,
   getSystemConfig,
+  saveSystemConfig,
   submitReport,
   getReports,
   updateReportStatus,
@@ -215,6 +216,27 @@ export default function App() {
     window.location.reload();
   };
 
+  const handleSaveSystemConfig = async () => {
+    try {
+      setToastMessage('⏳ กำลังบันทึกการตั้งค่าระบบไปยัง Google Sheets...');
+      await saveSystemConfig({
+        webTitle,
+        webMetaDescription,
+        webTagline,
+        webLogo,
+        webLogoType,
+        googleClientId: tempGoogleClientId,
+        promptPayId,
+        slipOkApiKey,
+        slipOkBranchId
+      });
+      setGoogleClientId(tempGoogleClientId);
+      setToastMessage('🟢 บันทึกการตั้งค่าระบบสำเร็จ!');
+    } catch (err) {
+      alert('❌ ไม่สามารถบันทึกการตั้งค่าระบบ: ' + err.message);
+    }
+  };
+
   const [googleUserProfile, setGoogleUserProfile] = useState(() => {
     const saved = localStorage.getItem('avn_google_user_profile_v9');
     return saved ? JSON.parse(saved) : null;
@@ -295,6 +317,12 @@ export default function App() {
   const [webTagline, setWebTagline] = useState(() => {
     return localStorage.getItem('avn_web_tagline_v9') || '★ พอร์ทัลแนะนำแนวและบันทึกเกมยอดนิยม';
   });
+
+  const [googleClientId, setGoogleClientId] = useState(() => {
+    return localStorage.getItem('avn_google_client_id') || import.meta.env.VITE_GOOGLE_CLIENT_ID || '1023772242138-placeholder.apps.googleusercontent.com';
+  });
+
+  const [tempGoogleClientId, setTempGoogleClientId] = useState(googleClientId);
 
   // --- TAG MANAGER STATES ---
   const [globalTags, setGlobalTags] = useState(() => {
@@ -581,6 +609,11 @@ export default function App() {
           setSlipOkBranchId(config.slipOkBranchId);
           localStorage.setItem('avn_slipok_branch_id', config.slipOkBranchId);
         }
+        if (config.googleClientId) {
+          setGoogleClientId(config.googleClientId);
+          setTempGoogleClientId(config.googleClientId);
+          localStorage.setItem('avn_google_client_id', config.googleClientId);
+        }
 
         // 3. Fetch user roles & premium dates
         const usersList = await getUsersList();
@@ -682,10 +715,10 @@ export default function App() {
   }, [googleUserProfile]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && typeof window.google !== 'undefined') {
+    if (typeof window !== 'undefined' && typeof window.google !== 'undefined' && googleClientId) {
       try {
         window.google.accounts.id.initialize({
-          client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID || '1023772242138-placeholder.apps.googleusercontent.com',
+          client_id: googleClientId,
           callback: handleGoogleLoginCallback
         });
       } catch (err) {
@@ -693,7 +726,7 @@ export default function App() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [googleClientId]);
 
   useEffect(() => {
     if (isGoogleLoginOpen && typeof window !== 'undefined' && typeof window.google !== 'undefined') {
@@ -712,7 +745,7 @@ export default function App() {
         console.error('Google button rendering error:', err);
       }
     }
-  }, [isGoogleLoginOpen]);
+  }, [isGoogleLoginOpen, googleClientId]);
 
   useEffect(() => {
     localStorage.setItem('avn_user_roles_v9', JSON.stringify(userRoles));
@@ -804,6 +837,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('avn_web_logo_type_v8', webLogoType);
   }, [webLogoType]);
+
+  useEffect(() => {
+    localStorage.setItem('avn_google_client_id', googleClientId);
+  }, [googleClientId]);
 
   // DOM Updates for Title & Meta Description
   useEffect(() => {
@@ -3622,7 +3659,27 @@ export default function App() {
                       </div>
                     </div>
                   )}
+                  <div>
+                    <label className="text-xs text-slate-400 font-bold block mb-1">Google OAuth Client ID</label>
+                    <input
+                      type="text"
+                      value={tempGoogleClientId}
+                      onChange={(e) => setTempGoogleClientId(e.target.value)}
+                      className="glass-input w-full h-10 px-3 text-xs rounded-xl text-slate-200"
+                      placeholder="พิมพ์ Google OAuth Client ID..."
+                    />
+                    <p className="text-[10px] text-slate-500 mt-1 leading-normal">
+                      * จำเป็นสำหรับระบบ Google Sign-In คุณสามารถสร้าง Client ID ได้จาก Google Cloud Console
+                    </p>
+                  </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={handleSaveSystemConfig}
+                  className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold h-10 px-4 rounded-xl cursor-pointer transition-colors self-start mt-2"
+                >
+                  💾 บันทึกการตั้งค่าระบบ
+                </button>
               </div>
 
               {/* Scraper bot card */}
