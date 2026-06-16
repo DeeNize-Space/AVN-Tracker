@@ -195,6 +195,9 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(() => {
     return localStorage.getItem('avn_current_user_v7') || 'Guest';
   });
+  const [currentUsername, setCurrentUsername] = useState(() => {
+    return localStorage.getItem('avn_current_username_v7') || 'Guest';
+  });
 
   const [googleSheetsUrl, setGoogleSheetsUrlState] = useState(() => getApiUrl());
   const [isDbConnecting, setIsDbConnecting] = useState(false);
@@ -435,11 +438,12 @@ export default function App() {
     setIsLoggingIn(true);
     try {
       const user = await loginUser(authUsername, authPassword);
-      setCurrentUser(user.username);
-      setUserRoles((prev) => ({ ...prev, [user.username]: user.role }));
+      setCurrentUser(user.email);
+      setCurrentUsername(user.username);
+      setUserRoles((prev) => ({ ...prev, [user.email]: user.role }));
       setUserPremiumDates((prev) => ({
         ...prev,
-        [user.username]: { signupDate: user.signupDate, expiryDate: user.expiryDate }
+        [user.email]: { signupDate: user.signupDate, expiryDate: user.expiryDate }
       }));
       setToastMessage(`ยินดีต้อนรับกลับมา, คุณ ${user.username}!`);
       setIsAuthModalOpen(false);
@@ -454,15 +458,16 @@ export default function App() {
 
   const handleRegister = async (e) => {
     if (e) e.preventDefault();
-    if (!authEmail || !authPassword) {
+    if (!authUsername || !authEmail || !authPassword) {
       alert('กรุณากรอกข้อมูลให้ครบถ้วน');
       return;
     }
     setIsLoggingIn(true);
     try {
-      const user = await registerUser(authEmail, authPassword);
-      setCurrentUser(user.username);
-      setUserRoles((prev) => ({ ...prev, [user.username]: user.role }));
+      const user = await registerUser(authUsername, authEmail, authPassword);
+      setCurrentUser(user.email);
+      setCurrentUsername(user.username);
+      setUserRoles((prev) => ({ ...prev, [user.email]: user.role }));
       setToastMessage(`สมัครสมาชิกสำเร็จ! ยินดีต้อนรับคุณ ${user.username}`);
       setIsAuthModalOpen(false);
       setAuthUsername('');
@@ -696,10 +701,11 @@ export default function App() {
   // Session restore on mount
   useEffect(() => {
     const savedUser = localStorage.getItem('avn_current_user_v7') || 'Guest';
+    const savedUsername = localStorage.getItem('avn_current_username_v7') || 'Guest';
     if (savedUser !== 'Guest') {
       Promise.resolve().then(() => {
         setCurrentUser(savedUser);
-        // No longer using Google user profile, currentUser is sufficient
+        setCurrentUsername(savedUsername);
       });
     }
   }, [isDbLoaded]);
@@ -742,6 +748,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('avn_current_user_v7', currentUser);
   }, [currentUser]);
+
+  useEffect(() => {
+    localStorage.setItem('avn_current_username_v7', currentUsername);
+  }, [currentUsername]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -945,14 +955,13 @@ export default function App() {
 
   const googleUser = useMemo(() => {
     if (isGuest) return null;
-    const capitalized = currentUser.charAt(0).toUpperCase() + currentUser.slice(1);
     return {
-      name: capitalized,
+      name: currentUsername,
       email: currentUser,
       role: currentUser,
       avatar: ''
     };
-  }, [currentUser, isGuest]);
+  }, [currentUser, currentUsername, isGuest]);
 
 
 
@@ -5720,17 +5729,17 @@ export default function App() {
                 }
                 className="flex flex-col gap-4"
               >
-                {/* Email Input for Login */}
-                {authMode === 'login' && (
+                {/* Username Input (Only login/register) */}
+                {(authMode === 'login' || authMode === 'register') && (
                   <div>
-                    <label className="text-xs text-slate-400 font-bold block mb-1 text-left">อีเมล (Email)</label>
+                    <label className="text-xs text-slate-400 font-bold block mb-1 text-left">Username</label>
                     <input
-                      type="email"
+                      type="text"
                       required
                       value={authUsername}
                       onChange={(e) => setAuthUsername(e.target.value)}
                       className="w-full h-10 px-3.5 text-xs rounded-xl border border-slate-800 bg-slate-955 text-slate-200 focus:outline-none focus:border-blue-500"
-                      placeholder="พิมพ์อีเมลของคุณ..."
+                      placeholder="พิมพ์ Username..."
                     />
                   </div>
                 )}
