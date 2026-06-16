@@ -454,13 +454,13 @@ export default function App() {
 
   const handleRegister = async (e) => {
     if (e) e.preventDefault();
-    if (!authUsername || !authEmail || !authPassword) {
+    if (!authEmail || !authPassword) {
       alert('กรุณากรอกข้อมูลให้ครบถ้วน');
       return;
     }
     setIsLoggingIn(true);
     try {
-      const user = await registerUser(authUsername, authEmail, authPassword);
+      const user = await registerUser(authEmail, authPassword);
       setCurrentUser(user.username);
       setUserRoles((prev) => ({ ...prev, [user.username]: user.role }));
       setToastMessage(`สมัครสมาชิกสำเร็จ! ยินดีต้อนรับคุณ ${user.username}`);
@@ -5720,17 +5720,17 @@ export default function App() {
                 }
                 className="flex flex-col gap-4"
               >
-                {/* Username Input (Only login/register) */}
-                {(authMode === 'login' || authMode === 'register') && (
+                {/* Email Input for Login */}
+                {authMode === 'login' && (
                   <div>
-                    <label className="text-xs text-slate-400 font-bold block mb-1 text-left">Username</label>
+                    <label className="text-xs text-slate-400 font-bold block mb-1 text-left">อีเมล (Email)</label>
                     <input
-                      type="text"
+                      type="email"
                       required
                       value={authUsername}
                       onChange={(e) => setAuthUsername(e.target.value)}
                       className="w-full h-10 px-3.5 text-xs rounded-xl border border-slate-800 bg-slate-955 text-slate-200 focus:outline-none focus:border-blue-500"
-                      placeholder="พิมพ์ Username..."
+                      placeholder="พิมพ์อีเมลของคุณ..."
                     />
                   </div>
                 )}
@@ -5738,7 +5738,7 @@ export default function App() {
                 {/* Email Input (Only register/forgot_password) */}
                 {(authMode === 'register' || authMode === 'forgot_password') && (
                   <div>
-                    <label className="text-xs text-slate-400 font-bold block mb-1 text-left">Email</label>
+                    <label className="text-xs text-slate-400 font-bold block mb-1 text-left">อีเมล (Email)</label>
                     <input
                       type="email"
                       required

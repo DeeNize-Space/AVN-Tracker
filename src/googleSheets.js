@@ -64,14 +64,20 @@ async function apiCall(action, data = {}, method = 'POST') {
 }
 
 // User Authentication
-export async function registerUser(username, email, password) {
-  const res = await apiCall('register', { username, email, password });
-  return res.data; // { username, email, role }
+export async function registerUser(email, password) {
+  const res = await apiCall('register', { email, password });
+  return {
+    ...res.data,
+    username: res.data.email
+  };
 }
 
-export async function loginUser(username, password) {
-  const res = await apiCall('login', { username, password });
-  return res.data; // { username, email, role, signupDate, expiryDate }
+export async function loginUser(email, password) {
+  const res = await apiCall('login', { email, password });
+  return {
+    ...res.data,
+    username: res.data.email
+  };
 }
 
 export async function requestPasswordReset(email, resetUrlBase) {
