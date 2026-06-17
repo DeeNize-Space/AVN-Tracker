@@ -135,6 +135,10 @@ export async function getAllUserLibraries() {
   return res.data || [];
 }
 
+export async function incrementGameViewCount(gameId) {
+  return await apiCall('incrementViewCount', { gameId });
+}
+
 // Catalog (Official Games) Management
 export async function getOfficialGames() {
   const res = await apiCall('getOfficialGames', {}, 'GET');
@@ -153,6 +157,7 @@ export async function getOfficialGames() {
     tags: Array.isArray(g.tags) ? g.tags : (g.tags ? g.tags.split(',').map(t => t.trim()) : []),
     screenshots: Array.isArray(g.screenshots) ? g.screenshots : (g.screenshots ? JSON.parse(g.screenshots) : []),
     updatedAt: g.updatedAt || g.updatedat || "",
+    viewCount: parseInt(g.viewCount) || parseInt(g.viewcount) || 0,
     isCustom: false
   }));
 }

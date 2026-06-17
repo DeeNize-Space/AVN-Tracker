@@ -12,6 +12,7 @@ import {
   updateLibraryItem,
   deleteLibraryItem,
   getAllUserLibraries,
+  incrementGameViewCount,
   getOfficialGames,
   saveOfficialGame,
   deleteOfficialGame,
@@ -422,6 +423,20 @@ export default function App() {
     setActiveScreenshotIndex(0);
     setShowAllScreenshots(false);
   }, [selectedGameDetail]);
+
+  const handleOpenGameDetail = (game) => {
+    if (!game) return;
+    setSelectedGameDetail(game);
+    // Increment viewCount for official games
+    if (game.id && game.isCustom === false) {
+      setOfficialGames(prev => prev.map(g => g.id === game.id ? { ...g, viewCount: (g.viewCount || 0) + 1 } : g));
+      if (isConfigured()) {
+        incrementGameViewCount(game.id).catch(err => {
+          console.error("Failed to increment view count on Sheets:", err);
+        });
+      }
+    }
+  };
 
   const [isSuggestingNew, setIsSuggestingNew] = useState(false);
   const [isReportingGame, setIsReportingGame] = useState(null);
@@ -1115,6 +1130,7 @@ export default function App() {
         title: game.title,
         developer: game.developer,
         coverUrl: game.coverUrl,
+        viewCount: game.viewCount || 0,
         engageCount: 0,
         ratingSum: 0,
         ratingCount: 0
@@ -1181,6 +1197,10 @@ export default function App() {
         return b.engageCount - a.engageCount;
       } else if (engageSort === 'engage-asc') {
         return a.engageCount - b.engageCount;
+      } else if (engageSort === 'views-desc') {
+        return b.viewCount - a.viewCount;
+      } else if (engageSort === 'views-asc') {
+        return a.viewCount - b.viewCount;
       } else if (engageSort === 'rating-desc') {
         const aRate = a.ratingCount > 0 ? a.avgRatingNum : -1;
         const bRate = b.ratingCount > 0 ? b.avgRatingNum : -1;
@@ -1197,14 +1217,15 @@ export default function App() {
   }, [computedEngagement, engageSearch, engageSort]);
 
   const handleExportEngagementCsv = () => {
-    const headers = ['รหัสเกม', 'ชื่อเกม', 'ผู้พัฒนา', 'จำนวนผู้เล่น (Engagement)', 'คะแนนเฉลี่ยจากผู้เล่น', 'จำนวนผู้รีวิว'];
+    const headers = ['รหัสเกม', 'ชื่อเกม', 'ผู้พัฒนา', 'จำนวนผู้เล่น (Engagement)', 'คะแนนเฉลี่ยจากผู้เล่น', 'จำนวนผู้รีวิว', 'ยอดคนเข้าชม (Views)'];
     const rows = filteredEngagement.map(game => [
       `"${game.id}"`,
       `"${game.title.replace(/"/g, '""')}"`,
       `"${game.developer.replace(/"/g, '""')}"`,
       game.engageCount,
       game.averageUserRating,
-      game.ratingCount
+      game.ratingCount,
+      game.viewCount
     ]);
     const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -2251,7 +2272,7 @@ export default function App() {
                             } else {
                               const target = officialGames.find((g) => g.id === notif.gameId);
                               if (target) {
-                                setSelectedGameDetail(target);
+                                handleOpenGameDetail(target);
                               }
                             }
                             setShowNotifications(false);
@@ -2600,7 +2621,7 @@ export default function App() {
                     return (
                       <div
                         key={game.id}
-                        onClick={() => setSelectedGameDetail(game)}
+                        onClick={() => handleOpenGameDetail(game)}
                         className="glass-card-minimal rounded-3xl overflow-hidden flex flex-col cursor-pointer group relative"
                       >
                         {/* Cover Image */}
@@ -2945,7 +2966,7 @@ export default function App() {
                       <div
                         key={item.gameId}
                         onClick={() => {
-                          setSelectedGameDetail(origGame || {
+                          handleOpenGameDetail(origGame || {
                             id: item.gameId,
                             title: item.title,
                             developer: item.developer,
@@ -3821,6 +3842,8 @@ export default function App() {
                     >
                       <option value="engage-desc">👤 ยอดเข้าคลัง (มาก → น้อย)</option>
                       <option value="engage-asc">👤 ยอดเข้าคลัง (น้อย → มาก)</option>
+                      <option value="views-desc">👁️ ยอดคนดู (มาก → น้อย)</option>
+                      <option value="views-asc">👁️ ยอดคนดู (น้อย → มาก)</option>
                       <option value="rating-desc">⭐ คะแนนรีวิว (สูง → ต่ำ)</option>
                       <option value="rating-asc">⭐ คะแนนรีวิว (ต่ำ → สูง)</option>
                     </select>
@@ -3849,14 +3872,17 @@ export default function App() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-400">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400" title="ยอดเข้าชม">
+                              👁️ {game.viewCount}
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-400" title="ยอดเข้าคลัง">
                               👤 {game.engageCount}
                             </span>
                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
                               game.ratingCount > 0 
                                 ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' 
                                 : 'bg-slate-900 border-slate-800 text-slate-500'
-                            }`}>
+                            }`} title="คะแนนเฉลี่ย">
                               ★ {game.averageUserRating}
                             </span>
                           </div>
@@ -4634,9 +4660,16 @@ export default function App() {
                   </button>
                 )}
 
-                <div className="flex items-center gap-2">
-                  {renderReviewStars(selectedGameDetail.rating)}
-                  <span className="text-xs font-extrabold text-slate-400">{selectedGameDetail.rating.toFixed(1)}</span>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    {renderReviewStars(selectedGameDetail.rating)}
+                    <span className="text-xs font-extrabold text-slate-400">{selectedGameDetail.rating.toFixed(1)}</span>
+                  </div>
+                  {selectedGameDetail.viewCount !== undefined && (
+                    <span className="text-xs font-bold text-slate-400 flex items-center gap-1 bg-slate-900 px-2 py-0.5 border border-slate-850 rounded-md">
+                      👁️ {selectedGameDetail.viewCount.toLocaleString()} ครั้ง
+                    </span>
+                  )}
                 </div>
 
                 {/* Tags */}
