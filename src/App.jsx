@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, Fragment } from 'react';
 import { initialOfficialGames, initialMockUserLibraries, initialReports } from './data/mockGames';
 import {
   getApiUrl,
@@ -11,6 +11,7 @@ import {
   getUserLibrary,
   updateLibraryItem,
   deleteLibraryItem,
+  getAllUserLibraries,
   getOfficialGames,
   saveOfficialGame,
   deleteOfficialGame,
@@ -239,9 +240,7 @@ export default function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
 
-  // --- SCRAPER BOT STATE ---
-  const [isScraping, setIsScraping] = useState(false);
-  const [scraperLogs, setScraperLogs] = useState([]);
+
 
   // --- USER ROLES & SYSTEM STATES ---
   const [userRoles, setUserRoles] = useState(() => {
@@ -594,6 +593,15 @@ export default function App() {
   const [tempTickerMessage, setTempTickerMessage] = useState(tickerMessage);
   const [tempShowTicker, setTempShowTicker] = useState(showTicker);
 
+  // Game Engagement states
+  const [allUserLibraries, setAllUserLibraries] = useState([]);
+  const [isRefreshingEngage, setIsRefreshingEngage] = useState(false);
+  const [engageSearch, setEngageSearch] = useState('');
+  const [engageSort, setEngageSort] = useState('engage-desc');
+
+  // Admin Catalog pagination states
+  const [adminCatalogPage, setAdminCatalogPage] = useState(1);
+
   // --- USER ROLE DERIVATIONS ---
   const subscriptionRole = (userRoles[currentUser] === 'admin' || userRoles[currentUser] === 'premium') ? userRoles[currentUser] : 'free';
   const isAdmin = subscriptionRole === 'admin';
@@ -719,6 +727,14 @@ export default function App() {
       });
     }
   }, [isDbLoaded]);
+
+  // Fetch all user libraries for engagement panel when entering admin panel as admin
+  useEffect(() => {
+    if (isFirebaseEnabled && isDbLoaded && activeTab === 'admin' && isAdmin) {
+      fetchEngagementData(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDbLoaded, activeTab, isAdmin, isFirebaseEnabled]);
 
   // Sync Current User's Library from Google Sheets on user change
   useEffect(() => {
@@ -1048,6 +1064,20 @@ export default function App() {
     );
   }, [officialGames, adminCatalogSearch]);
 
+  const adminCatalogPageSize = 10;
+  const adminCatalogTotalPages = Math.ceil(adminFilteredCatalog.length / adminCatalogPageSize) || 1;
+
+  useEffect(() => {
+    if (adminCatalogPage > adminCatalogTotalPages) {
+      setAdminCatalogPage(1);
+    }
+  }, [adminFilteredCatalog.length, adminCatalogTotalPages, adminCatalogPage]);
+
+  const adminCatalogPaginatedList = useMemo(() => {
+    const startIndex = (adminCatalogPage - 1) * adminCatalogPageSize;
+    return adminFilteredCatalog.slice(startIndex, startIndex + adminCatalogPageSize);
+  }, [adminFilteredCatalog, adminCatalogPage, adminCatalogPageSize]);
+
   const filteredTransactions = useMemo(() => {
     return revenueTransactions.filter(tx => {
       const matchSearch = 
@@ -1061,66 +1091,132 @@ export default function App() {
 
   // --- ACTIONS HANDLERS ---
 
-  const handleRunScraper = () => {
-    if (isScraping) return;
-    setIsScraping(true);
-    setScraperLogs([]);
-    
-    const logsList = [
-      `[${new Date().toLocaleTimeString()}] [INFO] เริ่มต้นระบบบอทดึงข้อมูลอัตโนมัติ (Scraper Bot v1.2)...`,
-      `[${new Date().toLocaleTimeString()}] [SCAN] เริ่มสแกนบอร์ดเกมยอดนิยม F95Zone.to...`,
-      `[${new Date().toLocaleTimeString()}] [FOUND] พบกระทู้ยอดนิยม: "Love Season" (Waveminds) - กำลังตรวจสอบข้อมูลหลัก...`,
-      `[${new Date().toLocaleTimeString()}] [DB_CHECK] ค้นหาในแคตตาล็อกระบบหลัก: ไม่พบเกม "Love Season"... บันทึกเตรียมยื่นข้อเสนอใหม่`,
-      `[${new Date().toLocaleTimeString()}] [SCAN] สแกนการอัปเดตเวอร์ชันเกมบน SteamDB และ Patreon...`,
-      `[${new Date().toLocaleTimeString()}] [FOUND] พบเวอร์ชันใหม่: "Being a DIK" (Dr PinkCake) -> v1.0.0 (ในระบบหลักเป็น v0.9.0)`,
-      `[${new Date().toLocaleTimeString()}] [DB_CHECK] บันทึกข้อเสนอการอัปเดต Being a DIK เป็น v1.0.0 เข้าสู่ระบบจัดคิวแอดมิน`,
-      `[${new Date().toLocaleTimeString()}] [SUCCESS] ดึงข้อมูลเสร็จสิ้นเรียบร้อย! ค้นพบข้อมูลใหม่ 2 รายการ ยื่นเข้าสู่กล่องข้อความของแอดมินสำเร็จ`
-    ];
+  const fetchEngagementData = async (silent = false) => {
+    if (!isFirebaseEnabled) {
+      return;
+    }
+    if (!silent) setIsRefreshingEngage(true);
+    try {
+      const data = await getAllUserLibraries();
+      setAllUserLibraries(data);
+    } catch (err) {
+      console.error('Error fetching all user libraries for engagement stats:', err);
+      setToastMessage('ไม่สามารถดึงข้อมูลคลังสมาชิกออนไลน์ได้ กำลังใช้ข้อมูลจากในเครื่อง');
+    } finally {
+      if (!silent) setIsRefreshingEngage(false);
+    }
+  };
 
-    let currentStep = 0;
-    const interval = setInterval(() => {
-      if (currentStep < logsList.length) {
-        setScraperLogs((prev) => [...prev, logsList[currentStep]]);
-        currentStep++;
-      } else {
-        clearInterval(interval);
-        setIsScraping(false);
-        
-        // Inject reports
-        const newReports = [
-          {
-            id: 'rep-scraper-new-' + Date.now(),
-            username: 'Scraper Bot',
-            type: 'new',
-            gameTitle: 'Love Season',
-            developer: 'Waveminds',
-            reportedVersion: 'v1.0.0',
-            description: 'บอทดึงข้อมูลอัตโนมัติพบเกม "Love Season" กำลังเป็นที่นิยมสูงบน F95Zone และ Patreon ข้อมูลพร้อมแอดมินตรวจอนุมัติเข้าระบบแคตตาล็อกหลัก',
-            status: 'pending',
-            timestamp: getIsoTimestamp(),
-            overview: 'A story about a former sports star who is forced to start from scratch. Move to a new city, meet different people, and navigate romantic and professional pathways.',
-            coverUrl: '',
-            tags: ['Drama', 'Sports', 'Romance', 'Slice of Life'],
-            screenshots: []
-          },
-          {
-            id: 'rep-scraper-update-' + Date.now(),
-            username: 'Scraper Bot',
-            type: 'update',
-            gameId: 'being-a-dik',
-            gameTitle: 'Being a DIK',
-            currentVersion: '0.9.0',
-            reportedVersion: '1.0.0',
-            description: 'บอทสแกนเนอร์ระบบหลักตรวจพบการปล่อยตัวเวอร์ชัน 1.0.0 (Official Release) บนช่องทาง Steam และ Patreon ของ Dr PinkCake เรียบร้อยแล้ว',
-            status: 'pending',
-            timestamp: getIsoTimestamp()
+  const computedEngagement = useMemo(() => {
+    const statsMap = {};
+    officialGames.forEach(game => {
+      statsMap[game.id] = {
+        id: game.id,
+        title: game.title,
+        developer: game.developer,
+        coverUrl: game.coverUrl,
+        engageCount: 0,
+        ratingSum: 0,
+        ratingCount: 0
+      };
+    });
+
+    const processLibraryItems = (items) => {
+      if (!Array.isArray(items)) return;
+      items.forEach(item => {
+        const gId = item.gameId || item.gameid;
+        if (!gId) return;
+        if (statsMap[gId]) {
+          statsMap[gId].engageCount += 1;
+          const rateVal = parseFloat(item.rating);
+          if (!isNaN(rateVal) && rateVal > 0) {
+            statsMap[gId].ratingSum += rateVal;
+            statsMap[gId].ratingCount += 1;
           }
-        ];
-        
-        setReports((prev) => [...newReports, ...prev]);
-        setToastMessage('บอทดึงข้อมูลสำเร็จ! เพิ่มรายงานใหม่ 2 รายการลงในกล่องข้อความแล้ว');
+        }
+      });
+    };
+
+    if (isFirebaseEnabled && allUserLibraries.length > 0) {
+      allUserLibraries.forEach(row => {
+        let items;
+        try {
+          items = typeof row.librarydata === 'string' ? JSON.parse(row.librarydata) : row.librarydata;
+        } catch {
+          items = [];
+        }
+        processLibraryItems(items);
+      });
+    } else {
+      Object.keys(userLibraries).forEach(user => {
+        const items = userLibraries[user] || [];
+        processLibraryItems(items);
+      });
+    }
+
+    return Object.values(statsMap).map(stat => {
+      const avgRatingNum = stat.ratingCount > 0 ? (stat.ratingSum / stat.ratingCount) : 0;
+      const averageUserRating = stat.ratingCount > 0 ? avgRatingNum.toFixed(1) : 'ไม่มีรีวิว';
+      return {
+        ...stat,
+        avgRatingNum,
+        averageUserRating
+      };
+    });
+  }, [officialGames, userLibraries, allUserLibraries, isFirebaseEnabled]);
+
+  const filteredEngagement = useMemo(() => {
+    let result = [...computedEngagement];
+
+    if (engageSearch.trim()) {
+      const q = engageSearch.toLowerCase().trim();
+      result = result.filter(game => 
+        game.title.toLowerCase().includes(q) || 
+        game.developer.toLowerCase().includes(q)
+      );
+    }
+
+    result.sort((a, b) => {
+      if (engageSort === 'engage-desc') {
+        return b.engageCount - a.engageCount;
+      } else if (engageSort === 'engage-asc') {
+        return a.engageCount - b.engageCount;
+      } else if (engageSort === 'rating-desc') {
+        const aRate = a.ratingCount > 0 ? a.avgRatingNum : -1;
+        const bRate = b.ratingCount > 0 ? b.avgRatingNum : -1;
+        return bRate - aRate;
+      } else if (engageSort === 'rating-asc') {
+        const aRate = a.ratingCount > 0 ? a.avgRatingNum : 999;
+        const bRate = b.ratingCount > 0 ? b.avgRatingNum : 999;
+        return aRate - bRate;
       }
-    }, 600);
+      return 0;
+    });
+
+    return result;
+  }, [computedEngagement, engageSearch, engageSort]);
+
+  const handleExportEngagementCsv = () => {
+    const headers = ['รหัสเกม', 'ชื่อเกม', 'ผู้พัฒนา', 'จำนวนผู้เล่น (Engagement)', 'คะแนนเฉลี่ยจากผู้เล่น', 'จำนวนผู้รีวิว'];
+    const rows = filteredEngagement.map(game => [
+      `"${game.id}"`,
+      `"${game.title.replace(/"/g, '""')}"`,
+      `"${game.developer.replace(/"/g, '""')}"`,
+      game.engageCount,
+      game.averageUserRating,
+      game.ratingCount
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    const date = new Date().toISOString().slice(0, 10);
+    link.setAttribute('download', `avn_game_engagement_report_${date}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setToastMessage('ส่งออกไฟล์ CSV สถิติความสนใจสำเร็จแล้ว!');
   };
 
 
@@ -1138,6 +1234,9 @@ export default function App() {
     if (tab === 'admin') {
       setTempTickerMessage(tickerMessage);
       setTempShowTicker(showTicker);
+      if (isFirebaseEnabled) {
+        fetchEngagementData(true);
+      }
     }
   };
 
@@ -3677,46 +3776,100 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Scraper bot card */}
+              {/* Game Engagement Panel */}
               <div className="glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
-                <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
-                  🤖 บอทดึงข้อมูลอัตโนมัติ (Scraper Bot)
-                </h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
+                    📊 แผงวิเคราะห์ความสนใจเกม (Game Engagement)
+                  </h3>
+                  {isFirebaseEnabled && (
+                    <button
+                      onClick={() => fetchEngagementData(false)}
+                      disabled={isRefreshingEngage}
+                      className="text-xs bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 font-bold px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors flex items-center gap-1 disabled:opacity-50"
+                    >
+                      {isRefreshingEngage ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div>
+                          <span>กำลังซิงค์...</span>
+                        </>
+                      ) : (
+                        <span>🔄 ซิงค์ข้อมูล</span>
+                      )}
+                    </button>
+                  )}
+                </div>
+
                 <div className="flex flex-col gap-3 flex-1 justify-between">
                   <p className="text-[11px] text-slate-400 leading-normal">
-                    ตรวจสอบความเคลื่อนไหวล่าสุดจาก F95Zone, Gamestorylog และ SteamDB บอทจะค้นพบข้อมูลเวอร์ชันใหม่และเกมยอดนิยมเพื่อนำเสนอเข้าแผงความคืบหน้าของแอดมิน
+                    แสดงยอดผู้เล่นที่ดึงเข้าคลัง และคะแนนรีวิวเฉลี่ยจากผู้ใช้งานทั้งหมดในระบบ {isFirebaseEnabled ? '(ซิงค์จากฐานข้อมูลคลาวด์)' : '(แสดงข้อมูลจำลอง)'}
                   </p>
-                  
-                  {/* Terminal Display */}
-                  <div className="bg-slate-950/80 border border-slate-900 rounded-xl p-3 h-28 overflow-y-auto font-mono text-[10px] text-emerald-400 flex flex-col gap-1 select-none scrollbar-thin">
-                    {scraperLogs.length === 0 ? (
-                      <span className="text-slate-600 italic">พร้อมสแกน... กดเพื่อสั่งบอทสเกรปข้อมูล</span>
+
+                  {/* Filters and Search */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      placeholder="🔍 ค้นหาชื่อเกม/ผู้พัฒนา..."
+                      value={engageSearch}
+                      onChange={(e) => setEngageSearch(e.target.value)}
+                      className="glass-input h-9 px-3 text-xs rounded-xl text-slate-200 w-full"
+                    />
+                    <select
+                      value={engageSort}
+                      onChange={(e) => setEngageSort(e.target.value)}
+                      className="glass-input h-9 px-2 text-xs rounded-xl bg-black text-white cursor-pointer w-full"
+                    >
+                      <option value="engage-desc">👤 ยอดเข้าคลัง (มาก → น้อย)</option>
+                      <option value="engage-asc">👤 ยอดเข้าคลัง (น้อย → มาก)</option>
+                      <option value="rating-desc">⭐ คะแนนรีวิว (สูง → ต่ำ)</option>
+                      <option value="rating-asc">⭐ คะแนนรีวิว (ต่ำ → สูง)</option>
+                    </select>
+                  </div>
+
+                  {/* Game List Display */}
+                  <div className="bg-slate-950/80 border border-slate-900 rounded-xl p-2 h-44 overflow-y-auto flex flex-col gap-1.5 scrollbar-thin">
+                    {filteredEngagement.length === 0 ? (
+                      <span className="text-slate-600 italic text-[11px] p-2 text-center">ไม่พบข้อมูลสถิติเกม</span>
                     ) : (
-                      scraperLogs.map((log, idx) => (
-                        <div key={idx} className="leading-normal whitespace-pre-wrap">{log}</div>
+                      filteredEngagement.map((game) => (
+                        <div key={game.id} className="flex items-center justify-between p-1.5 rounded-lg hover:bg-slate-900/40 transition-colors border border-white/0 hover:border-white/5">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-6 h-8 rounded overflow-hidden shrink-0 border border-white/10">
+                              {game.coverUrl ? (
+                                <img src={game.coverUrl} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full bg-slate-900 flex items-center justify-center text-[7px] font-black text-slate-500">
+                                  {game.title ? game.title.substring(0, 2).toUpperCase() : 'VN'}
+                                </div>
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-xs font-bold text-slate-200 truncate" title={game.title}>{game.title}</div>
+                              <div className="text-[10px] text-slate-400 truncate">{game.developer}</div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-400">
+                              👤 {game.engageCount}
+                            </span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                              game.ratingCount > 0 
+                                ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' 
+                                : 'bg-slate-900 border-slate-800 text-slate-500'
+                            }`}>
+                              ★ {game.averageUserRating}
+                            </span>
+                          </div>
+                        </div>
                       ))
                     )}
                   </div>
 
                   <button
-                    onClick={handleRunScraper}
-                    disabled={isScraping}
-                    className={`h-10 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all ${
-                      isScraping
-                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700/50'
-                        : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/15'
-                    }`}
+                    onClick={handleExportEngagementCsv}
+                    className="h-10 px-4 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/15 flex items-center justify-center gap-2 cursor-pointer transition-all w-full animate-fade-in"
                   >
-                    {isScraping ? (
-                      <>
-                        <div className="w-3.5 h-3.5 border-2 border-slate-500 border-t-transparent rounded-full animate-spin"></div>
-                        <span>กำลังดึงข้อมูลจำลอง...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>⚡ เริ่มต้นดึงข้อมูลยอดนิยม</span>
-                      </>
-                    )}
+                    <span>📤 ส่งออกรายงาน CSV (ภาษาไทย)</span>
                   </button>
                 </div>
               </div>
@@ -4143,18 +4296,18 @@ export default function App() {
                         <input
                           type="checkbox"
                           checked={
-                            adminFilteredCatalog.length > 0 &&
-                            adminFilteredCatalog.every((game) => selectedAdminGameIds.includes(game.id))
+                            adminCatalogPaginatedList.length > 0 &&
+                            adminCatalogPaginatedList.every((game) => selectedAdminGameIds.includes(game.id))
                           }
                           onChange={(e) => {
                             if (e.target.checked) {
-                              const visibleIds = adminFilteredCatalog.map((g) => g.id);
+                              const visibleIds = adminCatalogPaginatedList.map((g) => g.id);
                               setSelectedAdminGameIds((prev) => {
                                 const newSelection = new Set([...prev, ...visibleIds]);
                                 return Array.from(newSelection);
                               });
                             } else {
-                              const visibleIds = adminFilteredCatalog.map((g) => g.id);
+                              const visibleIds = adminCatalogPaginatedList.map((g) => g.id);
                               setSelectedAdminGameIds((prev) =>
                                 prev.filter((id) => !visibleIds.includes(id))
                               );
@@ -4172,7 +4325,7 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-900/60">
-                    {adminFilteredCatalog.map((game) => (
+                    {adminCatalogPaginatedList.map((game) => (
                       <tr key={game.id} className="hover:bg-slate-900/30 transition-colors">
                         <td className="py-2.5 pl-2 w-10">
                           <input
@@ -4238,6 +4391,73 @@ export default function App() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Pagination Controls */}
+              {adminCatalogTotalPages > 1 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between border-t border-slate-900/60 pt-4 mt-2 gap-3">
+                  <div className="text-xs text-slate-400">
+                    แสดง {(adminCatalogPage - 1) * adminCatalogPageSize + 1} - {Math.min(adminCatalogPage * adminCatalogPageSize, adminFilteredCatalog.length)} จาก {adminFilteredCatalog.length} เกม
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setAdminCatalogPage(1)}
+                      disabled={adminCatalogPage === 1}
+                      className="px-2.5 h-8 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-xs font-bold cursor-pointer"
+                    >
+                      หน้าแรก
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAdminCatalogPage(prev => Math.max(prev - 1, 1))}
+                      disabled={adminCatalogPage === 1}
+                      className="px-2.5 h-8 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-xs font-bold flex items-center justify-center cursor-pointer"
+                    >
+                      ‹ ย้อนกลับ
+                    </button>
+                    
+                    {/* Render page numbers */}
+                    {Array.from({ length: adminCatalogTotalPages }, (_, i) => i + 1)
+                      .filter(p => p === 1 || p === adminCatalogTotalPages || Math.abs(p - adminCatalogPage) <= 1)
+                      .map((p, idx, arr) => {
+                        const showEllipsisBefore = idx > 0 && p - arr[idx - 1] > 1;
+                        return (
+                          <Fragment key={p}>
+                            {showEllipsisBefore && <span className="text-slate-655 text-xs px-1 select-none">...</span>}
+                            <button
+                              type="button"
+                              onClick={() => setAdminCatalogPage(p)}
+                              className={`w-8 h-8 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                adminCatalogPage === p
+                                  ? 'bg-blue-600 text-white font-extrabold shadow-lg shadow-blue-500/20'
+                                  : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200'
+                              }`}
+                            >
+                              {p}
+                            </button>
+                          </Fragment>
+                        );
+                      })}
+
+                    <button
+                      type="button"
+                      onClick={() => setAdminCatalogPage(prev => Math.min(prev + 1, adminCatalogTotalPages))}
+                      disabled={adminCatalogPage === adminCatalogTotalPages}
+                      className="px-2.5 h-8 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-xs font-bold flex items-center justify-center cursor-pointer"
+                    >
+                      ถัดไป ›
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAdminCatalogPage(adminCatalogTotalPages)}
+                      disabled={adminCatalogPage === adminCatalogTotalPages}
+                      className="px-2.5 h-8 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-xs font-bold cursor-pointer"
+                    >
+                      หน้าสุดท้าย
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Tag Management Panel */}

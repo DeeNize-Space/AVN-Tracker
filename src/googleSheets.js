@@ -130,6 +130,11 @@ export async function deleteLibraryItem(email, gameId) {
   return await apiCall('deleteLibraryItem', { email, gameId });
 }
 
+export async function getAllUserLibraries() {
+  const res = await apiCall('getAllLibraries', {}, 'GET');
+  return res.data || [];
+}
+
 // Catalog (Official Games) Management
 export async function getOfficialGames() {
   const res = await apiCall('getOfficialGames', {}, 'GET');
