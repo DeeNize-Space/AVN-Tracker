@@ -938,9 +938,9 @@ export default function App() {
         
         if (today > expiry) {
           setTimeout(() => {
-            setUserRoles(prev => ({ ...prev, [currentUser]: 'free' }));
+            setUserRoles(prev => ({ ...prev, [currentUser]: 'user' }));
             if (isFirebaseEnabled) {
-              updateUserRole(currentUser, 'free')
+              updateUserRole(currentUser, 'user')
                 .catch(err => console.error('Error auto-downgrading expired premium user:', err));
             }
           }, 0);
@@ -948,7 +948,7 @@ export default function App() {
           const parts = sub.expiryDate.split('-');
           const displayDate = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : sub.expiryDate;
           setTimeout(() => {
-            alert(`⚠️ สมาชิก Premium ของคุณหมดอายุแล้วเมื่อวันที่ ${displayDate} ระบบได้ปรับบทบาทเป็น Free เเล้ว`);
+            alert(`⚠️ สมาชิก Premium ของคุณหมดอายุแล้วเมื่อวันที่ ${displayDate} ระบบได้ปรับบทบาทเป็น user ธรรมดาเเล้ว`);
           }, 0);
         }
       }
@@ -1506,7 +1506,7 @@ export default function App() {
 
     if (isFirebaseEnabled) {
       try {
-        await registerUser(email, '123456');
+        await registerUser(email.split('@')[0], email, '123456');
       } catch (err) {
         alert(`❌ ไม่สามารถเพิ่มผู้ใช้ลงฐานข้อมูลได้: ${err.message}`);
         return;
@@ -1515,7 +1515,7 @@ export default function App() {
 
     setUserRoles((prev) => ({
       ...prev,
-      [email]: 'free'
+      [email]: 'user'
     }));
 
     setUserPremiumDates((prev) => ({
