@@ -4768,7 +4768,7 @@ export default function App() {
                         {screenshotsList.length > 1 && (
                           <div className="flex gap-2 overflow-x-auto py-1 scrollbar-thin w-full max-w-full min-w-0">
                             {(() => {
-                              const maxThumbnails = 5;
+                              const maxThumbnails = 3;
                               const hasMore = screenshotsList.length > maxThumbnails;
                               const visibleList = (!showAllScreenshots && hasMore) 
                                 ? screenshotsList.slice(0, maxThumbnails) 
