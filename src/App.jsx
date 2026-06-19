@@ -4819,11 +4819,11 @@ export default function App() {
                 </div>
 
                 {/* Action footer */}
-                <div className="mt-4 pt-4 pb-2 pr-2 border-t border-slate-900 flex flex-col sm:flex-row justify-between gap-3">
+                <div className="mt-4 pt-4 pb-2 border-t border-slate-900 flex flex-col gap-2.5">
                   {!isGuest && (
                     <button
                       onClick={() => openReportGame(selectedGameDetail)}
-                      className="bg-slate-900 hover:bg-slate-850 text-amber-500 font-bold border border-slate-800 px-4 h-10 rounded-xl flex items-center justify-center gap-1.5 text-xs transition-colors cursor-pointer w-full sm:w-auto shrink-0"
+                      className="bg-slate-900 hover:bg-slate-850 text-amber-500 font-bold border border-slate-800 px-4 h-10 rounded-xl flex items-center justify-center gap-1.5 text-xs transition-colors cursor-pointer w-full shrink-0"
                     >
                       🚩 รายงานความไม่ถูกต้อง
                     </button>
@@ -4831,7 +4831,7 @@ export default function App() {
                   
                   <button
                     onClick={() => setSelectedGameDetail(null)}
-                    className="bg-slate-900 hover:bg-slate-850 text-slate-300 border border-slate-850 px-5 h-10 rounded-xl font-bold text-xs cursor-pointer sm:ml-auto w-full sm:w-auto flex items-center justify-center shrink-0"
+                    className="bg-slate-900 hover:bg-slate-850 text-slate-300 border border-slate-850 px-5 h-10 rounded-xl font-bold text-xs cursor-pointer w-full flex items-center justify-center shrink-0"
                   >
                     ปิดหน้าต่าง
                   </button>
