@@ -1305,9 +1305,9 @@ export default function App() {
       return;
     }
 
-    if (subscriptionRole === 'free' && currentUser !== 'Admin' && currentLib.length >= 7) {
+    if (subscriptionRole === 'free' && currentUser !== 'Admin' && currentLib.length >= 5) {
       setIsUpsellOpen(true);
-      setToastMessage('คลังเกมฟรีจำกัดที่ 7 เกม กรุณาสมัครพรีเมียมเพื่อขยายโควตา');
+      setToastMessage('คลังเกมฟรีจำกัดที่ 5 เกม กรุณาสมัครพรีเมียมเพื่อขยายโควตา');
       return;
     }
 
@@ -1534,8 +1534,8 @@ export default function App() {
   // Inline library row modifications
   const handleUpdateItemStatus = (gameId, newStatus) => {
     const currentLib = userLibraries[currentUser] || [];
-    if (subscriptionRole === 'free' && currentUser !== 'Admin' && currentLib.length > 7) {
-      setToastMessage('🔒 โควตาคลังเกมฟรีเกิน 7 เกม กรุณาสมัคร Premium เพื่อแก้ไขข้อมูล');
+    if (subscriptionRole === 'free' && currentUser !== 'Admin' && currentLib.length > 5) {
+      setToastMessage('🔒 โควตาคลังเกมฟรีเกิน 5 เกม กรุณาสมัคร Premium เพื่อแก้ไขข้อมูล');
       return;
     }
     setUserLibraries((prev) => {
@@ -1554,8 +1554,8 @@ export default function App() {
 
   const handleUpdateItemNotes = (gameId, newNotes) => {
     const currentLib = userLibraries[currentUser] || [];
-    if (subscriptionRole === 'free' && currentUser !== 'Admin' && currentLib.length > 7) {
-      setToastMessage('🔒 โควตาคลังเกมฟรีเกิน 7 เกม กรุณาสมัคร Premium เพื่อแก้ไขข้อมูล');
+    if (subscriptionRole === 'free' && currentUser !== 'Admin' && currentLib.length > 5) {
+      setToastMessage('🔒 โควตาคลังเกมฟรีเกิน 5 เกม กรุณาสมัคร Premium เพื่อแก้ไขข้อมูล');
       return;
     }
     setUserLibraries((prev) => {
@@ -1573,8 +1573,8 @@ export default function App() {
 
   const handleUpdateItemPlayTime = (gameId, newPlayTime) => {
     const currentLib = userLibraries[currentUser] || [];
-    if (subscriptionRole === 'free' && currentUser !== 'Admin' && currentLib.length > 7) {
-      setToastMessage('🔒 โควตาคลังเกมฟรีเกิน 7 เกม กรุณาสมัคร Premium เพื่อแก้ไขข้อมูล');
+    if (subscriptionRole === 'free' && currentUser !== 'Admin' && currentLib.length > 5) {
+      setToastMessage('🔒 โควตาคลังเกมฟรีเกิน 5 เกม กรุณาสมัคร Premium เพื่อแก้ไขข้อมูล');
       return;
     }
     const hours = parseFloat(newPlayTime) || 0;
@@ -1593,8 +1593,8 @@ export default function App() {
 
   const handleUpdateItemRating = (gameId, newRating) => {
     const currentLib = userLibraries[currentUser] || [];
-    if (subscriptionRole === 'free' && currentUser !== 'Admin' && currentLib.length > 7) {
-      setToastMessage('🔒 โควตาคลังเกมฟรีเกิน 7 เกม กรุณาสมัคร Premium เพื่อแก้ไขข้อมูล');
+    if (subscriptionRole === 'free' && currentUser !== 'Admin' && currentLib.length > 5) {
+      setToastMessage('🔒 โควตาคลังเกมฟรีเกิน 5 เกม กรุณาสมัคร Premium เพื่อแก้ไขข้อมูล');
       return;
     }
     setUserLibraries((prev) => {
@@ -1661,8 +1661,8 @@ export default function App() {
     e.preventDefault();
     if (!editingLocalItem) return;
 
-    if (subscriptionRole === 'free' && currentUser !== 'Admin' && currentLibraryList.length > 7) {
-      alert('🔒 สมาชิก Premium ของคุณหมดอายุแล้วและคลังมีเกมมากกว่า 7 เกม ไม่สามารถแก้ไข/บันทึกประวัติการเล่นได้จนกว่าจะสมัคร Premium อีกครั้ง');
+    if (subscriptionRole === 'free' && currentUser !== 'Admin' && currentLibraryList.length > 5) {
+      alert('🔒 สมาชิก Premium ของคุณหมดอายุแล้วและคลังมีเกมมากกว่า 5 เกม ไม่สามารถแก้ไข/บันทึกประวัติการเล่นได้จนกว่าจะสมัคร Premium อีกครั้ง');
       setEditingLocalItem(null);
       return;
     }
@@ -2463,9 +2463,9 @@ export default function App() {
                                       return;
                                     }
 
-                                    if (subscriptionRole === 'free' && currentUser !== 'Admin' && parsed.library.length > 7) {
+                                    if (subscriptionRole === 'free' && currentUser !== 'Admin' && parsed.library.length > 5) {
                                       setIsUpsellOpen(true);
-                                      setToastMessage('❌ โควตาคลังฟรีจำกัด 7 เกม ไม่สามารถนำเข้าข้อมูลที่มีเกมมากกว่า 7 เกมได้');
+                                      setToastMessage('❌ โควตาคลังฟรีจำกัด 5 เกม ไม่สามารถนำเข้าข้อมูลที่มีเกมมากกว่า 5 เกมได้');
                                       setIsUserDropdownOpen(false);
                                       return;
                                     }
@@ -6249,7 +6249,7 @@ export default function App() {
                 <ul className="text-[11px] text-slate-300 flex flex-col gap-2 leading-relaxed">
                   <li className="flex items-start gap-2">
                     <span className="text-amber-500 font-bold">1.</span>
-                    <span>สามารถบันทึกสถานะของเกมได้ไม่จำกัด (จากปกติฟรีได้แค่ 7 เกม)</span>
+                    <span>สามารถบันทึกสถานะของเกมได้ไม่จำกัด (จากปกติฟรีได้แค่ 5 เกม)</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-amber-500 font-bold">2.</span>
