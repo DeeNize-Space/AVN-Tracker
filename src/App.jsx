@@ -1007,8 +1007,25 @@ export default function App() {
   }, [officialGames]);
 
   const currentLibraryList = useMemo(() => {
-    return userLibraries[currentUser] || [];
-  }, [userLibraries, currentUser]);
+    const list = userLibraries[currentUser] || [];
+    return list.map((item) => {
+      const origGame = officialGames.find((g) => g.id === item.gameId);
+      return {
+        ...item,
+        title: origGame ? origGame.title : (item.title || 'ไม่พบชื่อเกม'),
+        developer: origGame ? origGame.developer : (item.developer || 'ไม่พบผู้พัฒนา'),
+        version: origGame ? origGame.version : (item.version || 'ไม่ระบุ'),
+        coverUrl: origGame ? origGame.coverUrl : (item.coverUrl || ''),
+        overview: origGame ? origGame.overview : (item.overview || ''),
+        tags: origGame ? origGame.tags : (item.tags || []),
+        patreonUrl: origGame ? origGame.patreonUrl : (item.patreonUrl || ''),
+        buyUrl: origGame ? origGame.buyUrl : (item.buyUrl || ''),
+        socialUrl: origGame ? origGame.socialUrl : (item.socialUrl || ''),
+        screenshots: origGame ? origGame.screenshots : (item.screenshots || []),
+        isCustom: false
+      };
+    });
+  }, [userLibraries, currentUser, officialGames]);
 
   const allUniqueLibraryTags = useMemo(() => {
     const tags = new Set();
