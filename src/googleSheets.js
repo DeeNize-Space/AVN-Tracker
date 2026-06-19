@@ -1,7 +1,7 @@
 // Google Sheets API client for AVN Game Tracker
 
 export function getApiUrl() {
-  return import.meta.env.VITE_GOOGLE_SHEETS_API_URL || localStorage.getItem('AVN_GS_API_URL') || 'https://script.google.com/macros/s/AKfycbxB-2jjr9I0GDUk50ROdu_eG6MSpP8dMxSAeg9ZsWXFGvDcK3XsEIxHlnBgBAOIs6myLw/exec';
+  return localStorage.getItem('AVN_GS_API_URL') || import.meta.env.VITE_GOOGLE_SHEETS_API_URL || 'https://script.google.com/macros/s/AKfycbxB-2jjr9I0GDUk50ROdu_eG6MSpP8dMxSAeg9ZsWXFGvDcK3XsEIxHlnBgBAOIs6myLw/exec';
 }
 
 export function setApiUrl(url) {
