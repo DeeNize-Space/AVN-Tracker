@@ -191,6 +191,25 @@ function getUserGmail(username) {
 }
 
 export default function App() {
+  // PWA (Install app) State and Handlers
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+
+  useEffect(() => {
+    const handleBeforeInstall = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+  }, []);
+
+  const handleInstallPWA = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log(`User response to install: ${outcome}`);
+    setDeferredPrompt(null);
+  };
   // --- CORE STATE ---
   const [currentUser, setCurrentUser] = useState(() => {
     return localStorage.getItem('avn_current_user_v7') || 'Guest';
@@ -2207,6 +2226,17 @@ export default function App() {
 
           {/* Right Controls */}
           <div className="flex items-center gap-3">
+            
+            {/* PWA Install Button */}
+            {deferredPrompt && (
+              <button
+                onClick={handleInstallPWA}
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-[11px] font-black h-10 px-3.5 rounded-xl cursor-pointer shadow-md transition-all shrink-0 flex items-center gap-1.5 animate-pulse"
+                title="ติดตั้งแอปบนเครื่องโทรศัพท์หรือคอมพิวเตอร์"
+              >
+                📥 ติดตั้งแอป
+              </button>
+            )}
             
             {/* Notification Bell */}
             {currentUser === 'Admin' && (

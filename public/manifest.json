@@ -1,0 +1,18 @@
+{
+  "name": "AVN Game Tracker",
+  "short_name": "AVN.LOG",
+  "description": "ระบบบันทึกสถานะและชั่วโมงการเล่นเกมแนว AVN",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#020617",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
