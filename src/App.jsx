@@ -8,7 +8,6 @@ import {
   loginUser,
   requestPasswordReset,
   resetPassword,
-  verifyRegisterOtp,
   getUserLibrary,
   updateLibraryItem,
   deleteLibraryItem,
@@ -254,7 +253,6 @@ export default function App() {
   // Auth Form Fields
   const [authUsername, setAuthUsername] = useState('');
   const [authPassword, setAuthPassword] = useState('');
-  const [authConfirmPassword, setAuthConfirmPassword] = useState('');
   const [authEmail, setAuthEmail] = useState('');
   
   const [authOtp, setAuthOtp] = useState('');
@@ -498,49 +496,23 @@ export default function App() {
 
   const handleRegister = async (e) => {
     if (e) e.preventDefault();
-    if (!authUsername || !authEmail || !authPassword || !authConfirmPassword) {
+    if (!authUsername || !authEmail || !authPassword) {
       alert('กรุณากรอกข้อมูลให้ครบถ้วน');
       return;
     }
-    if (authPassword !== authConfirmPassword) {
-      alert('รหัสผ่านและการยืนยันรหัสผ่านไม่ตรงกัน');
-      return;
-    }
     setIsLoggingIn(true);
     try {
-      const res = await registerUser(authUsername, authEmail, authPassword);
-      alert(res.message || 'ส่งรหัส OTP ไปยังอีเมลของท่านแล้ว โปรดตรวจสอบกล่องข้อความ');
-      setAuthOtp('');
-      setAuthMode('verify_register_otp');
-    } catch (err) {
-      alert('ข้อผิดพลาดในการสมัครสมาชิก: ' + err.message);
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
-
-  const handleVerifyRegisterOtp = async (e) => {
-    if (e) e.preventDefault();
-    if (!authOtp) {
-      alert('กรุณากรอกรหัส OTP 6 หลัก');
-      return;
-    }
-    setIsLoggingIn(true);
-    try {
-      const user = await verifyRegisterOtp(authEmail, authOtp);
+      const user = await registerUser(authUsername, authEmail, authPassword);
       setCurrentUser(user.email);
       setCurrentUsername(user.username);
       setUserRoles((prev) => ({ ...prev, [user.email]: user.role }));
-      setToastMessage(`สมัครสมาชิกและยืนยันตัวตนสำเร็จ! ยินดีต้อนรับคุณ ${user.username}`);
+      setToastMessage(`สมัครสมาชิกสำเร็จ! ยินดีต้อนรับคุณ ${user.username}`);
       setIsAuthModalOpen(false);
       setAuthUsername('');
       setAuthEmail('');
       setAuthPassword('');
-      setAuthConfirmPassword('');
-      setAuthOtp('');
-      setAuthMode('login');
     } catch (err) {
-      alert('การยืนยันรหัส OTP ล้มเหลว: ' + err.message);
+      alert('ข้อผิดพลาดในการสมัครสมาชิก: ' + err.message);
     } finally {
       setIsLoggingIn(false);
     }
@@ -6024,8 +5996,6 @@ export default function App() {
                 setAuthUsername('');
                 setAuthEmail('');
                 setAuthPassword('');
-                setAuthConfirmPassword('');
-                setAuthOtp('');
               }}
               className="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-850 hover:bg-slate-800 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer text-xs"
               title="ปิด"
@@ -6037,21 +6007,19 @@ export default function App() {
             <div className="flex flex-col items-center text-center pb-2 border-b border-slate-850">
               <span className="text-3xl mb-1">
                 {authMode === 'login' && '🔑'}
-                {(authMode === 'register' || authMode === 'verify_register_otp') && '📝'}
+                {authMode === 'register' && '📝'}
                 {authMode === 'forgot_password' && '📧'}
                 {authMode === 'reset_password' && '🔄'}
               </span>
               <h2 className="text-lg font-extrabold text-slate-100">
                 {authMode === 'login' && 'เข้าสู่ระบบ'}
                 {authMode === 'register' && 'สมัครสมาชิกใหม่'}
-                {authMode === 'verify_register_otp' && 'ยืนยันรหัสผ่าน OTP'}
                 {authMode === 'forgot_password' && 'ลืมรหัสผ่าน'}
                 {authMode === 'reset_password' && 'ตั้งรหัสผ่านใหม่'}
               </h2>
               <p className="text-xs text-slate-400 mt-1">
                 {authMode === 'login' && `กรุณากรอกบัญชีของคุณสำหรับ ${webTitle}`}
                 {authMode === 'register' && 'สร้างบัญชีใหม่เพื่อเปิดใช้งานคลังส่วนตัว'}
-                {authMode === 'verify_register_otp' && 'กรอกรหัส OTP 6 หลักที่ได้รับในอีเมลเพื่อสมัครสมาชิกให้สำเร็จ'}
                 {authMode === 'forgot_password' && 'กรอกอีเมลที่สมัครไว้เพื่อรับรหัส OTP สำหรับรีเซ็ตรหัสผ่าน'}
                 {authMode === 'reset_password' && 'กรอกรหัส OTP ที่ได้รับทางอีเมลและกำหนดรหัสผ่านใหม่'}
               </p>
@@ -6103,7 +6071,6 @@ export default function App() {
                 onSubmit={
                   authMode === 'login' ? handleLogin :
                   authMode === 'register' ? handleRegister :
-                  authMode === 'verify_register_otp' ? handleVerifyRegisterOtp :
                   authMode === 'forgot_password' ? handleForgotPassword :
                   handleResetPassword
                 }
@@ -6124,24 +6091,23 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Email Input (Only register/verify_register_otp/forgot_password) */}
-                {(authMode === 'register' || authMode === 'verify_register_otp' || authMode === 'forgot_password') && (
+                {/* Email Input (Only register/forgot_password) */}
+                {(authMode === 'register' || authMode === 'forgot_password') && (
                   <div>
                     <label className="text-xs text-slate-400 font-bold block mb-1 text-left">อีเมล (Email)</label>
                     <input
                       type="email"
                       required
-                      disabled={authMode === 'verify_register_otp'}
                       value={authEmail}
                       onChange={(e) => setAuthEmail(e.target.value)}
-                      className="w-full h-10 px-3.5 text-xs rounded-xl border border-slate-800 bg-slate-955 text-slate-200 focus:outline-none focus:border-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                      className="w-full h-10 px-3.5 text-xs rounded-xl border border-slate-800 bg-slate-955 text-slate-200 focus:outline-none focus:border-blue-500"
                       placeholder="พิมพ์อีเมล เช่น example@gmail.com"
                     />
                   </div>
                 )}
 
-                {/* OTP Input (Only reset_password & verify_register_otp) */}
-                {(authMode === 'reset_password' || authMode === 'verify_register_otp') && (
+                {/* OTP Input (Only reset_password) */}
+                {authMode === 'reset_password' && (
                   <div>
                     <label className="text-xs text-slate-400 font-bold block mb-1 text-left">รหัส OTP 6 หลัก</label>
                     <input
@@ -6173,21 +6139,6 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Confirm Password Input (Only register) */}
-                {authMode === 'register' && (
-                  <div>
-                    <label className="text-xs text-slate-400 font-bold block mb-1 text-left">ยืนยันรหัสผ่าน (Confirm Password)</label>
-                    <input
-                      type="password"
-                      required
-                      value={authConfirmPassword}
-                      onChange={(e) => setAuthConfirmPassword(e.target.value)}
-                      className="w-full h-10 px-3.5 text-xs rounded-xl border border-slate-800 bg-slate-955 text-slate-200 focus:outline-none focus:border-blue-500"
-                      placeholder="พิมพ์รหัสผ่านอีกครั้ง..."
-                    />
-                  </div>
-                )}
-
                 {/* Submit button */}
                 <button
                   type="submit"
@@ -6195,8 +6146,7 @@ export default function App() {
                   className={`w-full h-11 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold text-xs rounded-xl transition-all shadow-md focus:outline-none border border-white/10 ${!isFirebaseEnabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                 >
                   {authMode === 'login' && 'เข้าสู่ระบบ'}
-                  {authMode === 'register' && 'ขอรหัส OTP'}
-                  {authMode === 'verify_register_otp' && 'ยืนยันรหัส OTP และสมัครสมาชิก'}
+                  {authMode === 'register' && 'สมัครสมาชิก'}
                   {authMode === 'forgot_password' && 'ขอรหัส OTP'}
                   {authMode === 'reset_password' && 'ยืนยันตั้งรหัสผ่านใหม่'}
                 </button>
@@ -6222,7 +6172,7 @@ export default function App() {
                     </>
                   )}
 
-                  {(authMode === 'register' || authMode === 'verify_register_otp') && (
+                  {authMode === 'register' && (
                     <button
                       type="button"
                       onClick={() => setAuthMode('login')}

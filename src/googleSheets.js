@@ -66,16 +66,11 @@ async function apiCall(action, data = {}, method = 'POST') {
 // User Authentication
 export async function registerUser(username, email, password) {
   const res = await apiCall('register', { username, email, password });
-  return res; // { status, message }
+  return res.data; // { username, email, role, signupDate, expiryDate }
 }
 
 export async function loginUser(username, password) {
   const res = await apiCall('login', { username, password });
-  return res.data; // { username, email, role, signupDate, expiryDate }
-}
-
-export async function verifyRegisterOtp(email, otp) {
-  const res = await apiCall('verifyOtp', { email, otp });
   return res.data; // { username, email, role, signupDate, expiryDate }
 }
 
