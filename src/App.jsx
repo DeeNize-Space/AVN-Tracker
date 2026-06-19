@@ -4722,7 +4722,7 @@ export default function App() {
                     return (
                       <div className="flex flex-col gap-2">
                         {/* Large Image View */}
-                        <div className="aspect-video w-full rounded-2xl overflow-hidden border border-slate-800 relative group bg-slate-950/40">
+                        <div className="aspect-video w-full max-h-[240px] sm:max-h-[300px] rounded-2xl overflow-hidden border border-slate-800 relative group bg-slate-950/40">
                           <img
                             src={currentImg}
                             alt="screenshot large"
@@ -4819,11 +4819,11 @@ export default function App() {
                 </div>
 
                 {/* Action footer */}
-                <div className="mt-4 pt-4 border-t border-slate-900 flex justify-between gap-2">
+                <div className="mt-4 pt-4 pb-6 pr-4 border-t border-slate-900 flex justify-between gap-2">
                   {!isGuest && (
                     <button
                       onClick={() => openReportGame(selectedGameDetail)}
-                      className="bg-slate-900 hover:bg-slate-850 text-amber-500 font-bold border border-slate-800 px-4 h-10 rounded-xl flex items-center gap-1.5 text-xs transition-colors cursor-pointer"
+                      className="bg-slate-900 hover:bg-slate-850 text-amber-500 font-bold border border-slate-800 px-4 h-10 rounded-xl flex items-center gap-1.5 text-xs transition-colors cursor-pointer shrink-0"
                     >
                       🚩 รายงานความไม่ถูกต้อง
                     </button>
@@ -4831,7 +4831,7 @@ export default function App() {
                   
                   <button
                     onClick={() => setSelectedGameDetail(null)}
-                    className="bg-slate-900 hover:bg-slate-850 text-slate-300 border border-slate-850 px-5 h-10 rounded-xl font-bold text-xs cursor-pointer ml-auto"
+                    className="bg-slate-900 hover:bg-slate-850 text-slate-300 border border-slate-850 px-5 h-10 rounded-xl font-bold text-xs cursor-pointer ml-auto shrink-0"
                   >
                     ปิดหน้าต่าง
                   </button>
