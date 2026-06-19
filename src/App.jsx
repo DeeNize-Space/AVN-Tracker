@@ -4568,7 +4568,7 @@ export default function App() {
             </button>
 
             {/* Content layout */}
-            <div className="flex flex-col md:flex-row gap-6">
+            <div className="flex flex-col md:flex-row gap-6 w-full max-w-full min-w-0">
               {/* Left Column: Cover & Links */}
               <div className="w-full md:w-56 shrink-0 flex flex-col gap-4">
                 <div className="aspect-[3/4] w-full rounded-2xl overflow-hidden custom-placeholder border border-white/5 shadow-lg relative">
@@ -4620,7 +4620,7 @@ export default function App() {
               </div>
 
               {/* Right Column: Information details */}
-              <div className="flex-1 flex flex-col gap-4">
+              <div className="flex-1 flex flex-col gap-4 min-w-0">
                 
                 {/* Status Dropdown next/before Game Title */}
                 <div className="flex flex-col gap-2">
