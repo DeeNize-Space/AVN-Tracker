@@ -1282,17 +1282,7 @@ export default function App() {
       rating: 0,
       notes: '',
       lastUpdated: getIsoTimestamp(),
-      isCustom: false,
-      title: game.title,
-      developer: game.developer,
-      version: game.version,
-      coverUrl: game.coverUrl,
-      overview: game.overview,
-      tags: game.tags,
-      patreonUrl: game.patreonUrl || '',
-      buyUrl: game.buyUrl || '',
-      socialUrl: game.socialUrl || '',
-      screenshots: game.screenshots || []
+      isCustom: false
     };
 
     setUserLibraries({
@@ -1643,27 +1633,26 @@ export default function App() {
 
     const updatedLib = currentLibraryList.map((item) => {
       if (item.gameId === editingLocalItem.gameId) {
-        const isCustom = item.isCustom;
         return {
-          ...item,
+          gameId: item.gameId,
           status: localStatus,
           playTime: parseFloat(localPlayTime) || 0,
-          rating: isCustom ? localRating : item.rating, // rating locked for official in modal
+          rating: parseFloat(localRating) || 0,
           notes: localNotes,
-          lastUpdated: getIsoTimestamp(),
-          title: isCustom ? localTitle : item.title,
-          developer: isCustom ? localDeveloper : item.developer,
-          version: isCustom ? localVersion : item.version,
-          coverUrl: isCustom ? localCoverUrl : item.coverUrl,
-          overview: isCustom ? localOverview : item.overview,
-          tags: isCustom ? localTags.split(',').map((t) => t.trim()).filter(Boolean) : item.tags,
-          patreonUrl: isCustom ? localPatreonUrl : item.patreonUrl,
-          buyUrl: isCustom ? localBuyUrl : item.buyUrl,
-          socialUrl: isCustom ? localSocialUrl : item.socialUrl,
-          screenshots: isCustom ? localScreenshots : item.screenshots
+          isCustom: false,
+          lastUpdated: getIsoTimestamp()
         };
       }
-      return item;
+      // Sanitize other items to keep library clean
+      return {
+        gameId: item.gameId,
+        status: item.status,
+        playTime: parseFloat(item.playTime) || 0,
+        rating: parseFloat(item.rating) || 0,
+        notes: item.notes || '',
+        isCustom: false,
+        lastUpdated: item.lastUpdated || getIsoTimestamp()
+      };
     });
 
     setUserLibraries({
@@ -2203,7 +2192,8 @@ export default function App() {
           <div className="flex items-center gap-3">
             
             {/* Notification Bell */}
-            <div className="relative bell-btn-container">
+            {currentUser === 'Admin' && (
+              <div className="relative bell-btn-container">
               <button
                 onClick={() => setShowNotifications(!showNotifications)}
                 className="w-11 h-11 rounded-xl border border-slate-800 hover:border-slate-700 bg-slate-900/40 flex items-center justify-center relative transition-all cursor-pointer"
@@ -2315,6 +2305,7 @@ export default function App() {
                 </div>
               )}
             </div>
+            )}
 
             {/* Google Sign-in or User Dropdown Profile */}
             <div className="flex items-center">
@@ -4550,7 +4541,7 @@ export default function App() {
       {/* 1. GAME DETAIL MODAL */}
       {selectedGameDetail && (
         <div className="modal-overlay" onClick={() => setSelectedGameDetail(null)}>
-          <div className="modal-content w-full max-w-2xl bg-slate-950/95 border border-slate-850 rounded-3xl p-6 relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content w-full max-w-2xl bg-slate-950/95 border border-slate-850 rounded-3xl p-6 relative shadow-2xl" style={{ overflowX: "hidden" }} onClick={(e) => e.stopPropagation()}>
             
             <button
               onClick={() => setSelectedGameDetail(null)}
@@ -4692,7 +4683,7 @@ export default function App() {
                 </div>
 
                 {/* 3. SCREENSHOT SECTION (Carousel / Slider) */}
-                <div>
+                <div className="w-full max-w-full min-w-0">
                   <h4 className="text-xs font-bold text-slate-400 mb-2">ภาพตัวอย่างเกม (Screenshots):</h4>
                   {(() => {
                     const screenshotsList = (selectedGameDetail.screenshots && selectedGameDetail.screenshots.length > 0)
@@ -4758,7 +4749,7 @@ export default function App() {
 
                         {/* Thumbnail Navigation */}
                         {screenshotsList.length > 1 && (
-                          <div className="flex gap-2 overflow-x-auto py-1 scrollbar-thin">
+                          <div className="flex gap-2 overflow-x-auto py-1 scrollbar-thin w-full max-w-full min-w-0">
                             {(() => {
                               const maxThumbnails = 5;
                               const hasMore = screenshotsList.length > maxThumbnails;
@@ -4858,7 +4849,7 @@ export default function App() {
       {/* 3. EDIT LOCAL GAME MODAL */}
       {editingLocalItem && (
         <div className="modal-overlay" onClick={() => setEditingLocalItem(null)}>
-          <div className="modal-content w-full max-w-2xl bg-slate-950/95 border border-slate-855 rounded-3xl p-6 relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content w-full max-w-2xl bg-slate-955/95 border border-slate-855 rounded-3xl p-6 relative shadow-2xl" style={{ overflowX: "hidden" }} onClick={(e) => e.stopPropagation()}>
             
             <button
               onClick={() => setEditingLocalItem(null)}
@@ -4945,13 +4936,12 @@ export default function App() {
                 {/* Rating component locked / editable */}
                 <div>
                   <label className="text-xs text-slate-400 font-bold block mb-1">
-                    {!editingLocalItem.isCustom && <span className="mr-1">🔒</span>}
                     คะแนนความพึงพอใจ
                   </label>
                   <div className="h-11 flex items-center">
                     {renderReviewStars(
                       localRating,
-                      editingLocalItem.isCustom, // interactive only if custom
+                      true, // interactive always
                       (newStars) => setLocalRating(newStars)
                     )}
                   </div>
@@ -5171,7 +5161,7 @@ export default function App() {
       {/* 5. USER REPORT MODAL */}
       {isReportingGame && (
         <div className="modal-overlay" onClick={() => setIsReportingGame(null)}>
-          <div className="modal-content w-full max-w-xl bg-slate-950/95 border border-slate-855 rounded-3xl p-6 relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content w-full max-w-xl bg-slate-950/95 border border-slate-855 rounded-3xl p-6 relative shadow-2xl" style={{ overflowX: "hidden" }} onClick={(e) => e.stopPropagation()}>
             
             <button
               onClick={() => setIsReportingGame(null)}
@@ -5356,7 +5346,7 @@ export default function App() {
       {/* 6. SUGGEST NEW GAME MODAL (FOR REGULAR USER) */}
       {isSuggestingNew && (
         <div className="modal-overlay" onClick={() => setIsSuggestingNew(false)}>
-          <div className="modal-content w-full max-w-xl bg-slate-950/95 border border-slate-855 rounded-3xl p-6 relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content w-full max-w-xl bg-slate-950/95 border border-slate-855 rounded-3xl p-6 relative shadow-2xl" style={{ overflowX: "hidden" }} onClick={(e) => e.stopPropagation()}>
             
             <button
               onClick={() => setIsSuggestingNew(false)}
@@ -5464,7 +5454,7 @@ export default function App() {
       {/* 7. ADMIN ADD GAME MODAL (POPUP) */}
       {adminAddGameOpen && (
         <div className="modal-overlay" onClick={() => setAdminAddGameOpen(false)}>
-          <div className="modal-content w-full max-w-2xl bg-slate-950/95 border border-slate-855 rounded-3xl p-6 relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content w-full max-w-2xl bg-slate-955/95 border border-slate-855 rounded-3xl p-6 relative shadow-2xl" style={{ overflowX: "hidden" }} onClick={(e) => e.stopPropagation()}>
             
             <button
               onClick={() => setAdminAddGameOpen(false)}
@@ -5702,7 +5692,7 @@ export default function App() {
       {/* 8. ADMIN EDIT GAME MODAL (POPUP) */}
       {adminEditGameOpen && (
         <div className="modal-overlay" onClick={() => setAdminEditGameOpen(false)}>
-          <div className="modal-content w-full max-w-2xl bg-slate-950/95 border border-slate-855 rounded-3xl p-6 relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content w-full max-w-2xl bg-slate-955/95 border border-slate-855 rounded-3xl p-6 relative shadow-2xl" style={{ overflowX: "hidden" }} onClick={(e) => e.stopPropagation()}>
             
             <button
               onClick={() => setAdminEditGameOpen(false)}

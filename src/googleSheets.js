@@ -102,28 +102,27 @@ export async function getUserLibrary(email) {
   const res = await apiCall('getUserLibrary', { email });
   const list = res.data || [];
   return list.map(g => ({
-    email: g.email || "",
     gameId: g.gameId || g.gameid || "",
     status: g.status || "วางแผนจะเล่น",
     notes: g.notes || "",
     playTime: parseFloat(g.playTime) || parseFloat(g.playtime) || 0,
-    rating: parseFloat(g.rating) || 5.0,
-    isCustom: g.isCustom === true || g.iscustom === "true" || g.iscustom === true,
-    title: g.title || "",
-    developer: g.developer || "",
-    version: g.version || "",
-    coverUrl: g.coverUrl || g.coverurl || "",
-    overview: g.overview || "",
-    patreonUrl: g.patreonUrl || g.patreonurl || "",
-    buyUrl: g.buyUrl || g.buyurl || "",
-    socialUrl: g.socialUrl || g.socialurl || "",
-    screenshots: Array.isArray(g.screenshots) ? g.screenshots : (g.screenshots ? JSON.parse(g.screenshots) : []),
-    updatedAt: g.updatedAt || g.updatedat || ""
+    rating: parseFloat(g.rating) || 0,
+    isCustom: false,
+    lastUpdated: g.lastUpdated || g.updatedAt || g.updatedat || ""
   }));
 }
 
 export async function updateLibraryItem(email, item) {
-  return await apiCall('updateLibraryItem', { email, item });
+  const cleanItem = {
+    gameId: item.gameId || item.gameid || "",
+    status: item.status || "วางแผนจะเล่น",
+    notes: item.notes || "",
+    playTime: parseFloat(item.playTime) || parseFloat(item.playtime) || 0,
+    rating: parseFloat(item.rating) || 0,
+    isCustom: false,
+    lastUpdated: item.lastUpdated || item.updatedAt || item.updatedat || new Date().toISOString()
+  };
+  return await apiCall('updateLibraryItem', { email, item: cleanItem });
 }
 
 export async function deleteLibraryItem(email, gameId) {
