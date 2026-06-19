@@ -3153,6 +3153,18 @@ export default function App() {
         {/* ADMIN TAB */}
         {activeTab === 'admin' && isAdmin && (
           <div className="flex flex-col gap-6 animate-fade-in-up">
+            {/* API URL Diagnostic Banner */}
+            <div className="glass-panel p-4 rounded-2xl border border-blue-500/20 bg-blue-500/5 flex flex-col gap-1.5">
+              <h4 className="text-xs font-bold text-blue-400 flex items-center gap-1.5">
+                🔍 ลิงก์ API ที่กำลังใช้งานจริงในขณะนี้ (Active API URL):
+              </h4>
+              <p className="text-xs font-mono text-slate-300 break-all select-all bg-black/40 p-2.5 rounded-lg border border-slate-800">
+                {getApiUrl()}
+              </p>
+              <p className="text-[10px] text-slate-400">
+                *หากลิงก์ด้านบนไม่ตรงกับรุ่นที่คุณดีพลอยมาใหม่ ให้เลื่อนลงไปที่ "เชื่อมต่อระบบฐานข้อมูล Google Sheets" ด้านล่าง แล้วป้อนลิงก์ใหม่ จากนั้นกด "บันทึกและรีโหลดหน้าเว็บ"
+              </p>
+            </div>
             {!isFirebaseEnabled && (
               <div className="glass-panel p-5.5 rounded-3xl border border-amber-500/20 bg-amber-500/5 flex flex-col gap-3">
                 <h4 className="text-sm font-bold text-amber-400 flex items-center gap-1.5">
