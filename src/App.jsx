@@ -3867,6 +3867,37 @@ export default function App() {
                     </div>
                   )}
 
+                  <div>
+                    <label className="text-xs text-slate-400 font-bold block mb-1">หมายเลข PromptPay (เบอร์โทรศัพท์ หรือเลขบัตรประชาชน)</label>
+                    <input
+                      type="text"
+                      value={promptPayId}
+                      onChange={(e) => setPromptPayId(e.target.value)}
+                      className="glass-input w-full h-10 px-3 text-xs rounded-xl text-slate-200"
+                      placeholder="เช่น 0812345678"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-400 font-bold block mb-1">SlipOK API Key</label>
+                    <input
+                      type="text"
+                      value={slipOkApiKey}
+                      onChange={(e) => setSlipOkApiKey(e.target.value)}
+                      className="glass-input w-full h-10 px-3 text-xs rounded-xl text-slate-200"
+                      placeholder="พิมพ์ API Key ของ SlipOK..."
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-400 font-bold block mb-1">SlipOK Branch ID</label>
+                    <input
+                      type="text"
+                      value={slipOkBranchId}
+                      onChange={(e) => setSlipOkBranchId(e.target.value)}
+                      className="glass-input w-full h-10 px-3 text-xs rounded-xl text-slate-200"
+                      placeholder="พิมพ์ Branch ID ของ SlipOK..."
+                    />
+                  </div>
+
                 </div>
                 <button
                   type="button"
