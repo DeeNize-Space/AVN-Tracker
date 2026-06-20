@@ -714,7 +714,11 @@ export default function App() {
 
   // Sync Current User's Library from Supabase on user change
   useEffect(() => {
-    if (!isFirebaseEnabled || currentUser === 'Guest') return;
+    if (!isFirebaseEnabled) {
+      console.warn("Supabase is not enabled. Cannot sync library.");
+      return;
+    }
+    if (currentUser === 'Guest') return;
 
     const syncUserLibrary = async () => {
       try {
@@ -1253,6 +1257,11 @@ export default function App() {
       return;
     }
 
+    if (!isFirebaseEnabled) {
+      alert("⚠️ ไม่ได้เชื่อมต่อ Supabase! ข้อมูลจะบันทึกแค่ในเครื่องชั่วคราวเท่านั้น กรุณาตั้งค่า API Key หรือรันในเบราว์เซอร์หลักที่ตั้งค่าไว้");
+    }
+
+
     const newItem = {
       gameId: game.id,
       status: customStatus,
@@ -1379,6 +1388,9 @@ export default function App() {
 
   const handleAdminApproveTx = async (tx) => {
     const email = tx.email;
+    if (!isFirebaseEnabled) {
+      alert("⚠️ ไม่ได้เชื่อมต่อ Supabase! ข้อมูลจะบันทึกแค่ในเครื่องชั่วคราวเท่านั้น กรุณาตั้งค่า API Key หรือรันในเบราว์เซอร์หลักที่ตั้งค่าไว้");
+    }
     setUserRoles(prev => ({
       ...prev,
       [email]: 'premium'

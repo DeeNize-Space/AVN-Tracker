@@ -315,7 +315,10 @@ export async function updateLibraryItem(email, item) {
     .from('library')
     .upsert(payload, { onConflict: 'user_id,game_id' });
 
-  if (error) throw error;
+  if (error) {
+    alert(`Supabase Insert Error: ${error.message} \nDetails: ${JSON.stringify(error)}`);
+    throw error;
+  }
   return { status: 'success' };
 }
 
