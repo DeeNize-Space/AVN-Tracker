@@ -595,14 +595,14 @@ export default function App() {
 
 
 
-  // Mount Effect: Load Google Sheets Data
+  // Mount Effect: Load Supabase Data
   useEffect(() => {
     if (!isFirebaseEnabled) {
       Promise.resolve().then(() => setIsDbLoaded(true));
       return;
     }
 
-    const loadAllGoogleSheetsData = async () => {
+    const loadAllSupabaseData = async () => {
       try {
         // 1. Fetch official games
         const gamesList = await getOfficialGames();
@@ -667,12 +667,12 @@ export default function App() {
 
         setIsDbLoaded(true);
       } catch (err) {
-        console.error('Error loading Google Sheets data:', err);
+        console.error('Error loading Supabase data:', err);
         setIsDbLoaded(true);
       }
     };
 
-    loadAllGoogleSheetsData();
+    loadAllSupabaseData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -712,7 +712,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDbLoaded, activeTab, isAdmin, isFirebaseEnabled]);
 
-  // Sync Current User's Library from Google Sheets on user change
+  // Sync Current User's Library from Supabase on user change
   useEffect(() => {
     if (!isFirebaseEnabled || currentUser === 'Guest') return;
 
@@ -734,7 +734,7 @@ export default function App() {
             for (const item of currentLocalLib) {
               await updateLibraryItem(currentUser, item);
             }
-            console.log('Migrated local library to Google Sheets for', currentUser);
+            console.log('Migrated local library to Supabase for', currentUser);
           }
         }
       } catch (err) {
@@ -801,7 +801,7 @@ export default function App() {
       const prevItem = prevLib.find(p => p.gameId === item.gameId);
       if (!prevItem || JSON.stringify(prevItem) !== JSON.stringify(item)) {
         updateLibraryItem(currentUser, item).catch(err => 
-          console.error('Error updating item in Google Sheets:', err)
+          console.error('Error updating item in Supabase:', err)
         );
       }
     });
@@ -811,7 +811,7 @@ export default function App() {
       const exists = currentLib.some(c => c.gameId === prevItem.gameId);
       if (!exists) {
         deleteLibraryItem(currentUser, prevItem.gameId).catch(err => 
-          console.error('Error deleting item from Google Sheets:', err)
+          console.error('Error deleting item from Supabase:', err)
         );
       }
     });
@@ -1411,7 +1411,7 @@ export default function App() {
         await updateUserRole(email, 'premium', signupStr, expiryStr);
         await saveTransaction({ ...tx, status: 'success' });
       } catch (err) {
-        console.error('Error approving transaction in Google Sheets:', err);
+        console.error('Error approving transaction in Supabase:', err);
       }
     }
   };
@@ -1426,7 +1426,7 @@ export default function App() {
       try {
         await saveTransaction({ ...tx, status: 'failed', reason: 'แอดมินปฏิเสธการตรวจสอบ' });
       } catch (err) {
-        console.error('Error rejecting transaction in Google Sheets:', err);
+        console.error('Error rejecting transaction in Supabase:', err);
       }
     }
   };
@@ -1853,7 +1853,7 @@ export default function App() {
       setReports([newReport, ...reports]);
       if (isFirebaseEnabled) {
         submitReport(newReport)
-          .catch(err => console.error('Error saving suggestion to Google Sheets:', err));
+          .catch(err => console.error('Error saving suggestion to Supabase:', err));
       }
       setIsSendingSuggestion(false);
       setIsSuggestingNew(false);
@@ -3621,7 +3621,7 @@ export default function App() {
                 </div>
               </div>
               
-              {/* Google Sheets Database Link */}
+              {/* Supabase API Details */}
               <div className="glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
                 <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
                   📊 เชื่อมต่อระบบฐานข้อมูล Google Sheets
@@ -3631,7 +3631,7 @@ export default function App() {
                     ระบุ URL ของ Google Apps Script Web App ที่ดีพลอยมาจาก Google Sheet เพื่อซิงก์ข้อมูลคลังเกม บัญชีสมาชิก และข้อมูลธุรกรรมทั้งหมดออนไลน์
                   </p>
                   <div>
-                    <label className="text-xs text-slate-400 font-bold block mb-1">Google Sheets Web App API URL</label>
+                    <label className="text-xs text-slate-400 font-bold block mb-1">Supabase API URL</label>
                     <input
                       type="text"
                       value={googleSheetsUrl}
