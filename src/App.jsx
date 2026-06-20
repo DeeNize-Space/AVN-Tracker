@@ -5,9 +5,9 @@ import {
   setApiUrl,
   isConfigured,
   registerUser,
-  loginUser,
-  requestPasswordReset,
-  resetPassword,
+  loginWithGoogle,
+  getSession,
+  logoutUser,
   getUserLibrary,
   updateLibraryItem,
   deleteLibraryItem,
@@ -248,15 +248,6 @@ export default function App() {
 
   // --- AUTHENTICATION STATE ---
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [authMode, setAuthMode] = useState('login'); // 'login', 'register', 'forgot_password', 'reset_password'
-  
-  // Auth Form Fields
-  const [authUsername, setAuthUsername] = useState('');
-  const [authPassword, setAuthPassword] = useState('');
-  const [authEmail, setAuthEmail] = useState('');
-  
-  const [authOtp, setAuthOtp] = useState('');
-  
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
 
@@ -286,6 +277,30 @@ export default function App() {
     const saved = localStorage.getItem('avn_user_notifications_v9');
     return saved ? JSON.parse(saved) : [];
   });
+
+  useEffect(() => {
+    async function checkSession() {
+      try {
+        const sessionUser = await getSession();
+        if (sessionUser && sessionUser.email) {
+          setCurrentUser(sessionUser.email);
+          setCurrentUsername(sessionUser.username);
+          setUserRoles(prev => ({ ...prev, [sessionUser.email]: sessionUser.role }));
+          localStorage.setItem('avn_current_user_v7', sessionUser.email);
+          localStorage.setItem('avn_current_username_v7', sessionUser.username);
+          
+          const savedRoles = JSON.parse(localStorage.getItem('avn_user_roles_v9') || '{}');
+          savedRoles[sessionUser.email] = sessionUser.role;
+          localStorage.setItem('avn_user_roles_v9', JSON.stringify(savedRoles));
+        }
+      } catch (err) {
+        console.error('Session check failed:', err);
+      }
+    }
+    if (isConfigured()) {
+      checkSession();
+    }
+  }, []);
   const [isUpsellOpen, setIsUpsellOpen] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState('yearly');
   const [isSendingSuggestion, setIsSendingSuggestion] = useState(false);
@@ -467,101 +482,7 @@ export default function App() {
     setCustomAlert({ message: msg, title: '🔔 แจ้งเตือนระบบ' });
   };
 
-  const handleLogin = async (e) => {
-    if (e) e.preventDefault();
-    if (!authUsername || !authPassword) {
-      alert('กรุณากรอกข้อมูลให้ครบถ้วน');
-      return;
-    }
-    setIsLoggingIn(true);
-    try {
-      const user = await loginUser(authUsername, authPassword);
-      setCurrentUser(user.email);
-      setCurrentUsername(user.username);
-      setUserRoles((prev) => ({ ...prev, [user.email]: user.role }));
-      setUserPremiumDates((prev) => ({
-        ...prev,
-        [user.email]: { signupDate: user.signupDate, expiryDate: user.expiryDate }
-      }));
-      setToastMessage(`ยินดีต้อนรับกลับมา, คุณ ${user.username}!`);
-      setIsAuthModalOpen(false);
-      setAuthUsername('');
-      setAuthPassword('');
-    } catch (err) {
-      alert('ข้อผิดพลาดในการเข้าสู่ระบบ: ' + err.message);
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
 
-  const handleRegister = async (e) => {
-    if (e) e.preventDefault();
-    if (!authUsername || !authEmail || !authPassword) {
-      alert('กรุณากรอกข้อมูลให้ครบถ้วน');
-      return;
-    }
-    setIsLoggingIn(true);
-    try {
-      const user = await registerUser(authUsername, authEmail, authPassword);
-      setCurrentUser(user.email);
-      setCurrentUsername(user.username);
-      setUserRoles((prev) => ({ ...prev, [user.email]: user.role }));
-      setToastMessage(`สมัครสมาชิกสำเร็จ! ยินดีต้อนรับคุณ ${user.username}`);
-      setIsAuthModalOpen(false);
-      setAuthUsername('');
-      setAuthEmail('');
-      setAuthPassword('');
-    } catch (err) {
-      alert('ข้อผิดพลาดในการสมัครสมาชิก: ' + err.message);
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
-
-  const handleForgotPassword = async (e) => {
-    if (e) e.preventDefault();
-    if (!authEmail) {
-      alert('กรุณากรอกอีเมลของคุณ');
-      return;
-    }
-    setIsLoggingIn(true);
-    try {
-      const res = await requestPasswordReset(authEmail);
-      alert(res.message || 'ส่งรหัส OTP เรียบร้อยแล้ว โปรดตรวจสอบกล่องข้อความในอีเมลของคุณ');
-      setAuthOtp('');
-      setAuthPassword('');
-      setAuthMode('reset_password');
-    } catch (err) {
-      alert('ข้อผิดพลาด: ' + err.message);
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
-
-  const handleResetPassword = async (e) => {
-    if (e) e.preventDefault();
-    if (!authOtp) {
-      alert('กรุณากรอกรหัส OTP 6 หลัก');
-      return;
-    }
-    if (!authPassword) {
-      alert('กรุณากรอกรหัสผ่านใหม่');
-      return;
-    }
-    setIsLoggingIn(true);
-    try {
-      const res = await resetPassword(authEmail, authOtp, authPassword);
-      alert(res.message || 'รีเซ็ตรหัสผ่านเรียบร้อยแล้ว คุณสามารถเข้าสู่ระบบด้วยรหัสผ่านใหม่ได้ทันที');
-      setAuthMode('login');
-      setAuthPassword('');
-      setAuthOtp('');
-      setAuthUsername('');
-    } catch (err) {
-      alert('ข้อผิดพลาด: ' + err.message);
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
 
 
   // Admin Modals
@@ -761,6 +682,22 @@ export default function App() {
       });
     }
   }, [isDbLoaded]);
+
+  const handleLogout = async () => {
+    try {
+      await logoutUser();
+    } catch (e) {
+      console.error(e);
+    }
+    setCurrentUser('Guest');
+    setCurrentUsername('Guest');
+    localStorage.removeItem('avn_current_user_v7');
+    localStorage.removeItem('avn_current_username_v7');
+    setIsUserDropdownOpen(false);
+    setToastMessage('🔴 ออกจากระบบแล้ว');
+  };
+
+
 
   // Fetch all user libraries for engagement panel when entering admin panel as admin
   useEffect(() => {
@@ -2359,7 +2296,7 @@ export default function App() {
               {isGuest ? (
                 <button
                   onClick={() => {
-                    setAuthMode('login');
+
                     setIsAuthModalOpen(true);
                   }}
                   className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold h-10 px-4 rounded-xl transition-all shadow-md focus:outline-none border border-white/10 cursor-pointer animate-fade-in"
@@ -2505,11 +2442,7 @@ export default function App() {
                       </div>
 
                       <button
-                        onClick={() => {
-                          setIsUserDropdownOpen(false);
-                          setCurrentUser('Guest');
-                          setToastMessage('ออกจากระบบเรียบร้อย');
-                        }}
+                        onClick={handleLogout}
                         className="w-full h-10 flex items-center justify-center gap-2 bg-rose-600/10 hover:bg-rose-600/25 border border-rose-500/20 hover:border-rose-500/40 text-rose-400 text-xs font-bold rounded-xl cursor-pointer transition-all"
                       >
                         🚪 ออกจากระบบ
@@ -2624,7 +2557,7 @@ export default function App() {
               <button
                 onClick={() => {
                   if (isGuest) {
-                    setAuthMode('login');
+
                     setIsAuthModalOpen(true);
                     setToastMessage('กรุณาลงชื่อเข้าใช้เพื่อเสนอแนะเกมใหม่');
                   } else {
@@ -2699,7 +2632,7 @@ export default function App() {
                             {isGuest ? (
                               <button
                                 onClick={() => {
-                                  setAuthMode('login');
+              
                                   setIsAuthModalOpen(true);
                                   setToastMessage('กรุณาลงชื่อเข้าใช้เพื่อเพิ่มเกมเข้าคลัง');
                                 }}
@@ -2809,7 +2742,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => {
-                  setAuthMode('login');
+
                   setIsAuthModalOpen(true);
                 }}
                 className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-extrabold h-12 px-6 rounded-2xl transition-all shadow-lg focus:outline-none border border-white/10 cursor-pointer"
@@ -2938,7 +2871,7 @@ export default function App() {
                   <button
                     onClick={() => {
                       if (isGuest) {
-                        setAuthMode('login');
+    
                         setIsAuthModalOpen(true);
                         setToastMessage('กรุณาลงชื่อเข้าใช้เพื่อส่งคำขอเพิ่มเกม');
                       } else {
@@ -5993,9 +5926,6 @@ export default function App() {
             <button
               onClick={() => {
                 setIsAuthModalOpen(false);
-                setAuthUsername('');
-                setAuthEmail('');
-                setAuthPassword('');
               }}
               className="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-850 hover:bg-slate-800 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer text-xs"
               title="ปิด"
@@ -6006,22 +5936,13 @@ export default function App() {
             {/* Header */}
             <div className="flex flex-col items-center text-center pb-2 border-b border-slate-850">
               <span className="text-3xl mb-1">
-                {authMode === 'login' && '🔑'}
-                {authMode === 'register' && '📝'}
-                {authMode === 'forgot_password' && '📧'}
-                {authMode === 'reset_password' && '🔄'}
+                🔑
               </span>
               <h2 className="text-lg font-extrabold text-slate-100">
-                {authMode === 'login' && 'เข้าสู่ระบบ'}
-                {authMode === 'register' && 'สมัครสมาชิกใหม่'}
-                {authMode === 'forgot_password' && 'ลืมรหัสผ่าน'}
-                {authMode === 'reset_password' && 'ตั้งรหัสผ่านใหม่'}
+                เข้าสู่ระบบ / สมัครสมาชิก
               </h2>
               <p className="text-xs text-slate-400 mt-1">
-                {authMode === 'login' && `กรุณากรอกบัญชีของคุณสำหรับ ${webTitle}`}
-                {authMode === 'register' && 'สร้างบัญชีใหม่เพื่อเปิดใช้งานคลังส่วนตัว'}
-                {authMode === 'forgot_password' && 'กรอกอีเมลที่สมัครไว้เพื่อรับรหัส OTP สำหรับรีเซ็ตรหัสผ่าน'}
-                {authMode === 'reset_password' && 'กรอกรหัส OTP ที่ได้รับทางอีเมลและกำหนดรหัสผ่านใหม่'}
+                กรุณาเข้าสู่ระบบด้วย Google เพื่อเปิดใช้งานคลังเกมส่วนตัวและร่วมโหวต
               </p>
             </div>
 
@@ -6072,144 +5993,37 @@ export default function App() {
                 <span className="text-sm font-semibold text-slate-400">กำลังดำเนินการ...</span>
               </div>
             ) : (
-              <form 
-                onSubmit={
-                  authMode === 'login' ? handleLogin :
-                  authMode === 'register' ? handleRegister :
-                  authMode === 'forgot_password' ? handleForgotPassword :
-                  handleResetPassword
-                }
-                className="flex flex-col gap-4"
-              >
-                {/* Username Input (Only login/register) */}
-                {(authMode === 'login' || authMode === 'register') && (
-                  <div>
-                    <label className="text-xs text-slate-400 font-bold block mb-1 text-left">Username</label>
-                    <input
-                      type="text"
-                      required
-                      value={authUsername}
-                      onChange={(e) => setAuthUsername(e.target.value)}
-                      className="w-full h-10 px-3.5 text-xs rounded-xl border border-slate-800 bg-slate-955 text-slate-200 focus:outline-none focus:border-blue-500"
-                      placeholder="พิมพ์ Username..."
-                    />
-                  </div>
-                )}
-
-                {/* Email Input (Only register/forgot_password) */}
-                {(authMode === 'register' || authMode === 'forgot_password') && (
-                  <div>
-                    <label className="text-xs text-slate-400 font-bold block mb-1 text-left">อีเมล (Email)</label>
-                    <input
-                      type="email"
-                      required
-                      value={authEmail}
-                      onChange={(e) => setAuthEmail(e.target.value)}
-                      className="w-full h-10 px-3.5 text-xs rounded-xl border border-slate-800 bg-slate-955 text-slate-200 focus:outline-none focus:border-blue-500"
-                      placeholder="พิมพ์อีเมล เช่น example@gmail.com"
-                    />
-                  </div>
-                )}
-
-                {/* OTP Input (Only reset_password) */}
-                {authMode === 'reset_password' && (
-                  <div>
-                    <label className="text-xs text-slate-400 font-bold block mb-1 text-left">รหัส OTP 6 หลัก</label>
-                    <input
-                      type="text"
-                      required
-                      maxLength={6}
-                      value={authOtp}
-                      onChange={(e) => setAuthOtp(e.target.value.replace(/\D/g, ''))}
-                      className="w-full h-10 px-3.5 text-xs rounded-xl border border-slate-800 bg-slate-955 text-slate-200 focus:outline-none focus:border-blue-500 text-center tracking-[0.25em] font-extrabold text-sm"
-                      placeholder="XXXXXX"
-                    />
-                  </div>
-                )}
-
-                {/* Password Input (Only login/register/reset_password) */}
-                {(authMode === 'login' || authMode === 'register' || authMode === 'reset_password') && (
-                  <div>
-                    <label className="text-xs text-slate-400 font-bold block mb-1 text-left">
-                      {authMode === 'reset_password' ? 'รหัสผ่านใหม่' : 'Password'}
-                    </label>
-                    <input
-                      type="password"
-                      required
-                      value={authPassword}
-                      onChange={(e) => setAuthPassword(e.target.value)}
-                      className="w-full h-10 px-3.5 text-xs rounded-xl border border-slate-800 bg-slate-955 text-slate-200 focus:outline-none focus:border-blue-500"
-                      placeholder="พิมพ์รหัสผ่าน..."
-                    />
-                  </div>
-                )}
-
-                {/* Submit button */}
+              <div className="flex flex-col gap-4">
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={async () => {
+                    setIsLoggingIn(true);
+                    try {
+                      await loginWithGoogle();
+                    } catch (err) {
+                      alert('Login with Google failed: ' + err.message);
+                      setIsLoggingIn(false);
+                    }
+                  }}
                   disabled={!isFirebaseEnabled}
-                  className={`w-full h-11 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold text-xs rounded-xl transition-all shadow-md focus:outline-none border border-white/10 ${!isFirebaseEnabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  className={`w-full h-12 bg-white hover:bg-gray-100 text-gray-800 font-extrabold text-sm rounded-xl transition-all shadow-md focus:outline-none flex items-center justify-center gap-3 ${!isFirebaseEnabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                 >
-                  {authMode === 'login' && 'เข้าสู่ระบบ'}
-                  {authMode === 'register' && 'สมัครสมาชิก'}
-                  {authMode === 'forgot_password' && 'ขอรหัส OTP'}
-                  {authMode === 'reset_password' && 'ยืนยันตั้งรหัสผ่านใหม่'}
+                  <svg viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
+                    <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">
+                      <path fill="#4285F4" d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z"/>
+                      <path fill="#34A853" d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.369 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z"/>
+                      <path fill="#FBBC05" d="M -21.484 53.529 C -21.734 52.809 -21.864 52.039 -21.864 51.239 C -21.864 50.439 -21.724 49.669 -21.484 48.949 L -21.484 45.859 L -25.464 45.859 C -26.284 47.479 -26.754 49.299 -26.754 51.239 C -26.754 53.179 -26.284 54.999 -25.464 56.619 L -21.484 53.529 Z"/>
+                      <path fill="#EA4335" d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.109 -17.884 43.989 -14.754 43.989 Z"/>
+                    </g>
+                  </svg>
+                  Login with Google
                 </button>
 
-                {/* Links */}
-                <div className="flex justify-between items-center text-xs mt-1">
-                  {authMode === 'login' && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setAuthMode('forgot_password')}
-                        className="text-slate-400 hover:text-white transition-colors cursor-pointer"
-                      >
-                        ลืมรหัสผ่าน?
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAuthMode('register')}
-                        className="text-blue-400 hover:text-blue-300 font-extrabold transition-colors cursor-pointer"
-                      >
-                        สมัครสมาชิกใหม่
-                      </button>
-                    </>
-                  )}
-
-                  {authMode === 'register' && (
-                    <button
-                      type="button"
-                      onClick={() => setAuthMode('login')}
-                      className="text-slate-400 hover:text-white transition-colors cursor-pointer mx-auto"
-                    >
-                      มีบัญชีอยู่แล้ว? <span className="text-blue-400 hover:text-blue-300 font-extrabold">เข้าสู่ระบบ</span>
-                    </button>
-                  )}
-
-                  {authMode === 'forgot_password' && (
-                    <button
-                      type="button"
-                      onClick={() => setAuthMode('login')}
-                      className="text-slate-400 hover:text-white transition-colors cursor-pointer mx-auto"
-                    >
-                      กลับไปหน้า <span className="text-blue-400 hover:text-blue-300 font-extrabold">เข้าสู่ระบบ</span>
-                    </button>
-                  )}
-
-                  {authMode === 'reset_password' && (
-                    <button
-                      type="button"
-                      onClick={() => setAuthMode('forgot_password')}
-                      className="text-slate-400 hover:text-white transition-colors cursor-pointer mx-auto"
-                    >
-                      ต้องการขอ OTP ใหม่? <span className="text-blue-400 hover:text-blue-300 font-extrabold">ส่งรหัสอีกครั้ง</span>
-                    </button>
-                  )}
-                </div>
 
 
-              </form>
+
+
+              </div>
             )}
           </div>
         </div>

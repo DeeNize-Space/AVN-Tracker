@@ -104,6 +104,51 @@ export async function loginUser(usernameOrEmail, password) {
   };
 }
 
+export async function loginWithGoogle() {
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: window.location.origin
+    }
+  });
+  if (error) throw error;
+}
+
+export async function getSession() {
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error || !session) return null;
+
+  // Fetch profiles table for user role & subscription details
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', session.user.id)
+    .single();
+
+  let mappedRole = 'user';
+  if (profile) {
+    if (profile.admin === 'yes') {
+      mappedRole = 'admin';
+    } else if (profile.premium === 'yes') {
+      mappedRole = 'premium';
+    }
+  }
+
+  return {
+    username: profile?.username || session.user.user_metadata?.full_name || session.user.email.split('@')[0],
+    email: session.user.email,
+    role: mappedRole,
+    signupDate: profile?.signup_date || '',
+    expiryDate: profile?.expiry_date || ''
+  };
+}
+
+export async function logoutUser() {
+  const { error } = await supabase.auth.signOut();
+  if (error) throw error;
+  return { status: 'success' };
+}
+
 export async function requestPasswordReset(email) {
   const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
     redirectTo: window.location.origin
