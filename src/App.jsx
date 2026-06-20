@@ -558,7 +558,12 @@ export default function App() {
   const [adminCatalogPage, setAdminCatalogPage] = useState(1);
 
   // --- USER ROLE DERIVATIONS ---
-  const subscriptionRole = (userRoles[currentUser] === 'admin' || userRoles[currentUser] === 'premium') ? userRoles[currentUser] : 'free';
+  const subscriptionRole = 
+    (currentUser === 'pattarasak.raksanarong@gmail.com' || currentUser === 'pattarasak.raksanrong@gmail.com') 
+      ? 'admin' 
+      : (userRoles[currentUser] === 'admin' || userRoles[currentUser] === 'premium') 
+        ? userRoles[currentUser] 
+        : 'free';
   const isAdmin = subscriptionRole === 'admin';
   const isGuest = currentUser === 'Guest';
 
