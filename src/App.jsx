@@ -422,16 +422,19 @@ export default function App() {
   const [selectedCatalogTags, setSelectedCatalogTags] = useState([]);
   const [catalogTagSearch, setCatalogTagSearch] = useState('');
   const [showTagFilterCatalog, setShowTagFilterCatalog] = useState(false);
+  const [catalogSort, setCatalogSort] = useState('views-desc');
 
-  // Reset catalog page during render when search, tags, or tab changes to avoid ESLint warning
+  // Reset catalog page during render when search, tags, sort, or tab changes to avoid ESLint warning
   const [prevSearchQuery, setPrevSearchQuery] = useState(searchQuery);
   const [prevCatalogTags, setPrevCatalogTags] = useState(selectedCatalogTags);
   const [prevActiveTab, setPrevActiveTab] = useState(activeTab);
+  const [prevCatalogSort, setPrevCatalogSort] = useState(catalogSort);
 
-  if (searchQuery !== prevSearchQuery || selectedCatalogTags !== prevCatalogTags || activeTab !== prevActiveTab) {
+  if (searchQuery !== prevSearchQuery || selectedCatalogTags !== prevCatalogTags || activeTab !== prevActiveTab || catalogSort !== prevCatalogSort) {
     setPrevSearchQuery(searchQuery);
     setPrevCatalogTags(selectedCatalogTags);
     setPrevActiveTab(activeTab);
+    setPrevCatalogSort(catalogSort);
     setCatalogPage(1);
   }
 
@@ -987,7 +990,7 @@ export default function App() {
   }, [currentLibraryList]);
 
   const filteredCatalog = useMemo(() => {
-    return officialGames.filter((g) => {
+    let result = officialGames.filter((g) => {
       const matchSearch =
         g.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         g.developer.toLowerCase().includes(searchQuery.toLowerCase());
@@ -996,7 +999,39 @@ export default function App() {
         selectedCatalogTags.every(tag => g.tags.some(t => t.toLowerCase() === tag.toLowerCase()));
       return matchSearch && matchTag;
     });
-  }, [officialGames, searchQuery, selectedCatalogTags]);
+
+    // Sorting
+    result.sort((a, b) => {
+      if (catalogSort === 'views-desc') {
+        return (b.viewCount || 0) - (a.viewCount || 0);
+      }
+      if (catalogSort === 'views-asc') {
+        return (a.viewCount || 0) - (b.viewCount || 0);
+      }
+      if (catalogSort === 'rating-desc') {
+        return (b.rating || 0) - (a.rating || 0);
+      }
+      if (catalogSort === 'rating-asc') {
+        return (a.rating || 0) - (b.rating || 0);
+      }
+      if (catalogSort === 'date-desc') {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+      }
+      if (catalogSort === 'date-asc') {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateA - dateB;
+      }
+      if (catalogSort === 'title-asc') {
+        return a.title.localeCompare(b.title);
+      }
+      return 0;
+    });
+
+    return result;
+  }, [officialGames, searchQuery, selectedCatalogTags, catalogSort]);
 
   const ITEMS_PER_PAGE = 20;
   const totalCatalogItems = filteredCatalog.length;
@@ -2606,6 +2641,29 @@ export default function App() {
                       </div>
                     </div>
                   )}
+                </div>
+
+                {/* Sort Dropdown */}
+                <div className="relative w-full sm:w-48">
+                  <select
+                    value={catalogSort}
+                    onChange={(e) => setCatalogSort(e.target.value)}
+                    className="glass-input w-full h-11 px-4 pr-8 text-sm rounded-xl focus:outline-none bg-slate-900/60 border border-slate-800 hover:border-slate-700 text-slate-300 font-medium cursor-pointer transition-colors appearance-none"
+                    style={{
+                      backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%2394a3b8' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3E%3C/svg%3E")`,
+                      backgroundPosition: 'right 0.5rem center',
+                      backgroundSize: '1.5em 1.5em',
+                      backgroundRepeat: 'no-repeat'
+                    }}
+                  >
+                    <option value="views-desc" className="bg-slate-950 text-slate-300">🔥 ยอดวิว: มาก ➔ น้อย</option>
+                    <option value="views-asc" className="bg-slate-950 text-slate-300">❄️ ยอดวิว: น้อย ➔ มาก</option>
+                    <option value="rating-desc" className="bg-slate-950 text-slate-300">⭐ คะแนน: มาก ➔ น้อย</option>
+                    <option value="rating-asc" className="bg-slate-950 text-slate-300">⭐ คะแนน: น้อย ➔ มาก</option>
+                    <option value="date-desc" className="bg-slate-950 text-slate-300">📅 วันที่อัปเดต: ใหม่ ➔ เก่า</option>
+                    <option value="date-asc" className="bg-slate-950 text-slate-300">📅 วันที่อัปเดต: เก่า ➔ ใหม่</option>
+                    <option value="title-asc" className="bg-slate-950 text-slate-300">🔤 ชื่อเกม: A ➔ Z</option>
+                  </select>
                 </div>
               </div>
 

@@ -349,6 +349,8 @@ export async function getOfficialGames() {
     tags: g.tags || [],
     screenshots: g.screenshots || [],
     viewCount: g.view_count || 0,
+    createdAt: g.created_at || '',
+    updatedAt: g.updated_at || '',
     isCustom: false
   }));
 }
