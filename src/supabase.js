@@ -253,33 +253,17 @@ export async function getUserLibrary(email) {
 
   const { data, error } = await supabase
     .from('library')
-    .select('*')
-    .eq('user_id', profile.id);
+    .select('library_data')
+    .eq('user_id', profile.id)
+    .maybeSingle();
 
   if (error) throw error;
+  if (!data || !data.library_data) return [];
 
-  return data.map(g => ({
-    gameId: g.game_id,
-    status: g.status || 'วางแผนจะเล่น',
-    notes: g.notes || '',
-    playTime: parseFloat(g.play_time) || 0,
-    rating: parseFloat(g.rating) || 0,
-    isCustom: g.is_custom === true,
-    lastUpdated: g.last_updated || '',
-    // If custom game details are needed, we map them too
-    title: g.title || '',
-    developer: g.developer || '',
-    version: g.version || '',
-    coverUrl: g.cover_url || '',
-    overview: g.overview || '',
-    patreonUrl: g.patreon_url || '',
-    buyUrl: g.buy_url || '',
-    socialUrl: g.social_url || '',
-    screenshots: g.screenshots || []
-  }));
+  return data.library_data;
 }
 
-export async function updateLibraryItem(email, item) {
+export async function saveUserLibrary(email, items) {
   const { data: profile } = await supabase
     .from('profiles')
     .select('id')
@@ -289,90 +273,31 @@ export async function updateLibraryItem(email, item) {
   const payload = {
     user_id: profile.id,
     email: email.trim().toLowerCase(),
-    game_id: item.gameId,
-    status: item.status || 'วางแผนจะเล่น',
-    notes: item.notes || '',
-    play_time: parseFloat(item.playTime) || 0,
-    rating: parseFloat(item.rating) || 0,
-    is_custom: item.isCustom === true,
+    library_data: items || [],
     last_updated: new Date().toISOString()
   };
 
-  // Add custom details if it is a custom game
-  if (item.isCustom) {
-    payload.title = item.title || '';
-    payload.developer = item.developer || '';
-    payload.version = item.version || '';
-    payload.cover_url = item.coverUrl || '';
-    payload.overview = item.overview || '';
-    payload.patreon_url = item.patreonUrl || '';
-    payload.buy_url = item.buyUrl || '';
-    payload.social_url = item.socialUrl || '';
-    payload.screenshots = item.screenshots || [];
-  }
-
   const { error } = await supabase
     .from('library')
-    .upsert(payload, { onConflict: 'user_id,game_id' });
+    .upsert(payload, { onConflict: 'user_id' });
 
   if (error) {
-    alert(`Supabase Insert Error: ${error.message} \nDetails: ${JSON.stringify(error)}`);
+    alert(`Supabase Save Error: ${error.message} \nDetails: ${JSON.stringify(error)}`);
     throw error;
   }
-  return { status: 'success' };
-}
-
-export async function deleteLibraryItem(email, gameId) {
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('email', email.trim().toLowerCase())
-    .single();
-
-  const { error } = await supabase
-    .from('library')
-    .delete()
-    .eq('user_id', profile.id)
-    .eq('game_id', gameId);
-
-  if (error) throw error;
   return { status: 'success' };
 }
 
 export async function getAllUserLibraries() {
   const { data, error } = await supabase
     .from('library')
-    .select('*');
+    .select('email, library_data');
 
   if (error) throw error;
 
-  // Group items by email to match Sheets logic format
-  // Sheets returns user library rows as: { email, librarydata: stringified_json }
-  const libsMap = {};
-  data.forEach(g => {
-    if (!libsMap[g.email]) libsMap[g.email] = [];
-    libsMap[g.email].push({
-      gameId: g.game_id,
-      status: g.status,
-      notes: g.notes,
-      playTime: parseFloat(g.play_time) || 0,
-      rating: parseFloat(g.rating) || 0,
-      isCustom: g.is_custom === true,
-      title: g.title,
-      developer: g.developer,
-      version: g.version,
-      coverUrl: g.cover_url,
-      overview: g.overview,
-      patreonUrl: g.patreon_url,
-      buyUrl: g.buy_url,
-      socialUrl: g.social_url,
-      screenshots: g.screenshots
-    });
-  });
-
-  return Object.keys(libsMap).map(email => ({
-    email: email,
-    librarydata: JSON.stringify(libsMap[email])
+  return data.map(row => ({
+    email: row.email || '',
+    librarydata: JSON.stringify(row.library_data || [])
   }));
 }
 

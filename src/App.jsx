@@ -9,8 +9,7 @@ import {
   getSession,
   logoutUser,
   getUserLibrary,
-  updateLibraryItem,
-  deleteLibraryItem,
+  saveUserLibrary,
   getAllUserLibraries,
   incrementGameViewCount,
   getOfficialGames,
@@ -735,9 +734,7 @@ export default function App() {
         } else {
           const currentLocalLib = userLibraries[currentUser] || [];
           if (currentLocalLib.length > 0) {
-            for (const item of currentLocalLib) {
-              await updateLibraryItem(currentUser, item);
-            }
+            await saveUserLibrary(currentUser, currentLocalLib);
             console.log('Migrated local library to Supabase for', currentUser);
           }
         }
@@ -800,27 +797,13 @@ export default function App() {
     const currentLib = userLibraries[currentUser] || [];
     const prevLib = prevLibRef.current;
     
-    // Sync updates and additions
-    currentLib.forEach(item => {
-      const prevItem = prevLib.find(p => p.gameId === item.gameId);
-      if (!prevItem || JSON.stringify(prevItem) !== JSON.stringify(item)) {
-        updateLibraryItem(currentUser, item).catch(err => 
-          console.error('Error updating item in Supabase:', err)
-        );
-      }
-    });
-    
-    // Sync deletions
-    prevLib.forEach(prevItem => {
-      const exists = currentLib.some(c => c.gameId === prevItem.gameId);
-      if (!exists) {
-        deleteLibraryItem(currentUser, prevItem.gameId).catch(err => 
-          console.error('Error deleting item from Supabase:', err)
-        );
-      }
-    });
-    
-    prevLibRef.current = currentLib;
+    // Sync library as a whole if there are changes
+    if (JSON.stringify(currentLib) !== JSON.stringify(prevLib)) {
+      saveUserLibrary(currentUser, currentLib).catch(err => 
+        console.error('Error saving library to Supabase:', err)
+      );
+      prevLibRef.current = currentLib;
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userLibraries, currentUser, isDbLoaded]);
 
