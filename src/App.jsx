@@ -27,7 +27,7 @@ import {
   saveTransaction,
   getTransactions,
   deleteUser
-} from './googleSheets';
+} from './supabase';
 
 // --- HELPER FUNCTIONS OUTSIDE COMPONENT ---
 function generateId() {
@@ -6029,10 +6029,10 @@ export default function App() {
             {!isFirebaseEnabled && (
               <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex flex-col gap-2">
                 <h4 className="text-xs font-black text-amber-400 flex items-center gap-1.5 text-left">
-                  ⚠️ ระบบฐานข้อมูลจำลอง (ยังไม่ได้เชื่อมต่อ Sheets)
+                  ⚠️ ระบบฐานข้อมูลจำลอง (ยังไม่ได้เชื่อมต่อ Supabase)
                 </h4>
                 <p className="text-[10px] text-slate-400 leading-normal text-left">
-                  กรุณาระบุ URL ของ Google Apps Script Web App ด้านล่างนี้เพื่อเปิดระบบฐานข้อมูลออนไลน์และสมัครสมาชิก/ล็อกอินจริง:
+                  กรุณาระบุ URL ของ Supabase Project ด้านล่างนี้เพื่อเชื่อมต่อฐานข้อมูลออนไลน์จริง:
                 </p>
                 <div className="flex gap-2">
                   <input
@@ -6040,17 +6040,22 @@ export default function App() {
                     value={googleSheetsUrl}
                     onChange={(e) => setGoogleSheetsUrlState(e.target.value)}
                     className="flex-1 h-9 px-3 text-[11px] rounded-xl border border-slate-800 bg-slate-955 text-slate-200 focus:outline-none focus:border-blue-500"
-                    placeholder="https://script.google.com/macros/s/.../exec"
+                    placeholder="https://your-project.supabase.co"
                   />
                   <button
                     type="button"
                     onClick={() => {
                       if (!googleSheetsUrl) {
-                        alert('กรุณากรอก URL ก่อนกดเชื่อมต่อ');
+                        alert('กรุณากรอก Supabase URL ก่อนกดเชื่อมต่อ');
                         return;
                       }
-                      updateGoogleSheetsUrl(googleSheetsUrl);
-                      alert('🟢 บันทึก URL และกำลังเชื่อมต่อฐานข้อมูล...');
+                      const key = prompt('กรุณากรอก Supabase Anon Key ของโปรเจกต์:');
+                      if (!key) {
+                        alert('จำเป็นต้องกรอก Anon Key เพื่อใช้เชื่อมต่อ');
+                        return;
+                      }
+                      setApiUrl(googleSheetsUrl, key);
+                      window.location.reload();
                     }}
                     className="bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-black px-3 rounded-xl cursor-pointer transition-colors"
                   >
