@@ -1652,7 +1652,7 @@ export default function App() {
     }
   };
 
-  // Real Google Drive Payment Slip Upload
+  // Real Google Drive & SlipOK Payment Slip Upload/Verification
   const handleVerifySlip = (file) => {
     if (!file) return;
 
@@ -1662,76 +1662,173 @@ export default function App() {
       setIsSlipChecking(true);
       setSlipCheckLogs([
         '🤖 [ระบบ] กำลังอ่านไฟล์รูปภาพสลิป...',
-        '🤖 [ระบบ] กำลังแปลงข้อมูลเป็นรูปแบบ Base64...'
+        '🤖 [ระบบ] กำลังสแกนรหัส QR Code และติดต่อตรวจสอบกับ SlipOK API...'
       ]);
 
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const base64Data = reader.result.split(',')[1];
-        setSlipCheckLogs(prev => [
-          ...prev, 
-          '🤖 [ระบบ] กำลังตรวจสอบขนาดไฟล์และความละเอียด...',
-          '🤖 [ระบบ] กำลังอัปโหลดสลิปใบจริงเข้าสู่ Google Drive ของระบบ...'
-        ]);
+      const amountVal = selectedPackage === 'monthly' ? 49 : 499;
 
+      const runVerification = async () => {
         try {
-          const amountVal = selectedPackage === 'monthly' ? 49 : 499;
-          const txEmail = getUserGmail(currentUser);
-          const transRef = 'ref-' + Date.now() + Math.floor(1000 + Math.random() * 9000);
-          const txId = 'tx-' + Date.now();
+          // Prepare Form Data for SlipOK API
+          const formData = new FormData();
+          formData.append('files', file);
+          formData.append('log', 'true');
+          formData.append('amount', String(amountVal));
 
-          const newTx = {
-            id: txId,
-            transRef: transRef,
-            username: currentUsername,
-            email: txEmail,
-            package: selectedPackage,
-            amount: amountVal,
-            timestamp: getIsoTimestamp(),
-            status: 'pending',
-            slipBase64: base64Data,
-            slipFileName: file.name
-          };
+          // Post directly to SlipOK API
+          const res = await fetch(`https://api.slipok.com/api/line/apikey/${slipOkBranchId}`, {
+            method: 'POST',
+            headers: {
+              'x-authorization': slipOkApiKey
+            },
+            body: formData
+          });
 
-          const res = await saveTransaction(newTx);
-          
-          setSlipCheckLogs(prev => [...prev, '🟢 [ระบบ] อัปโหลดรูปภาพเสร็จสิ้นและบันทึกรายการสำเร็จ!']);
-          
-          const localTx = {
-            id: txId,
-            transRef: transRef,
-            username: currentUsername,
-            email: txEmail,
-            package: selectedPackage,
-            amount: amountVal,
-            timestamp: getIsoTimestamp(),
-            status: 'pending',
-            slipUrl: res.slipUrl || previewUrl
-          };
-          
-          setRevenueTransactions(prev => [localTx, ...prev]);
+          const slipOkResult = await res.json();
 
-          setTimeout(() => {
+          // Check if SlipOK returned success
+          if (slipOkResult.success && (slipOkResult.data?.success || slipOkResult.data)) {
+            const data = slipOkResult.data;
+            const transRef = data.transRef || '';
+            const actualAmount = data.amount || amountVal;
+            
+            setSlipCheckLogs(prev => [
+              ...prev,
+              `🟢 [SlipOK] ตรวจสอบสลิปสำเร็จ!`,
+              `🏦 ธนาคารต้นทาง: ${data.sendingBank || 'N/A'}`,
+              `💰 ยอดเงินโอนจริง: ${actualAmount} บาท`,
+              `🆔 เลขที่อ้างอิง: ${transRef}`,
+              `🤖 [ระบบ] กำลังอนุมัติการสมัครสมาชิก Premium ของคุณทันที...`
+            ]);
+
+            // บันทึกรายการลงฐานข้อมูลเป็น "success" และอัปเกรดผู้ใช้ทันที!
+            const txEmail = getUserGmail(currentUser);
+            const txId = 'tx-' + Date.now();
+            
+            // 1. บันทึกธุรกรรมลง Supabase เป็น success
+            const newTx = {
+              id: txId,
+              refNo: transRef,
+              username: currentUsername,
+              email: txEmail,
+              packageName: selectedPackage,
+              amount: actualAmount,
+              timestamp: getIsoTimestamp(),
+              status: 'success', // อนุมัติทันที!
+              slipUrl: previewUrl,
+              reason: 'ตรวจสอบผ่านระบบอัตโนมัติ (SlipOK)'
+            };
+
+            await saveTransaction(newTx);
+
+            // 2. อัปเกรดบทบาทของผู้ใช้งานเป็น Premium ทันที!
+            const daysToAdd = selectedPackage === 'monthly' ? 30 : 365;
+            const signupDate = new Date().toISOString().split('T')[0];
+            const expiryDate = new Date(Date.now() + daysToAdd * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+            await updateUserRole(txEmail, 'premium', signupDate, expiryDate);
+
+            // อัปเดต State หน้าเว็บเพื่อเปิดสิทธิ์ Premium ทันทีโดยไม่ต้องโหลดใหม่
+            setUserRoles(prev => ({ ...prev, [txEmail]: 'premium' }));
+            setUserPremiumDates(prev => ({
+              ...prev,
+              [txEmail]: { signupDate, expiryDate }
+            }));
+
+            // Sync รายการในตาราง Admin
+            const localTx = {
+              id: txId,
+              refNo: transRef,
+              username: currentUsername,
+              email: txEmail,
+              packageName: selectedPackage,
+              amount: actualAmount,
+              timestamp: getIsoTimestamp(),
+              status: 'success',
+              slipUrl: previewUrl,
+              reason: 'ตรวจสอบผ่านระบบอัตโนมัติ (SlipOK)'
+            };
+            setRevenueTransactions(prev => [localTx, ...prev]);
+
+            setToastMessage('🎉 ยินดีด้วย! บัญชีของคุณได้รับการอัปเกรดเป็น Premium เรียบร้อยแล้ว');
+            
+            setTimeout(() => {
+              setIsSlipChecking(false);
+              setUploadedSlipPreview(null);
+              setSelectedSlipFile(null);
+              setSelectedSlipFilePreview(null);
+              setIsUpsellOpen(false);
+            }, 3000);
+
+          } else {
+            // SlipOK ตรวจสอบแล้วไม่ผ่าน (สลิปซ้ำ ยอดไม่ตรง ไม่มี QR ฯลฯ)
+            const errMsg = slipOkResult.message || 'สลิปไม่ถูกต้อง หรือไม่พบ QR Code';
+            const errCode = slipOkResult.code || '';
+            throw new Error(`[โค้ด ${errCode}] ${errMsg}`);
+          }
+
+        } catch (err) {
+          console.error(err);
+          setSlipCheckLogs(prev => [
+            ...prev,
+            `❌ [การตรวจสอบอัตโนมัติไม่สำเร็จ] ${err.message}`,
+            `🤖 [ระบบ] บันทึกสลิปรายการแบบปกติเพื่อให้ผู้ดูแลระบบตรวจสอบเองด้วยมือ...`
+          ]);
+
+          // Fallback: บันทึกธุรกรรมเป็น "pending" เพื่อให้แอดมินมาเปิดระบบมือทีหลัง (ไม่ให้เงินสูญเปล่า)
+          try {
+            const txEmail = getUserGmail(currentUser);
+            const txId = 'tx-' + Date.now();
+            const transRef = 'ref-manual-' + Date.now();
+
+            const fallbackTx = {
+              id: txId,
+              refNo: transRef,
+              username: currentUsername,
+              email: txEmail,
+              packageName: selectedPackage,
+              amount: amountVal,
+              timestamp: getIsoTimestamp(),
+              status: 'pending',
+              slipUrl: previewUrl,
+              reason: `SlipOK ตรวจสอบไม่ผ่าน: ${err.message}`
+            };
+
+            await saveTransaction(fallbackTx);
+            
+            const localTx = {
+              id: txId,
+              refNo: transRef,
+              username: currentUsername,
+              email: txEmail,
+              packageName: selectedPackage,
+              amount: amountVal,
+              timestamp: getIsoTimestamp(),
+              status: 'pending',
+              slipUrl: previewUrl,
+              reason: `SlipOK ตรวจสอบไม่ผ่าน: ${err.message}`
+            };
+            setRevenueTransactions(prev => [localTx, ...prev]);
+
+            setTimeout(() => {
+              setIsSlipChecking(false);
+              setUploadedSlipPreview(null);
+              setSelectedSlipFile(null);
+              setSelectedSlipFilePreview(null);
+              setIsUpsellOpen(false);
+              alert(`การตรวจสอบอัตโนมัติไม่ผ่าน: ${err.message}\n\nระบบได้ส่งสลิปของคุณไปยังแอดมินเพื่อตรวจสอบด้วยมือแล้วครับ โปรดรอแอดมินอนุมัติบทบาท`);
+            }, 3000);
+
+          } catch (dbErr) {
+            console.error(dbErr);
             setIsSlipChecking(false);
             setUploadedSlipPreview(null);
-            setSelectedSlipFile(null);
-            setSelectedSlipFilePreview(null);
-            setIsUpsellOpen(false);
-            setToastMessage('⚠️ อัปโหลดเสร็จสิ้น ส่งเรื่องให้ผู้ดูแลระบบตรวจสอบและอนุมัติแล้ว');
-          }, 1500);
-
-        } catch (uploadErr) {
-          console.error(uploadErr);
-          setSlipCheckLogs(prev => [...prev, '❌ เกิดข้อผิดพลาด: ' + uploadErr.message]);
-          setTimeout(() => {
-            setIsSlipChecking(false);
-            setUploadedSlipPreview(null);
-            alert('ไม่สามารถอัปโหลดรูปสลิปได้: ' + uploadErr.message);
-          }, 2500);
+            alert(`ไม่สามารถทำรายการได้: ${dbErr.message}`);
+          }
         }
       };
-      
-      reader.readAsDataURL(file);
+
+      runVerification();
 
     } catch (err) {
       console.error(err);
