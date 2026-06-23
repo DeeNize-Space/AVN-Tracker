@@ -422,7 +422,7 @@ export default function App() {
   const [selectedCatalogTags, setSelectedCatalogTags] = useState([]);
   const [catalogTagSearch, setCatalogTagSearch] = useState('');
   const [showTagFilterCatalog, setShowTagFilterCatalog] = useState(false);
-  const [catalogSort, setCatalogSort] = useState('views-desc');
+  const [catalogSort, setCatalogSort] = useState('date-desc');
 
   // Reset catalog page during render when search, tags, sort, or tab changes to avoid ESLint warning
   const [prevSearchQuery, setPrevSearchQuery] = useState(searchQuery);
