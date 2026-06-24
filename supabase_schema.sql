@@ -239,3 +239,26 @@ BEGIN
   WHERE id = game_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ---------------------------------------------------------------------
+-- 10. Table: Translated Games
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.translated_games (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    cover_url TEXT,
+    version TEXT NOT NULL,
+    description TEXT,
+    download_pc TEXT,
+    download_mobile TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.translated_games ENABLE ROW LEVEL SECURITY;
+
+-- Translated Games Policies
+CREATE POLICY "Allow read translated games to everyone" ON public.translated_games FOR SELECT TO public USING (true);
+CREATE POLICY "Allow all on translated games to admins" ON public.translated_games FOR ALL TO authenticated 
+  USING (EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.admin = 'yes'));
+
