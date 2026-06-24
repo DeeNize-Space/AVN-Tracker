@@ -30,26 +30,7 @@ import {
 } from './supabase';
 
 // Mock Data for Translated Games Preview
-const initialTranslatedGames = [
-  {
-    id: "eternum-th",
-    title: "Eternum (แปลไทย)",
-    cover_url: "https://images.gamestorylog.com/game-assets/covers/eternum-cover-1.webp",
-    version: "v0.9 แปลไทยครบ 100%",
-    description: "ยินดีต้อนรับสู่โลกเสมือนจริงของ Eternum! ผลงานแปลภาษาไทยชิ้นเอกที่มีการแปลบทสนทนา เนื้อเรื่อง เมนู และคำอธิบายทั้งหมดกว่า 130,000 คำ เพื่อให้คุณได้รับอรรถรสในการเล่นเกม Visual Novel ยอดนิยมเกมนี้อย่างเต็มอิ่มที่สุด การันตีผลงานแปลคุณภาพสระไม่เพลีย อ่านง่ายไหลลื่น\n\n**ขั้นตอนการติดตั้ง:**\n1. ดาวน์โหลดไฟล์เวอร์ชันที่ต้องการ (PC หรือ Android)\n2. สำหรับ PC: แตกไฟล์ลงโฟลเดอร์ของเกมและทับไฟล์เดิมได้เลย\n3. สำหรับ Android: ติดตั้งไฟล์ .apk แล้วเริ่มเล่นได้ทันที",
-    download_pc: "https://mega.nz/file/examplePC123",
-    download_mobile: "https://mega.nz/file/exampleMobile123"
-  },
-  {
-    id: "origin-story-th",
-    title: "Origin Story (แปลไทย)",
-    cover_url: "https://images.gamestorylog.com/game-assets/covers/origin-story-cover-1.webp",
-    version: "v0.9.3 แปลไทย 95%",
-    description: "เรื่องราวการเติบโตและพลังพิเศษที่มาพร้อมกับความสัมพันธ์รอบตัว ได้รับการแปลภาษาไทยเป็นส่วนใหญ่แล้ว ทั้งบทสนทนาหลักและหน้าจอเมนูโทรศัพท์\n\n**ข้อแนะนำ:** เวอร์ชัน Android จำเป็นต้องดาวน์โหลดไฟล์ APK และกดติดตั้งด้วยสิทธิ์ดาวน์โหลดแอปภายนอก",
-    download_pc: "https://gofile.io/d/examplePC456",
-    download_mobile: "https://gofile.io/d/exampleMobile456"
-  }
-];
+const initialTranslatedGames = [];
 
 // --- HELPER FUNCTIONS OUTSIDE COMPONENT ---
 function generateId() {
