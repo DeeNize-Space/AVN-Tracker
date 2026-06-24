@@ -29,6 +29,28 @@ import {
   deleteUser
 } from './supabase';
 
+// Mock Data for Translated Games Preview
+const initialTranslatedGames = [
+  {
+    id: "eternum-th",
+    title: "Eternum (แปลไทย)",
+    cover_url: "https://images.gamestorylog.com/game-assets/covers/eternum-cover-1.webp",
+    version: "v0.9 แปลไทยครบ 100%",
+    description: "ยินดีต้อนรับสู่โลกเสมือนจริงของ Eternum! ผลงานแปลภาษาไทยชิ้นเอกที่มีการแปลบทสนทนา เนื้อเรื่อง เมนู และคำอธิบายทั้งหมดกว่า 130,000 คำ เพื่อให้คุณได้รับอรรถรสในการเล่นเกม Visual Novel ยอดนิยมเกมนี้อย่างเต็มอิ่มที่สุด การันตีผลงานแปลคุณภาพสระไม่เพลีย อ่านง่ายไหลลื่น\n\n**ขั้นตอนการติดตั้ง:**\n1. ดาวน์โหลดไฟล์เวอร์ชันที่ต้องการ (PC หรือ Android)\n2. สำหรับ PC: แตกไฟล์ลงโฟลเดอร์ของเกมและทับไฟล์เดิมได้เลย\n3. สำหรับ Android: ติดตั้งไฟล์ .apk แล้วเริ่มเล่นได้ทันที",
+    download_pc: "https://mega.nz/file/examplePC123",
+    download_mobile: "https://mega.nz/file/exampleMobile123"
+  },
+  {
+    id: "origin-story-th",
+    title: "Origin Story (แปลไทย)",
+    cover_url: "https://images.gamestorylog.com/game-assets/covers/origin-story-cover-1.webp",
+    version: "v0.9.3 แปลไทย 95%",
+    description: "เรื่องราวการเติบโตและพลังพิเศษที่มาพร้อมกับความสัมพันธ์รอบตัว ได้รับการแปลภาษาไทยเป็นส่วนใหญ่แล้ว ทั้งบทสนทนาหลักและหน้าจอเมนูโทรศัพท์\n\n**ข้อแนะนำ:** เวอร์ชัน Android จำเป็นต้องดาวน์โหลดไฟล์ APK และกดติดตั้งด้วยสิทธิ์ดาวน์โหลดแอปภายนอก",
+    download_pc: "https://gofile.io/d/examplePC456",
+    download_mobile: "https://gofile.io/d/exampleMobile456"
+  }
+];
+
 // --- HELPER FUNCTIONS OUTSIDE COMPONENT ---
 function generateId() {
   return 'id-' + Math.random().toString(36).substring(2, 11);
@@ -423,6 +445,17 @@ export default function App() {
   const [catalogTagSearch, setCatalogTagSearch] = useState('');
   const [showTagFilterCatalog, setShowTagFilterCatalog] = useState(false);
   const [catalogSort, setCatalogSort] = useState('date-desc');
+
+  // Translated Games states
+  const [translatedGames, setTranslatedGames] = useState(() => {
+    const saved = localStorage.getItem('avn_translated_games_preview');
+    return saved ? JSON.parse(saved) : initialTranslatedGames;
+  });
+  const [selectedTranslatedGame, setSelectedTranslatedGame] = useState(null);
+  const [isTranslatedModalOpen, setIsTranslatedModalOpen] = useState(false);
+  const [isAddTranslatedOpen, setIsAddTranslatedOpen] = useState(false);
+  const [isEditTranslatedOpen, setIsEditTranslatedOpen] = useState(false);
+  const [editingTranslatedGame, setEditingTranslatedGame] = useState(null);
 
   // Reset catalog page during render when search, tags, sort, or tab changes to avoid ESLint warning
   const [prevSearchQuery, setPrevSearchQuery] = useState(searchQuery);
@@ -2218,6 +2251,17 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => handleTabChange('translated')}
+              className={`text-sm px-4 py-2.5 rounded-xl font-bold transition-all h-11 flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'translated'
+                  ? 'bg-blue-600/15 text-blue-400 border border-blue-500/30'
+                  : 'text-slate-400 hover:text-slate-200 border border-transparent'
+              }`}
+            >
+              🇹🇭 แปลไทย
+            </button>
+
+            <button
               onClick={() => handleTabChange('local')}
               className={`text-sm px-4 py-2.5 rounded-xl font-bold transition-all h-11 flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'local'
@@ -2832,6 +2876,184 @@ export default function App() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* TRANSLATED GAMES PORTAL */}
+        {activeTab === 'translated' && (
+          <div className="flex flex-col gap-6 animate-fade-in-up">
+            <div className="text-center py-6">
+              <h2 className="text-2xl font-black text-slate-100 flex items-center justify-center gap-2">
+                🇹🇭 เกมแปลไทยโดยผู้พัฒนา
+              </h2>
+              <p className="text-sm text-slate-400 mt-2 max-w-xl mx-auto">
+                คลังดาวน์โหลดเกมแนว Visual Novel ที่ได้รับการแปลเป็นภาษาไทยอย่างสมบูรณ์แบบโดยทีมงานของเรา คุณสามารถเข้าอ่านรีวิว ตรวจสอบวิธีติดตั้ง และดาวน์โหลดไปเล่นได้ฟรี!
+              </p>
+            </div>
+
+            {translatedGames.length === 0 ? (
+              <div className="text-center py-20 glass-panel rounded-3xl border border-slate-900">
+                <span className="text-5xl block mb-3">📦</span>
+                <p className="text-slate-450 font-bold text-base">กำลังปรับปรุงข้อมูลเกมแปลไทยในขณะนี้</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                {translatedGames.map((game) => (
+                  <div
+                    key={game.id}
+                    onClick={() => {
+                      setSelectedTranslatedGame(game);
+                      setIsTranslatedModalOpen(true);
+                    }}
+                    className="glass-panel group hover:border-blue-500/40 rounded-2xl overflow-hidden cursor-pointer flex flex-col transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/5 hover:-translate-y-1 relative"
+                  >
+                    {/* Cover image */}
+                    <div className="aspect-[4/5] relative overflow-hidden bg-slate-950/45 shrink-0">
+                      {game.cover_url ? (
+                        <img
+                          src={game.cover_url}
+                          alt={game.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-blue-900 to-purple-900 flex items-center justify-center font-bold text-slate-300">
+                          {game.title.substring(0, 2)}
+                        </div>
+                      )}
+                      <div className="absolute top-3 left-3 bg-blue-600/90 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-full shadow-lg shadow-blue-500/20 uppercase tracking-wide">
+                        {game.version}
+                      </div>
+                    </div>
+
+                    {/* Card Content */}
+                    <div className="p-4 flex flex-col flex-grow justify-between gap-3">
+                      <div>
+                        <h3 className="font-extrabold text-sm text-slate-100 group-hover:text-blue-400 transition-colors line-clamp-1 mb-1.5">
+                          {game.title}
+                        </h3>
+                        <p className="text-xs text-slate-400 line-clamp-3 leading-relaxed">
+                          {game.description.replace(/\*\*/g, '').replace(/#/g, '')}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="w-full bg-slate-900/60 hover:bg-blue-600 text-slate-200 hover:text-white border border-slate-800 hover:border-blue-500 text-xs font-bold py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-2"
+                      >
+                        📖 อ่านรีวิว & ดาวน์โหลด
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* TRANSLATED GAME DETAIL MODAL */}
+            {isTranslatedModalOpen && selectedTranslatedGame && (
+              <div className="modal-overlay fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div
+                  className="glass-panel w-full max-w-2xl rounded-3xl border border-white/10 shadow-2xl flex flex-col overflow-hidden max-h-[90vh] animate-scale-up"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Header / Cover Hero */}
+                  <div className="h-44 sm:h-56 relative bg-slate-950/60 shrink-0">
+                    {selectedTranslatedGame.cover_url ? (
+                      <img
+                        src={selectedTranslatedGame.cover_url}
+                        alt={selectedTranslatedGame.title}
+                        className="w-full h-full object-cover opacity-40 blur-sm animate-pulse-slow"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-r from-blue-950 to-purple-950"></div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 to-transparent"></div>
+                    
+                    <button
+                      type="button"
+                      onClick={() => setIsTranslatedModalOpen(false)}
+                      className="absolute top-4 right-4 w-9 h-9 flex items-center justify-center rounded-full bg-black/50 hover:bg-slate-900 text-slate-400 hover:text-white transition-colors cursor-pointer border border-white/5"
+                    >
+                      ✕
+                    </button>
+
+                    <div className="absolute bottom-4 left-6 right-6 flex items-end gap-4 sm:gap-5">
+                      <div className="w-20 sm:w-24 aspect-[4/5] rounded-xl overflow-hidden shadow-2xl border border-white/10 shrink-0 bg-slate-900 hidden sm:block">
+                        <img src={selectedTranslatedGame.cover_url} alt="" className="w-full h-full object-cover" />
+                      </div>
+                      <div className="flex-grow pb-1">
+                        <span className="text-[10px] sm:text-xs font-bold text-blue-400 uppercase tracking-wider block mb-1">
+                          {selectedTranslatedGame.version}
+                        </span>
+                        <h2 className="text-lg sm:text-2xl font-black text-slate-100 leading-tight">
+                          {selectedTranslatedGame.title}
+                        </h2>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Body Content */}
+                  <div className="p-6 overflow-y-auto flex flex-col gap-6 text-slate-300 scrollbar-thin">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2.5">
+                        📝 รีวิวและรายละเอียดเกมแปลไทย
+                      </h4>
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap text-slate-300">
+                        {selectedTranslatedGame.description}
+                      </p>
+                    </div>
+
+                    <div className="border-t border-slate-900 pt-5">
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3.5 flex items-center gap-1.5">
+                        📥 ลิงก์ดาวน์โหลดเกม (Download Links)
+                      </h4>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        {selectedTranslatedGame.download_pc ? (
+                          <a
+                            href={selectedTranslatedGame.download_pc}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-sm py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25 transition-all active:scale-98 cursor-pointer"
+                          >
+                            💻 ดาวน์โหลดเวอร์ชัน PC (Windows/Mac)
+                          </a>
+                        ) : (
+                          <div className="bg-slate-900/60 border border-slate-800 text-slate-500 text-xs font-bold py-3 rounded-xl flex items-center justify-center">
+                            ไม่มีลิงก์สำหรับ PC
+                          </div>
+                        )}
+
+                        {selectedTranslatedGame.download_mobile ? (
+                          <a
+                            href={selectedTranslatedGame.download_mobile}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-purple-600 hover:bg-purple-505 text-white font-extrabold text-sm py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-purple-500/25 transition-all active:scale-98 cursor-pointer"
+                          >
+                            📱 ดาวน์โหลดเวอร์ชัน Android (APK)
+                          </a>
+                        ) : (
+                          <div className="bg-slate-900/60 border border-slate-800 text-slate-500 text-xs font-bold py-3 rounded-xl flex items-center justify-center">
+                            ไม่มีลิงก์สำหรับ Android
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="px-6 py-4 bg-slate-950/40 border-t border-slate-900 flex justify-end shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setIsTranslatedModalOpen(false)}
+                      className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-350 text-xs font-bold h-10 px-5 rounded-xl transition-colors cursor-pointer"
+                    >
+                      ปิดหน้านี้
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -4613,6 +4835,107 @@ export default function App() {
               )}
             </div>
 
+            {/* Translated Games Management Panel */}
+            <div className="glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
+                    🇹🇭 จัดการบทความเกมแปลไทย ({translatedGames.length})
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    จัดการข้อมูลหน้าปกเกม อัปเดตเนื้อหาบทความความคืบหน้างานแปล และลิงก์ดาวน์โหลดสำหรับเกมแปลไทย
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setIsAddTranslatedOpen(true);
+                  }}
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 h-10 rounded-xl flex items-center gap-1.5 text-xs transition-all cursor-pointer shrink-0"
+                >
+                  ➕ เขียนบทความแปลไทยใหม่
+                </button>
+              </div>
+
+              <div className="overflow-x-auto mt-2">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-900 text-slate-400 font-bold">
+                      <th className="pb-3 pl-2 w-16">ปกเกม</th>
+                      <th className="pb-3">ชื่อเกม</th>
+                      <th className="pb-3 w-32">เวอร์ชันงานแปล</th>
+                      <th className="pb-3 w-40">ลิงก์ PC / Mobile</th>
+                      <th className="pb-3 text-right pr-2 w-28">การจัดการ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {translatedGames.length === 0 ? (
+                      <tr>
+                        <td colSpan="5" className="py-6 text-center text-slate-500 italic">
+                          ยังไม่มีข้อมูลบทความแปลไทย (รันอยู่ในโหมดพรีวิวโลคัล)
+                        </td>
+                      </tr>
+                    ) : (
+                      translatedGames.map((game) => (
+                        <tr key={game.id} className="border-b border-slate-900/50 hover:bg-slate-900/10 text-slate-350">
+                          <td className="py-2.5 pl-2">
+                            <div className="w-8 h-10 bg-slate-950 rounded-md overflow-hidden border border-white/5">
+                              {game.cover_url ? (
+                                <img src={game.cover_url} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full bg-slate-900 flex items-center justify-center font-bold text-[9px]">
+                                  NO
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-2.5 font-bold text-slate-200">
+                            {game.title}
+                          </td>
+                          <td className="py-2.5">
+                            <span className="bg-blue-950 text-blue-400 border border-blue-500/20 text-[9px] font-bold px-2 py-0.5 rounded-md">
+                              {game.version}
+                            </span>
+                          </td>
+                          <td className="py-2.5 text-[10px] text-slate-400 leading-normal">
+                            <div className="flex flex-col gap-0.5">
+                              <span className="truncate max-w-[150px]">💻 PC: {game.download_pc ? 'มีลิงก์' : 'ไม่มี'}</span>
+                              <span className="truncate max-w-[150px]">📱 Mobile: {game.download_mobile ? 'มีลิงก์' : 'ไม่มี'}</span>
+                            </div>
+                          </td>
+                          <td className="py-2.5 text-right pr-2">
+                            <div className="flex justify-end gap-1.5">
+                              <button
+                                onClick={() => {
+                                  setEditingTranslatedGame(game);
+                                  setIsEditTranslatedOpen(true);
+                                }}
+                                className="bg-slate-900 hover:bg-slate-800 border border-slate-850 hover:border-slate-700 text-blue-400 text-[10px] font-bold h-7 px-2.5 rounded-lg cursor-pointer transition-colors"
+                              >
+                                ✏️ แก้ไข
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (confirm(`คุณต้องการลบบทความเกม "${game.title}" หรือไม่?`)) {
+                                    const updated = translatedGames.filter(g => g.id !== game.id);
+                                    setTranslatedGames(updated);
+                                    localStorage.setItem('avn_translated_games_preview', JSON.stringify(updated));
+                                    setToastMessage('ลบบทความเรียบร้อยแล้ว!');
+                                  }
+                                }}
+                                className="bg-rose-950/20 hover:bg-rose-900/30 border border-rose-500/10 hover:border-rose-500/30 text-rose-400 text-[10px] font-bold h-7 px-2.5 rounded-lg cursor-pointer transition-colors"
+                              >
+                                🗑️ ลบ
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             {/* Tag Management Panel */}
             <div className="glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
               <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
@@ -5583,6 +5906,261 @@ export default function App() {
                 </button>
               </div>
 
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ADD TRANSLATED GAME MODAL (POPUP) */}
+      {isAddTranslatedOpen && (
+        <div className="modal-overlay fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setIsAddTranslatedOpen(false)}>
+          <div
+            className="glass-panel w-full max-w-2xl bg-slate-950 border border-slate-800 rounded-3xl p-6 relative shadow-2xl flex flex-col max-h-[90vh] overflow-y-auto scrollbar-thin"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setIsAddTranslatedOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 w-9 h-9 border border-slate-800 rounded-full flex items-center justify-center cursor-pointer"
+            >
+              ✕
+            </button>
+
+            <h2 className="text-lg font-black text-slate-100 mb-4 flex items-center gap-1.5">
+              🇹🇭 เพิ่มบทความเกมแปลไทยใหม่
+            </h2>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const newGame = {
+                  id: 'translated-' + Date.now(),
+                  title: formData.get('title') || 'Untitled',
+                  cover_url: formData.get('cover_url') || '',
+                  version: formData.get('version') || 'v1.0 แปลไทย',
+                  description: formData.get('description') || '',
+                  download_pc: formData.get('download_pc') || '',
+                  download_mobile: formData.get('download_mobile') || ''
+                };
+
+                const updated = [...translatedGames, newGame];
+                setTranslatedGames(updated);
+                localStorage.setItem('avn_translated_games_preview', JSON.stringify(updated));
+                setIsAddTranslatedOpen(false);
+                setToastMessage('เพิ่มบทความเกมแปลไทยสำเร็จ!');
+              }}
+              className="flex flex-col gap-4"
+            >
+              <div>
+                <label className="text-xs text-slate-400 font-bold block mb-1">ชื่อเกม (Title) *</label>
+                <input
+                  name="title"
+                  type="text"
+                  required
+                  className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                  placeholder="เช่น Eternum (แปลไทย)"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">เวอร์ชันงานแปล (Version) *</label>
+                  <input
+                    name="version"
+                    type="text"
+                    required
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                    placeholder="เช่น v0.9 แปลไทยครบ 100%"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">ลิงก์รูปภาพปก (Cover Image URL)</label>
+                  <input
+                    name="cover_url"
+                    type="url"
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                    placeholder="เช่น https://..."
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400 font-bold block mb-1">รายละเอียดบทความ / วิธีการติดตั้ง (Markdown/Text) *</label>
+                <textarea
+                  name="description"
+                  required
+                  className="glass-input w-full p-4 text-sm rounded-xl h-36 text-slate-200 leading-relaxed"
+                  placeholder="พิมพ์ข้อความอธิบายความคืบหน้าของงานแปล หรือวิธีลงตัวเกมแปลภาษาไทย..."
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">ลิงก์ดาวน์โหลด PC (Windows/Mac)</label>
+                  <input
+                    name="download_pc"
+                    type="url"
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                    placeholder="เช่น https://mega.nz/..."
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">ลิงก์ดาวน์โหลด Mobile (Android APK)</label>
+                  <input
+                    name="download_mobile"
+                    type="url"
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                    placeholder="เช่น https://mega.nz/..."
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-slate-900 flex justify-end gap-2.5">
+                <button
+                  type="submit"
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold h-10 px-5 rounded-xl text-xs transition-colors cursor-pointer"
+                >
+                  💾 บันทึกบทความ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsAddTranslatedOpen(false)}
+                  className="bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 px-5 h-10 rounded-xl font-bold text-xs cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT TRANSLATED GAME MODAL (POPUP) */}
+      {isEditTranslatedOpen && editingTranslatedGame && (
+        <div className="modal-overlay fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setIsEditTranslatedOpen(false)}>
+          <div
+            className="glass-panel w-full max-w-2xl bg-slate-950 border border-slate-800 rounded-3xl p-6 relative shadow-2xl flex flex-col max-h-[90vh] overflow-y-auto scrollbar-thin"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setIsEditTranslatedOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 w-9 h-9 border border-slate-800 rounded-full flex items-center justify-center cursor-pointer"
+            >
+              ✕
+            </button>
+
+            <h2 className="text-lg font-black text-slate-100 mb-4 flex items-center gap-1.5">
+              🇹🇭 แก้ไขบทความเกมแปลไทย
+            </h2>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const updatedGame = {
+                  ...editingTranslatedGame,
+                  title: formData.get('title') || 'Untitled',
+                  cover_url: formData.get('cover_url') || '',
+                  version: formData.get('version') || 'v1.0 แปลไทย',
+                  description: formData.get('description') || '',
+                  download_pc: formData.get('download_pc') || '',
+                  download_mobile: formData.get('download_mobile') || ''
+                };
+
+                const updated = translatedGames.map(g => g.id === editingTranslatedGame.id ? updatedGame : g);
+                setTranslatedGames(updated);
+                localStorage.setItem('avn_translated_games_preview', JSON.stringify(updated));
+                setIsEditTranslatedOpen(false);
+                setEditingTranslatedGame(null);
+                setToastMessage('แก้ไขบทความเกมแปลไทยสำเร็จ!');
+              }}
+              className="flex flex-col gap-4"
+            >
+              <div>
+                <label className="text-xs text-slate-400 font-bold block mb-1">ชื่อเกม (Title) *</label>
+                <input
+                  name="title"
+                  type="text"
+                  required
+                  defaultValue={editingTranslatedGame.title}
+                  className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                  placeholder="เช่น Eternum (แปลไทย)"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">เวอร์ชันงานแปล (Version) *</label>
+                  <input
+                    name="version"
+                    type="text"
+                    required
+                    defaultValue={editingTranslatedGame.version}
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                    placeholder="เช่น v0.9 แปลไทยครบ 100%"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">ลิงก์รูปภาพปก (Cover Image URL)</label>
+                  <input
+                    name="cover_url"
+                    type="url"
+                    defaultValue={editingTranslatedGame.cover_url}
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                    placeholder="เช่น https://..."
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400 font-bold block mb-1">รายละเอียดบทความ / วิธีการติดตั้ง (Markdown/Text) *</label>
+                <textarea
+                  name="description"
+                  required
+                  defaultValue={editingTranslatedGame.description}
+                  className="glass-input w-full p-4 text-sm rounded-xl h-36 text-slate-200 leading-relaxed"
+                  placeholder="พิมพ์ข้อความอธิบายความคืบหน้าของงานแปล หรือวิธีลงตัวเกมแปลภาษาไทย..."
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">ลิงก์ดาวน์โหลด PC (Windows/Mac)</label>
+                  <input
+                    name="download_pc"
+                    type="url"
+                    defaultValue={editingTranslatedGame.download_pc}
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                    placeholder="เช่น https://mega.nz/..."
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">ลิงก์ดาวน์โหลด Mobile (Android APK)</label>
+                  <input
+                    name="download_mobile"
+                    type="url"
+                    defaultValue={editingTranslatedGame.download_mobile}
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
+                    placeholder="เช่น https://mega.nz/..."
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-slate-900 flex justify-end gap-2.5">
+                <button
+                  type="submit"
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold h-10 px-5 rounded-xl text-xs transition-colors cursor-pointer"
+                >
+                  💾 บันทึกการเปลี่ยนแปลง
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditTranslatedOpen(false)}
+                  className="bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 px-5 h-10 rounded-xl font-bold text-xs cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+              </div>
             </form>
           </div>
         </div>
