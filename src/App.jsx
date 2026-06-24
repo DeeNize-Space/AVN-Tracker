@@ -26,7 +26,10 @@ import {
   getUsersList,
   saveTransaction,
   getTransactions,
-  deleteUser
+  deleteUser,
+  getTranslatedGames,
+  saveTranslatedGame,
+  deleteTranslatedGame
 } from './supabase';
 
 // Mock Data for Translated Games Preview
@@ -792,6 +795,10 @@ export default function App() {
         // 5. Fetch reports
         const reportsList = await getReports();
         setReports(reportsList);
+
+        // 6. Fetch translated games
+        const transList = await getTranslatedGames();
+        setTranslatedGames(transList);
 
         setIsDbLoaded(true);
       } catch (err) {
@@ -2994,8 +3001,14 @@ export default function App() {
                   <div
                     key={game.id}
                     onClick={() => {
-                      setSelectedTranslatedGame(game);
-                      setIsTranslatedModalOpen(true);
+                      const isPremium = subscriptionRole === 'premium' || subscriptionRole === 'admin';
+                      if (isPremium) {
+                        setSelectedTranslatedGame(game);
+                        setIsTranslatedModalOpen(true);
+                      } else {
+                        setIsUpsellOpen(true);
+                        setToastMessage('👑 สมาชิก Premium เท่านั้นที่สามารถเปิดอ่านบทความและดาวน์โหลดเกมแปลไทยได้');
+                      }
                     }}
                     className="glass-panel group hover:border-blue-500/40 rounded-2xl overflow-hidden cursor-pointer flex flex-col transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/5 hover:-translate-y-1 relative"
                   >
@@ -3020,12 +3033,9 @@ export default function App() {
                     {/* Card Content */}
                     <div className="p-4 flex flex-col flex-grow justify-between gap-3">
                       <div>
-                        <h3 className="font-extrabold text-sm text-slate-100 group-hover:text-blue-400 transition-colors line-clamp-1 mb-1.5">
+                        <h3 className="font-extrabold text-sm text-slate-100 group-hover:text-blue-400 transition-colors line-clamp-1">
                           {game.title}
                         </h3>
-                        <p className="text-xs text-slate-400 line-clamp-3 leading-relaxed">
-                          {game.description.replace(/\*\*/g, '').replace(/#/g, '')}
-                        </p>
                       </div>
 
                       <button
@@ -4960,10 +4970,14 @@ export default function App() {
                               <button
                                 onClick={() => {
                                   if (confirm(`คุณต้องการลบบทความเกม "${game.title}" หรือไม่?`)) {
-                                    const updated = translatedGames.filter(g => g.id !== game.id);
-                                    setTranslatedGames(updated);
-                                    localStorage.setItem('avn_translated_games_preview', JSON.stringify(updated));
-                                    setToastMessage('ลบบทความเรียบร้อยแล้ว!');
+                                    deleteTranslatedGame(game.id).then(() => {
+                                      const updated = translatedGames.filter(g => g.id !== game.id);
+                                      setTranslatedGames(updated);
+                                      setToastMessage('ลบบทความเรียบร้อยแล้ว!');
+                                    }).catch(err => {
+                                      console.error(err);
+                                      alert('เกิดข้อผิดพลาดในการลบข้อมูล: ' + err.message);
+                                    });
                                   }
                                 }}
                                 className="bg-rose-950/20 hover:bg-rose-900/30 border border-rose-500/10 hover:border-rose-500/30 text-rose-400 text-[10px] font-bold h-7 px-2.5 rounded-lg cursor-pointer transition-colors"
@@ -5987,11 +6001,14 @@ export default function App() {
                   download_mobile: ''
                 };
 
-                const updated = [...translatedGames, newGame];
-                setTranslatedGames(updated);
-                localStorage.setItem('avn_translated_games_preview', JSON.stringify(updated));
-                setIsAddTranslatedOpen(false);
-                setToastMessage('เพิ่มบทความเกมแปลไทยสำเร็จ!');
+                saveTranslatedGame(newGame).then(() => {
+                  setTranslatedGames([newGame, ...translatedGames]);
+                  setIsAddTranslatedOpen(false);
+                  setToastMessage('เพิ่มบทความเกมแปลไทยสำเร็จ!');
+                }).catch(err => {
+                  console.error(err);
+                  alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล: ' + err.message);
+                });
               }}
               className="flex flex-col gap-4"
             >
@@ -6164,12 +6181,16 @@ export default function App() {
                   download_mobile: ''
                 };
 
-                const updated = translatedGames.map(g => g.id === editingTranslatedGame.id ? updatedGame : g);
-                setTranslatedGames(updated);
-                localStorage.setItem('avn_translated_games_preview', JSON.stringify(updated));
-                setIsEditTranslatedOpen(false);
-                setEditingTranslatedGame(null);
-                setToastMessage('แก้ไขบทความเกมแปลไทยสำเร็จ!');
+                saveTranslatedGame(updatedGame).then(() => {
+                  const updated = translatedGames.map(g => g.id === editingTranslatedGame.id ? updatedGame : g);
+                  setTranslatedGames(updated);
+                  setIsEditTranslatedOpen(false);
+                  setEditingTranslatedGame(null);
+                  setToastMessage('แก้ไขบทความเกมแปลไทยสำเร็จ!');
+                }).catch(err => {
+                  console.error(err);
+                  alert('เกิดข้อผิดพลาดในการแก้ไขข้อมูล: ' + err.message);
+                });
               }}
               className="flex flex-col gap-4"
             >

@@ -564,3 +564,58 @@ export async function testConnection() {
     return false;
   }
 }
+
+// ==========================================
+// TRANSLATED GAMES MANAGEMENT
+// ==========================================
+
+export async function getTranslatedGames() {
+  const { data, error } = await supabase
+    .from('translated_games')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data.map(g => ({
+    id: g.id || '',
+    title: g.title || '',
+    cover_url: g.cover_url || '',
+    version: g.version || '',
+    description: g.description || '',
+    download_pc: g.download_pc || '',
+    download_mobile: g.download_mobile || '',
+    createdAt: g.created_at || '',
+    updatedAt: g.updated_at || ''
+  }));
+}
+
+export async function saveTranslatedGame(game) {
+  const payload = {
+    id: game.id,
+    title: game.title,
+    cover_url: game.cover_url || '',
+    version: game.version || '',
+    description: game.description || '',
+    download_pc: game.download_pc || '',
+    download_mobile: game.download_mobile || '',
+    updated_at: new Date().toISOString()
+  };
+
+  const { error } = await supabase
+    .from('translated_games')
+    .upsert(payload);
+
+  if (error) throw error;
+  return { status: 'success' };
+}
+
+export async function deleteTranslatedGame(gameId) {
+  const { error } = await supabase
+    .from('translated_games')
+    .delete()
+    .eq('id', gameId);
+
+  if (error) throw error;
+  return { status: 'success' };
+}
+
