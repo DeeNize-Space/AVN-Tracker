@@ -193,6 +193,117 @@ function getUserGmail(username) {
   return username;
 }
 
+// Markdown Helper for Inline Text (Bold & Links)
+const parseInlineStyles = (text) => {
+  if (!text) return '';
+  const parts = text.split(/(\*\*.*?\*\*|\[.*?\]\(.*?\))/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={i} className="font-extrabold text-slate-100">{part.substring(2, part.length - 2)}</strong>;
+    }
+    const linkMatch = part.match(/^\[(.*?)\]\((.*?)\)$/);
+    if (linkMatch) {
+      return (
+        <a
+          key={i}
+          href={linkMatch[2]}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-400 hover:text-blue-300 underline font-bold cursor-pointer"
+        >
+          {linkMatch[1]}
+        </a>
+      );
+    }
+    return part;
+  });
+};
+
+// Line-by-line Markdown Parser
+const renderMarkdown = (content) => {
+  if (!content) return null;
+  const lines = content.split('\n');
+  
+  return lines.map((line, idx) => {
+    const trimmed = line.trim();
+    
+    // 1. Headings
+    if (trimmed.startsWith('# ')) {
+      return <h1 key={idx} className="text-lg font-black text-slate-100 mt-5 mb-2.5 border-b border-slate-900 pb-1">{trimmed.substring(2)}</h1>;
+    }
+    if (trimmed.startsWith('## ')) {
+      return <h2 key={idx} className="text-base font-extrabold text-slate-200 mt-4 mb-2">{trimmed.substring(3)}</h2>;
+    }
+    if (trimmed.startsWith('### ')) {
+      return <h3 key={idx} className="text-sm font-bold text-slate-300 mt-3 mb-1.5">{trimmed.substring(4)}</h3>;
+    }
+    
+    // 2. Unordered lists
+    if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+      return <li key={idx} className="list-disc ml-5 text-sm text-slate-300 leading-relaxed mb-1">{parseInlineStyles(trimmed.substring(2))}</li>;
+    }
+    
+    // 3. Block link as action button: [Button Text](URL)
+    const buttonMatch = trimmed.match(/^\[(.*?)\]\((.*?)\)$/);
+    if (buttonMatch) {
+      const [, btnText, btnUrl] = buttonMatch;
+      let btnStyle = "bg-blue-600 hover:bg-blue-500 shadow-blue-500/20"; // default PC/Generic
+      if (btnText.includes('PC') || btnText.includes('Windows') || btnText.includes('Mac') || btnText.includes('คอม')) {
+        btnStyle = "bg-blue-600 hover:bg-blue-500 shadow-blue-500/20";
+      } else if (btnText.includes('Mobile') || btnText.includes('Android') || btnText.includes('APK') || btnText.includes('มือถือ')) {
+        btnStyle = "bg-purple-600 hover:bg-purple-500 shadow-purple-500/20";
+      } else if (btnText.includes('กลุ่ม') || btnText.includes('พูดคุย') || btnText.includes('Facebook') || btnText.includes('Social') || btnText.includes('Patreon')) {
+        btnStyle = "bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20";
+      }
+      
+      return (
+        <div key={idx} className="my-3">
+          <a
+            href={btnUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 text-white font-extrabold text-xs py-2.5 px-5 rounded-xl shadow-lg transition-all active:scale-98 cursor-pointer ${btnStyle}`}
+          >
+            {btnText}
+          </a>
+        </div>
+      );
+    }
+    
+    // 4. Empty line
+    if (trimmed === '') {
+      return <div key={idx} className="h-2"></div>;
+    }
+    
+    // 5. Normal text
+    return <p key={idx} className="text-sm leading-relaxed text-slate-350 mb-1.5">{parseInlineStyles(line)}</p>;
+  });
+};
+
+// Insert text at selection helper
+const insertMarkdownDirect = (textareaId, markdownText) => {
+  const textarea = document.getElementById(textareaId);
+  if (!textarea) return;
+  
+  textarea.focus();
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const text = textarea.value;
+  
+  const before = text.substring(0, start);
+  const after = text.substring(end, text.length);
+  
+  const newValue = before + markdownText + after;
+  textarea.value = newValue;
+  
+  // Dispatch input event to notify any listeners (React form handlers)
+  textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  
+  // Set selection range to position after inserted text
+  const newPos = start + markdownText.length;
+  textarea.setSelectionRange(newPos, newPos);
+};
+
 export default function App() {
   // PWA (Install app) State and Handlers
   const [deferredPrompt, setDeferredPrompt] = useState(null);
@@ -2973,53 +3084,8 @@ export default function App() {
                   </div>
 
                   {/* Body Content */}
-                  <div className="p-6 overflow-y-auto flex flex-col gap-6 text-slate-300 scrollbar-thin">
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2.5">
-                        📝 รีวิวและรายละเอียดเกมแปลไทย
-                      </h4>
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap text-slate-300">
-                        {selectedTranslatedGame.description}
-                      </p>
-                    </div>
-
-                    <div className="border-t border-slate-900 pt-5">
-                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3.5 flex items-center gap-1.5">
-                        📥 ลิงก์ดาวน์โหลดเกม (Download Links)
-                      </h4>
-                      
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                        {selectedTranslatedGame.download_pc ? (
-                          <a
-                            href={selectedTranslatedGame.download_pc}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-sm py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25 transition-all active:scale-98 cursor-pointer"
-                          >
-                            💻 ดาวน์โหลดเวอร์ชัน PC (Windows/Mac)
-                          </a>
-                        ) : (
-                          <div className="bg-slate-900/60 border border-slate-800 text-slate-500 text-xs font-bold py-3 rounded-xl flex items-center justify-center">
-                            ไม่มีลิงก์สำหรับ PC
-                          </div>
-                        )}
-
-                        {selectedTranslatedGame.download_mobile ? (
-                          <a
-                            href={selectedTranslatedGame.download_mobile}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="bg-purple-600 hover:bg-purple-505 text-white font-extrabold text-sm py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-purple-500/25 transition-all active:scale-98 cursor-pointer"
-                          >
-                            📱 ดาวน์โหลดเวอร์ชัน Android (APK)
-                          </a>
-                        ) : (
-                          <div className="bg-slate-900/60 border border-slate-800 text-slate-500 text-xs font-bold py-3 rounded-xl flex items-center justify-center">
-                            ไม่มีลิงก์สำหรับ Android
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                  <div className="p-6 overflow-y-auto flex flex-col gap-4 text-slate-300 scrollbar-thin text-xs sm:text-sm">
+                    {renderMarkdown(selectedTranslatedGame.description)}
                   </div>
 
                   {/* Footer */}
@@ -4844,7 +4910,7 @@ export default function App() {
                       <th className="pb-3 pl-2 w-16">ปกเกม</th>
                       <th className="pb-3">ชื่อเกม</th>
                       <th className="pb-3 w-32">เวอร์ชันงานแปล</th>
-                      <th className="pb-3 w-40">ลิงก์ PC / Mobile</th>
+                      <th className="pb-3 w-44">ตัวอย่างเนื้อหา</th>
                       <th className="pb-3 text-right pr-2 w-28">การจัดการ</th>
                     </tr>
                   </thead>
@@ -4877,11 +4943,8 @@ export default function App() {
                               {game.version}
                             </span>
                           </td>
-                          <td className="py-2.5 text-[10px] text-slate-400 leading-normal">
-                            <div className="flex flex-col gap-0.5">
-                              <span className="truncate max-w-[150px]">💻 PC: {game.download_pc ? 'มีลิงก์' : 'ไม่มี'}</span>
-                              <span className="truncate max-w-[150px]">📱 Mobile: {game.download_mobile ? 'มีลิงก์' : 'ไม่มี'}</span>
-                            </div>
+                          <td className="py-2.5 text-[10px] text-slate-400 max-w-[200px] truncate pr-4">
+                            {game.description ? game.description.replace(/\n/g, ' ').substring(0, 50) + '...' : '-'}
                           </td>
                           <td className="py-2.5 text-right pr-2">
                             <div className="flex justify-end gap-1.5">
@@ -5920,8 +5983,8 @@ export default function App() {
                   cover_url: formData.get('cover_url') || '',
                   version: formData.get('version') || 'v1.0 แปลไทย',
                   description: formData.get('description') || '',
-                  download_pc: formData.get('download_pc') || '',
-                  download_mobile: formData.get('download_mobile') || ''
+                  download_pc: '',
+                  download_mobile: ''
                 };
 
                 const updated = [...translatedGames, newGame];
@@ -5966,34 +6029,86 @@ export default function App() {
               </div>
 
               <div>
-                <label className="text-xs text-slate-400 font-bold block mb-1">รายละเอียดบทความ / วิธีการติดตั้ง (Markdown/Text) *</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs text-slate-400 font-bold block">เนื้อหาบทความ & วิธีติดตั้ง (Markdown Blog) *</label>
+                  <span className="text-[10px] text-slate-500 font-semibold">พิมพ์เนื้อหาและสร้างปุ่มดาวน์โหลด/ลิงก์ยืดหยุ่นได้เอง</span>
+                </div>
+
+                {/* Markdown Toolbar Helper */}
+                <div className="flex flex-wrap gap-1.5 mb-2 bg-slate-900/40 p-2 rounded-xl border border-slate-900">
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownDirect('add-translated-desc', '# ')}
+                    className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[10px] font-bold text-slate-300 h-7 px-2 rounded-lg cursor-pointer"
+                    title="หัวข้อหลัก H1"
+                  >
+                    H1
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownDirect('add-translated-desc', '## ')}
+                    className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[10px] font-bold text-slate-300 h-7 px-2 rounded-lg cursor-pointer"
+                    title="หัวข้อรอง H2"
+                  >
+                    H2
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownDirect('add-translated-desc', '**ตัวหนา**')}
+                    className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[10px] font-bold text-slate-300 h-7 px-2 rounded-lg cursor-pointer"
+                    title="ตัวหนา"
+                  >
+                    <b>B</b>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownDirect('add-translated-desc', '- ')}
+                    className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[10px] font-bold text-slate-300 h-7 px-2 rounded-lg cursor-pointer"
+                    title="รายการสัญลักษณ์"
+                  >
+                    • รายการ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownDirect('add-translated-desc', '\n[💻 ดาวน์โหลดสำหรับ PC](https://...)')}
+                    className="bg-blue-950/60 hover:bg-blue-900/60 border border-blue-500/20 text-[10px] font-extrabold text-blue-400 h-7 px-2.5 rounded-lg cursor-pointer"
+                    title="ปุ่มดาวน์โหลด PC"
+                  >
+                    💻 ปุ่ม PC
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownDirect('add-translated-desc', '\n[📱 ดาวน์โหลดสำหรับ Android](https://...)')}
+                    className="bg-purple-950/60 hover:bg-purple-900/60 border border-purple-500/20 text-[10px] font-extrabold text-purple-400 h-7 px-2.5 rounded-lg cursor-pointer"
+                    title="ปุ่มดาวน์โหลด Android"
+                  >
+                    📱 ปุ่ม Android
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownDirect('add-translated-desc', '\n[💬 กลุ่มพูดคุยผลงานแปล](https://...)')}
+                    className="bg-emerald-950/60 hover:bg-emerald-900/60 border border-emerald-500/20 text-[10px] font-extrabold text-emerald-400 h-7 px-2.5 rounded-lg cursor-pointer"
+                    title="ปุ่มลิงก์กลุ่ม/โซเชียล"
+                  >
+                    💬 ปุ่มโซเชียล
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownDirect('add-translated-desc', '[ลิงก์ทั่วไป](https://...)')}
+                    className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[10px] font-bold text-slate-300 h-7 px-2 rounded-lg cursor-pointer"
+                    title="ลิงก์เชื่อมโยงทั่วไป"
+                  >
+                    🔗 ลิงก์ทั่วไป
+                  </button>
+                </div>
+
                 <textarea
+                  id="add-translated-desc"
                   name="description"
                   required
-                  className="glass-input w-full p-4 text-sm rounded-xl h-36 text-slate-200 leading-relaxed"
-                  placeholder="พิมพ์ข้อความอธิบายความคืบหน้าของงานแปล หรือวิธีลงตัวเกมแปลภาษาไทย..."
+                  className="glass-input w-full p-4 text-sm rounded-xl h-48 text-slate-200 leading-relaxed font-mono"
+                  placeholder="พิมพ์ข้อความรายละเอียด หรือใช้แถบ Shortcut ด้านบนเพื่อช่วยสร้างหัวข้อและปุ่มดาวน์โหลดอย่างอิสระ..."
                 />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs text-slate-400 font-bold block mb-1">ลิงก์ดาวน์โหลด PC (Windows/Mac)</label>
-                  <input
-                    name="download_pc"
-                    type="url"
-                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
-                    placeholder="เช่น https://mega.nz/..."
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-slate-400 font-bold block mb-1">ลิงก์ดาวน์โหลด Mobile (Android APK)</label>
-                  <input
-                    name="download_mobile"
-                    type="url"
-                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
-                    placeholder="เช่น https://mega.nz/..."
-                  />
-                </div>
               </div>
 
               <div className="mt-4 pt-4 border-t border-slate-900 flex justify-end gap-2.5">
@@ -6002,6 +6117,7 @@ export default function App() {
                   className="bg-blue-600 hover:bg-blue-500 text-white font-bold h-10 px-5 rounded-xl text-xs transition-colors cursor-pointer"
                 >
                   💾 บันทึกบทความ
+
                 </button>
                 <button
                   type="button"
@@ -6044,8 +6160,8 @@ export default function App() {
                   cover_url: formData.get('cover_url') || '',
                   version: formData.get('version') || 'v1.0 แปลไทย',
                   description: formData.get('description') || '',
-                  download_pc: formData.get('download_pc') || '',
-                  download_mobile: formData.get('download_mobile') || ''
+                  download_pc: '',
+                  download_mobile: ''
                 };
 
                 const updated = translatedGames.map(g => g.id === editingTranslatedGame.id ? updatedGame : g);
@@ -6094,37 +6210,87 @@ export default function App() {
               </div>
 
               <div>
-                <label className="text-xs text-slate-400 font-bold block mb-1">รายละเอียดบทความ / วิธีการติดตั้ง (Markdown/Text) *</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs text-slate-400 font-bold block">เนื้อหาบทความ & วิธีติดตั้ง (Markdown Blog) *</label>
+                  <span className="text-[10px] text-slate-500 font-semibold">พิมพ์เนื้อหาและสร้างปุ่มดาวน์โหลด/ลิงก์ยืดหยุ่นได้เอง</span>
+                </div>
+
+                {/* Markdown Toolbar Helper */}
+                <div className="flex flex-wrap gap-1.5 mb-2 bg-slate-900/40 p-2 rounded-xl border border-slate-900">
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownDirect('edit-translated-desc', '# ')}
+                    className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[10px] font-bold text-slate-300 h-7 px-2 rounded-lg cursor-pointer"
+                    title="หัวข้อหลัก H1"
+                  >
+                    H1
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownDirect('edit-translated-desc', '## ')}
+                    className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[10px] font-bold text-slate-300 h-7 px-2 rounded-lg cursor-pointer"
+                    title="หัวข้อรอง H2"
+                  >
+                    H2
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownDirect('edit-translated-desc', '**ตัวหนา**')}
+                    className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[10px] font-bold text-slate-300 h-7 px-2 rounded-lg cursor-pointer"
+                    title="ตัวหนา"
+                  >
+                    <b>B</b>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownDirect('edit-translated-desc', '- ')}
+                    className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[10px] font-bold text-slate-300 h-7 px-2 rounded-lg cursor-pointer"
+                    title="รายการสัญลักษณ์"
+                  >
+                    • รายการ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownDirect('edit-translated-desc', '\n[💻 ดาวน์โหลดสำหรับ PC](https://...)')}
+                    className="bg-blue-950/60 hover:bg-blue-900/60 border border-blue-500/20 text-[10px] font-extrabold text-blue-400 h-7 px-2.5 rounded-lg cursor-pointer"
+                    title="ปุ่มดาวน์โหลด PC"
+                  >
+                    💻 ปุ่ม PC
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownDirect('edit-translated-desc', '\n[📱 ดาวน์โหลดสำหรับ Android](https://...)')}
+                    className="bg-purple-950/60 hover:bg-purple-900/60 border border-purple-500/20 text-[10px] font-extrabold text-purple-400 h-7 px-2.5 rounded-lg cursor-pointer"
+                    title="ปุ่มดาวน์โหลด Android"
+                  >
+                    📱 ปุ่ม Android
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownDirect('edit-translated-desc', '\n[💬 กลุ่มพูดคุยผลงานแปล](https://...)')}
+                    className="bg-emerald-950/60 hover:bg-emerald-900/60 border border-emerald-500/20 text-[10px] font-extrabold text-emerald-400 h-7 px-2.5 rounded-lg cursor-pointer"
+                    title="ปุ่มลิงก์กลุ่ม/โซเชียล"
+                  >
+                    💬 ปุ่มโซเชียล
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownDirect('edit-translated-desc', '[ลิงก์ทั่วไป](https://...)')}
+                    className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[10px] font-bold text-slate-300 h-7 px-2 rounded-lg cursor-pointer"
+                    title="ลิงก์เชื่อมโยงทั่วไป"
+                  >
+                    🔗 ลิงก์ทั่วไป
+                  </button>
+                </div>
+
                 <textarea
+                  id="edit-translated-desc"
                   name="description"
                   required
                   defaultValue={editingTranslatedGame.description}
-                  className="glass-input w-full p-4 text-sm rounded-xl h-36 text-slate-200 leading-relaxed"
-                  placeholder="พิมพ์ข้อความอธิบายความคืบหน้าของงานแปล หรือวิธีลงตัวเกมแปลภาษาไทย..."
+                  className="glass-input w-full p-4 text-sm rounded-xl h-48 text-slate-200 leading-relaxed font-mono"
+                  placeholder="พิมพ์ข้อความรายละเอียด หรือใช้แถบ Shortcut ด้านบนเพื่อช่วยสร้างหัวข้อและปุ่มดาวน์โหลดอย่างอิสระ..."
                 />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs text-slate-400 font-bold block mb-1">ลิงก์ดาวน์โหลด PC (Windows/Mac)</label>
-                  <input
-                    name="download_pc"
-                    type="url"
-                    defaultValue={editingTranslatedGame.download_pc}
-                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
-                    placeholder="เช่น https://mega.nz/..."
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-slate-400 font-bold block mb-1">ลิงก์ดาวน์โหลด Mobile (Android APK)</label>
-                  <input
-                    name="download_mobile"
-                    type="url"
-                    defaultValue={editingTranslatedGame.download_mobile}
-                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
-                    placeholder="เช่น https://mega.nz/..."
-                  />
-                </div>
               </div>
 
               <div className="mt-4 pt-4 border-t border-slate-900 flex justify-end gap-2.5">
