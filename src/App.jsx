@@ -29,7 +29,8 @@ import {
   deleteUser,
   getTranslatedGames,
   saveTranslatedGame,
-  deleteTranslatedGame
+  deleteTranslatedGame,
+  incrementTranslatedGameViews
 } from './supabase';
 
 // Mock Data for Translated Games Preview
@@ -3003,8 +3004,13 @@ export default function App() {
                     onClick={() => {
                       const isPremium = subscriptionRole === 'premium' || subscriptionRole === 'admin';
                       if (isPremium) {
-                        setSelectedTranslatedGame(game);
+                        setSelectedTranslatedGame({
+                          ...game,
+                          views: (game.views || 0) + 1
+                        });
                         setIsTranslatedModalOpen(true);
+                        incrementTranslatedGameViews(game.id).catch(err => console.error("Error incrementing views:", err));
+                        setTranslatedGames(prev => prev.map(g => g.id === game.id ? { ...g, views: (g.views || 0) + 1 } : g));
                       } else {
                         setIsUpsellOpen(true);
                         setToastMessage('👑 สมาชิก Premium เท่านั้นที่สามารถเปิดอ่านบทความและดาวน์โหลดเกมแปลไทยได้');
@@ -3027,6 +3033,9 @@ export default function App() {
                       )}
                       <div className="absolute top-3 left-3 bg-blue-600/90 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-full shadow-lg shadow-blue-500/20 uppercase tracking-wide">
                         {game.version}
+                      </div>
+                      <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-sm text-slate-300 text-[10px] font-bold px-2 py-1 rounded-full shadow-lg flex items-center gap-1">
+                        👁️ {game.views || 0}
                       </div>
                     </div>
 
@@ -3084,7 +3093,7 @@ export default function App() {
                       </div>
                       <div className="flex-grow pb-1">
                         <span className="text-[10px] sm:text-xs font-bold text-blue-400 uppercase tracking-wider block mb-1">
-                          {selectedTranslatedGame.version}
+                          {selectedTranslatedGame.version} • 👁️ {selectedTranslatedGame.views || 0} views
                         </span>
                         <h2 className="text-lg sm:text-2xl font-black text-slate-100 leading-tight">
                           {selectedTranslatedGame.title}

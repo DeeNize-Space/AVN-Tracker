@@ -584,6 +584,7 @@ export async function getTranslatedGames() {
     description: g.description || '',
     download_pc: g.download_pc || '',
     download_mobile: g.download_mobile || '',
+    views: g.views || 0,
     createdAt: g.created_at || '',
     updatedAt: g.updated_at || ''
   }));
@@ -598,6 +599,7 @@ export async function saveTranslatedGame(game) {
     description: game.description || '',
     download_pc: game.download_pc || '',
     download_mobile: game.download_mobile || '',
+    views: game.views || 0,
     updated_at: new Date().toISOString()
   };
 
@@ -616,6 +618,33 @@ export async function deleteTranslatedGame(gameId) {
     .eq('id', gameId);
 
   if (error) throw error;
+  return { status: 'success' };
+}
+
+export async function incrementTranslatedGameViews(id) {
+  try {
+    const { error } = await supabase.rpc('increment_translated_game_views', { game_id: id });
+    if (!error) return { status: 'success' };
+  } catch (err) {
+    console.warn('RPC failed, falling back to update:', err);
+  }
+
+  // Fallback: Fetch views, increment, and update
+  const { data, error: fetchError } = await supabase
+    .from('translated_games')
+    .select('views')
+    .eq('id', id)
+    .single();
+
+  if (fetchError) throw fetchError;
+  const currentViews = (data && data.views) || 0;
+
+  const { error: updateError } = await supabase
+    .from('translated_games')
+    .update({ views: currentViews + 1 })
+    .eq('id', id);
+
+  if (updateError) throw updateError;
   return { status: 'success' };
 }
 
