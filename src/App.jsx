@@ -1250,7 +1250,7 @@ export default function App() {
       setAllUserLibraries(data);
     } catch (err) {
       console.error('Error fetching all user libraries for engagement stats:', err);
-      setToastMessage('ไม่สามารถดึงข้อมูลคลังสมาชิกออนไลน์ได้ กำลังใช้ข้อมูลจากในเครื่อง');
+      setToastMessage('ไม่สามารถดึงข้อมูลคลังสมาชิกออนไลน์ได้: ' + err.message);
     } finally {
       if (!silent) setIsRefreshingEngage(false);
     }
