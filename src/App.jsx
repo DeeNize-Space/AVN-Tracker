@@ -2467,7 +2467,7 @@ export default function App() {
             )}
             
             {/* Notification Bell */}
-            {(currentUser === 'Admin' || subscriptionRole === 'premium') && (
+            {(subscriptionRole === 'admin' || subscriptionRole === 'premium') && (
               <div className="relative bell-btn-container">
                 <button
                   onClick={() => setShowNotifications(!showNotifications)}
