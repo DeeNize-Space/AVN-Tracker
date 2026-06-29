@@ -348,6 +348,7 @@ export async function getOfficialGames() {
     rating: parseFloat(g.rating) || 5.0,
     tags: g.tags || [],
     screenshots: g.screenshots || [],
+    versions: g.versions || [],
     viewCount: g.view_count || 0,
     createdAt: g.created_at || '',
     updatedAt: g.updated_at || '',
@@ -369,6 +370,7 @@ export async function saveOfficialGame(game) {
     rating: parseFloat(game.rating) || 5.0,
     tags: game.tags || [],
     screenshots: game.screenshots || [],
+    versions: game.versions || [],
     view_count: game.viewCount || 0,
     updated_at: new Date().toISOString()
   };

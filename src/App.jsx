@@ -92,6 +92,21 @@ function getIsoTimestamp() {
   return new Date().toISOString();
 }
 
+function isVersionOlder(localVer, officialVer) {
+  if (!localVer || !officialVer) return false;
+  if (localVer === officialVer) return false;
+  const clean = (v) => v.toString().replace(/[^0-9.]/g, '').split('.').map(Number);
+  const v1 = clean(localVer);
+  const v2 = clean(officialVer);
+  for (let i = 0; i < Math.max(v1.length, v2.length); i++) {
+    const n1 = v1[i] || 0;
+    const n2 = v2[i] || 0;
+    if (n1 < n2) return true;
+    if (n1 > n2) return false;
+  }
+  return localVer.localeCompare(officialVer, undefined, { numeric: true, sensitivity: 'base' }) < 0;
+}
+
 function getInitials(title) {
   if (!title) return 'AVN';
   return title
@@ -584,10 +599,16 @@ export default function App() {
   const [activeScreenshotPreview, setActiveScreenshotPreview] = useState(null);
   const [activeScreenshotIndex, setActiveScreenshotIndex] = useState(0);
   const [showAllScreenshots, setShowAllScreenshots] = useState(false);
+  const [showAllTags, setShowAllTags] = useState(false);
+  const [activeDetailTab, setActiveDetailTab] = useState('overview');
+  const [isOverviewExpanded, setIsOverviewExpanded] = useState(false);
 
   useEffect(() => {
     setActiveScreenshotIndex(0);
     setShowAllScreenshots(false);
+    setShowAllTags(false);
+    setActiveDetailTab('overview');
+    setIsOverviewExpanded(false);
   }, [selectedGameDetail]);
 
   const handleOpenGameDetail = (game) => {
@@ -1063,11 +1084,45 @@ export default function App() {
     if (currentUser === 'Admin') {
       return reports.filter((r) => r.status === 'pending');
     }
-    if (subscriptionRole === 'free') {
-      return [];
+    
+    // Calculate local library update notifications
+    const libraryUpdates = [];
+    if (!isGuest) {
+      currentLibraryList.forEach(item => {
+        if (item.isCustom) return;
+        const official = officialGames.find(g => g.id === item.gameId);
+        if (official && isVersionOlder(item.version, official.version)) {
+          libraryUpdates.push({
+            id: `update-${item.gameId}-${official.version}`,
+            type: 'library-update',
+            gameId: item.gameId,
+            gameTitle: official.title,
+            localVersion: item.version,
+            newVersion: official.version,
+            message: `เกม "${official.title}" มีการอัปเดตใหม่เป็น v${official.version} (เวอร์ชันของคุณ: v${item.version})`
+          });
+        }
+      });
     }
-    return userNotifications.filter((n) => n.recipient === currentUser);
-  }, [reports, currentUser, subscriptionRole, userNotifications]);
+
+    if (subscriptionRole === 'free') {
+      return libraryUpdates;
+    }
+    
+    // For premium users, also merge the custom/official announcements from userNotifications
+    const newsNotifications = userNotifications
+      .filter((n) => n.recipient === currentUser)
+      .map(n => ({
+        id: n.id,
+        type: 'news',
+        gameId: n.gameId,
+        gameTitle: n.gameTitle,
+        newVersion: n.version,
+        message: `เกม "${n.gameTitle}" มีการอัปเดตเป็นเวอร์ชัน ${n.version}!`
+      }));
+
+    return [...libraryUpdates, ...newsNotifications];
+  }, [reports, currentUser, subscriptionRole, userNotifications, currentLibraryList, officialGames]);
 
   const googleUser = useMemo(() => {
     if (isGuest) return null;
@@ -2410,122 +2465,133 @@ export default function App() {
             )}
             
             {/* Notification Bell */}
-            {currentUser === 'Admin' && (
+            {(currentUser === 'Admin' || subscriptionRole === 'premium') && (
               <div className="relative bell-btn-container">
-              <button
-                onClick={() => setShowNotifications(!showNotifications)}
-                className="w-11 h-11 rounded-xl border border-slate-800 hover:border-slate-700 bg-slate-900/40 flex items-center justify-center relative transition-all cursor-pointer"
-              >
-                <span className="text-xl">🔔</span>
-                {notifications.length > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[20px] h-[20px] rounded-full bg-red-600 text-white text-[10px] font-black flex items-center justify-center px-1 animate-pulse">
-                    {notifications.length}
-                  </span>
-                )}
-              </button>
-
-              {showNotifications && (
-                <div className="absolute right-0 mt-3 w-80 glass-panel border border-slate-805 rounded-2xl shadow-2xl z-50 p-4 animate-fade-in-up">
-                  <div className="flex items-center justify-between pb-2.5 border-b border-slate-800 mb-2.5">
-                    <span className="text-xs font-bold text-slate-350 flex items-center gap-1.5">
-                      🔔 การแจ้งเตือนอัปเดต ({subscriptionRole === 'free' ? 0 : notifications.length})
+                <button
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className="w-11 h-11 rounded-xl border border-slate-800 hover:border-slate-700 bg-slate-900/40 flex items-center justify-center relative transition-all cursor-pointer"
+                >
+                  <span className="text-xl">🔔</span>
+                  {notifications.length > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[20px] h-[20px] rounded-full bg-red-650 text-white text-[10px] font-black flex items-center justify-center px-1 animate-pulse shadow-lg shadow-red-500/20">
+                      {notifications.length}
                     </span>
-                    {subscriptionRole !== 'free' && notifications.length > 0 && (
-                      <button
-                        onClick={() => {
-                          if (currentUser === 'Admin') {
-                            setReports(reports.map(r => ({ ...r, status: 'ignored' })));
-                          } else {
-                            setUserNotifications(userNotifications.filter(n => n.recipient !== currentUser));
-                          }
-                          setToastMessage('ล้างการแจ้งเตือนทั้งหมดแล้ว');
-                        }}
-                        className="text-[10px] font-bold text-blue-400 hover:text-blue-300 cursor-pointer"
-                      >
-                        ล้างทั้งหมด
-                      </button>
-                    )}
-                  </div>
+                  )}
+                </button>
 
-                  <div className="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1">
-                    {subscriptionRole === 'free' ? (
-                      <div className="text-center py-6 px-2 flex flex-col items-center gap-3">
-                        <span className="text-3xl">🔒</span>
-                        <p className="text-xs text-slate-300 font-bold leading-normal">
-                          ฟีเจอร์แจ้งเตือนเมื่อมีเกมเวอร์ชันใหม่ออกมา เปิดใช้งานเฉพาะผู้ใช้ระดับ Premium เท่านั้น
-                        </p>
+                {showNotifications && (
+                  <div className="absolute right-0 mt-3 w-80 glass-panel border border-slate-805 rounded-2xl shadow-2xl z-50 p-4 animate-fade-in-up">
+                    <div className="flex items-center justify-between pb-2.5 border-b border-slate-800 mb-2.5">
+                      <span className="text-xs font-bold text-slate-350 flex items-center gap-1.5">
+                        🔔 การแจ้งเตือนอัปเดต ({notifications.length})
+                      </span>
+                      {notifications.length > 0 && (
                         <button
-                          type="button"
-                          onClick={() => {
-                            setIsUpsellOpen(true);
-                            setShowNotifications(false);
-                          }}
-                          className="bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white text-[10px] font-black py-2 px-4 rounded-xl cursor-pointer shadow-md transition-all mt-1"
-                        >
-                          👑 สมัครสมาชิก Premium
-                        </button>
-                      </div>
-                    ) : notifications.length === 0 ? (
-                      <div className="text-center py-8 text-slate-500 text-xs font-medium">
-                        ไม่มีการแจ้งเตือนใหม่
-                      </div>
-                    ) : (
-                      notifications.map((notif) => (
-                        <div
-                          key={notif.id}
                           onClick={() => {
                             if (currentUser === 'Admin') {
-                              handleTabChange('admin');
-                              setAdminReportTab(notif.type);
+                              setReports(reports.map(r => ({ ...r, status: 'ignored' })));
                             } else {
-                              const target = officialGames.find((g) => g.id === notif.gameId);
-                              if (target) {
-                                handleOpenGameDetail(target);
-                              }
+                              setUserNotifications(userNotifications.filter(n => n.recipient !== currentUser));
                             }
-                            setShowNotifications(false);
+                            setToastMessage('ล้างการแจ้งเตือนทั้งหมดแล้ว');
                           }}
-                          className="p-3 bg-slate-950 border border-slate-900 text-xs text-slate-350 hover:bg-slate-900/30 cursor-pointer transition-colors"
+                          className="text-[10px] font-bold text-blue-400 hover:text-blue-300 cursor-pointer"
                         >
-                          <div>
-                            {currentUser === 'Admin' ? (
-                              notif.type === 'new' ? (
-                                <span>เสนอแนะเกมใหม่: <span className="font-extrabold text-blue-400">{notif.gameTitle}</span></span>
-                              ) : notif.type === 'error' ? (
-                                <span>แจ้งข้อมูลผิดพลาด: <span className="font-extrabold text-amber-400">{notif.gameTitle}</span></span>
-                              ) : (
-                                <span>พบเวอร์ชันใหม่สำหรับ <span className="font-extrabold text-blue-400">{notif.gameTitle}</span></span>
-                              )
-                            ) : (
-                              notif.message ? (
-                                <span>{notif.message}</span>
-                              ) : (
-                                <span>เกม <span className="font-extrabold text-blue-400">{notif.gameTitle}</span> มีเวอร์ชันใหม่ล่าสุดแล้ว!</span>
-                              )
-                            )}
-                          </div>
-                          <div className="mt-1 flex justify-between items-center text-[10px]">
-                            {currentUser === 'Admin' ? (
-                              notif.type === 'update' && (
-                                <span className="text-slate-400">v{notif.currentVersion} ➔ <span className="text-emerald-455 font-bold">v{notif.reportedVersion}</span></span>
-                              )
-                            ) : (
-                              !notif.message && (
-                                <span className="text-slate-400">เวอร์ชันล่าสุด: <span className="text-emerald-455 font-bold">v{notif.version}</span></span>
-                              )
-                            )}
-                            <span className="text-slate-500 block text-right w-full">{formatThaiDate(notif.timestamp)}</span>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-            )}
+                          ล้างทั้งหมด
+                        </button>
+                      )}
+                    </div>
 
-            {/* Google Sign-in or User Dropdown Profile */}
+                    <div className="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1">
+                      {notifications.length === 0 ? (
+                        <div className="text-center py-8 text-slate-500 text-xs font-medium">
+                          ไม่มีการแจ้งเตือนใหม่
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          {notifications.map((notif) => (
+                            <div
+                              key={notif.id}
+                              onClick={() => {
+                                if (currentUser === 'Admin') {
+                                  handleTabChange('admin');
+                                  setAdminReportTab(notif.type);
+                                } else {
+                                  if (notif.type === 'library-update') {
+                                    // Find local library item and open Edit Modal
+                                    const libItem = currentLibraryList.find(i => i.gameId === notif.gameId);
+                                    if (libItem) {
+                                      setEditingLocalItem(libItem);
+                                    }
+                                  } else {
+                                    const target = officialGames.find((g) => g.id === notif.gameId);
+                                    if (target) {
+                                      handleOpenGameDetail(target);
+                                    }
+                                  }
+                                }
+                                setShowNotifications(false);
+                              }}
+                              className="p-3 bg-slate-950/70 border border-slate-900 text-xs text-slate-350 hover:bg-slate-900/30 cursor-pointer transition-colors rounded-xl"
+                            >
+                              <div className="font-medium text-slate-200">
+                                {notif.message || (
+                                  <div>
+                                    {currentUser === 'Admin' ? (
+                                      notif.type === 'new' ? (
+                                        <span>เสนอแนะเกมใหม่: <span className="font-extrabold text-blue-400">{notif.gameTitle}</span></span>
+                                      ) : notif.type === 'error' ? (
+                                        <span>รายงานข้อผิดพลาด: <span className="font-extrabold text-red-400">{notif.gameTitle}</span></span>
+                                      ) : (
+                                        <span>แจ้งเตือนอัปเดต: <span className="font-extrabold text-amber-400">{notif.gameTitle}</span></span>
+                                      )
+                                    ) : (
+                                      <span>เกม <span className="font-extrabold text-blue-400">{notif.gameTitle}</span> อัปเดต v{notif.newVersion || notif.version}!</span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="mt-1 flex justify-between items-center text-[10px]">
+                                {currentUser === 'Admin' ? (
+                                  notif.type === 'update' && (
+                                    <span className="text-slate-400">v{notif.currentVersion} ➔ <span className="text-emerald-455 font-bold">v{notif.reportedVersion}</span></span>
+                                  )
+                                ) : (
+                                  !notif.message && (
+                                    <span className="text-slate-400">เวอร์ชันล่าสุด: <span className="text-emerald-455 font-bold">v{notif.version}</span></span>
+                                  )
+                                )}
+                                <span className="text-slate-500 block text-right w-full">{notif.timestamp ? formatThaiDate(notif.timestamp) : 'เพิ่งเมื่อครู่'}</span>
+                              </div>
+                            </div>
+                          ))}
+
+                          {subscriptionRole === 'free' && (
+                            <div className="text-center py-4 px-2 flex flex-col items-center gap-2 bg-slate-900/40 border border-slate-900 rounded-xl mt-1.5">
+                              <p className="text-[10px] text-slate-400 font-bold leading-normal">
+                                👑 สมัคร Premium เพื่อรับการแจ้งเตือนอัปเดตเกมทั้งหมดบนแพลตฟอร์มทันที!
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsUpsellOpen(true);
+                                  setShowNotifications(false);
+                                }}
+                                className="bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white text-[9px] font-black py-1.5 px-3 rounded-lg cursor-pointer shadow-md transition-all"
+                              >
+                                สมัครสมาชิก Premium
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            
+                        {/* Google Sign-in or User Dropdown Profile */}
             <div className="flex items-center">
               {isGuest ? (
                 <button
@@ -3373,6 +3439,12 @@ export default function App() {
                           <div className="absolute top-3 right-3 bg-slate-955/90 backdrop-blur border border-white/10 px-2 py-0.5 rounded-lg text-xs font-extrabold text-blue-400">
                             v{item.version}
                           </div>
+
+                          {origGame && isVersionOlder(item.version, origGame.version) && (
+                            <div className="absolute top-10 right-3 bg-red-650/95 backdrop-blur border border-red-500/20 px-2 py-0.5 rounded-lg text-[9px] font-black text-white uppercase tracking-wider animate-pulse shadow-lg shadow-red-500/20">
+                              อัปเดตใหม่ v{origGame.version}
+                            </div>
+                          )}
                           
                           {item.isCustom && (
                             <div className="absolute top-3 left-3 bg-amber-500/90 backdrop-blur border border-white/10 px-2 py-0.5 rounded-lg text-[9px] font-black text-white uppercase tracking-wider">
@@ -5067,7 +5139,7 @@ export default function App() {
       {/* 1. GAME DETAIL MODAL */}
       {selectedGameDetail && (
         <div className="modal-overlay" onClick={() => setSelectedGameDetail(null)}>
-          <div className="modal-content w-full max-w-2xl bg-slate-950/95 border border-slate-850 rounded-3xl p-6 relative shadow-2xl" style={{ overflowX: "hidden" }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content w-full max-w-2xl bg-slate-955/95 border border-slate-850 rounded-3xl p-6 relative shadow-2xl" style={{ overflowX: "hidden" }} onClick={(e) => e.stopPropagation()}>
             
             <button
               onClick={() => setSelectedGameDetail(null)}
@@ -5078,7 +5150,7 @@ export default function App() {
 
             {/* Content layout */}
             <div className="flex flex-col md:flex-row gap-6 w-full max-w-full min-w-0">
-              {/* Left Column: Cover & Links */}
+              {/* Left Column: Cover & Links & Tags */}
               <div className="w-full md:w-56 shrink-0 flex flex-col gap-4">
                 <div className="aspect-[3/4] w-full rounded-2xl overflow-hidden custom-placeholder border border-white/5 shadow-lg relative">
                   {selectedGameDetail.coverUrl ? (
@@ -5088,7 +5160,7 @@ export default function App() {
                       {getInitials(selectedGameDetail.title)}
                     </div>
                   )}
-                  <div className="absolute top-2.5 right-2.5 bg-slate-950/85 backdrop-blur px-2 py-0.5 rounded-lg text-xs font-bold text-blue-400">
+                  <div className="absolute top-2.5 right-2.5 bg-slate-955/85 backdrop-blur px-2 py-0.5 rounded-lg text-xs font-bold text-blue-400">
                     v{selectedGameDetail.version}
                   </div>
                 </div>
@@ -5126,6 +5198,39 @@ export default function App() {
                     </a>
                   )}
                 </div>
+
+                {/* Genre Tags (moved to left column, max 5, with show more) */}
+                {selectedGameDetail.tags && selectedGameDetail.tags.length > 0 && (
+                  <div className="mt-2">
+                    <h4 className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-2">แท็กประเภท (Tags):</h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(() => {
+                        const maxTags = 5;
+                        const hasMoreTags = selectedGameDetail.tags.length > maxTags;
+                        const visibleTags = showAllTags ? selectedGameDetail.tags : selectedGameDetail.tags.slice(0, maxTags);
+                        
+                        return (
+                          <>
+                            {visibleTags.map((tag) => (
+                              <span key={tag} className="text-[10px] font-bold bg-slate-900/60 hover:bg-slate-900 text-blue-400/90 px-2 py-0.5 rounded-md border border-slate-850 transition-colors">
+                                #{tag}
+                              </span>
+                            ))}
+                            {hasMoreTags && (
+                              <button
+                                type="button"
+                                onClick={() => setShowAllTags(!showAllTags)}
+                                className="text-[10px] font-black text-blue-500 hover:text-blue-400 bg-slate-900/40 hover:bg-slate-900/80 px-2 py-0.5 rounded-md border border-slate-850 cursor-pointer transition-all"
+                              >
+                                {showAllTags ? '◀ Show Less' : `+${selectedGameDetail.tags.length - maxTags} Show More`}
+                              </button>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Right Column: Information details */}
@@ -5189,143 +5294,214 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Tags */}
-                {selectedGameDetail.tags && selectedGameDetail.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {selectedGameDetail.tags.map((tag) => (
-                      <span key={tag} className="text-[10px] font-bold bg-slate-900 text-blue-400 px-2 py-0.5 rounded-md border border-slate-850">
-                        #{tag}
-                      </span>
-                    ))}
+                {/* Tabbed Navigation */}
+                <div className="flex border-b border-slate-900 gap-6 text-xs font-extrabold text-slate-400 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveDetailTab('overview')}
+                    className={`pb-2.5 cursor-pointer border-b-2 transition-all ${
+                      activeDetailTab === 'overview'
+                        ? 'text-blue-500 border-blue-500'
+                        : 'border-transparent hover:text-slate-200'
+                    }`}
+                  >
+                    📖 Overview
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveDetailTab('screenshots')}
+                    className={`pb-2.5 cursor-pointer border-b-2 transition-all ${
+                      activeDetailTab === 'screenshots'
+                        ? 'text-blue-500 border-blue-500'
+                        : 'border-transparent hover:text-slate-200'
+                    }`}
+                  >
+                    🖼️ Gallery
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveDetailTab('changelog')}
+                    className={`pb-2.5 cursor-pointer border-b-2 transition-all ${
+                      activeDetailTab === 'changelog'
+                        ? 'text-blue-500 border-blue-500'
+                        : 'border-transparent hover:text-slate-200'
+                    }`}
+                  >
+                    🔄 Changelog
+                  </button>
+                </div>
+
+                {/* Tab Content Rendering */}
+                {activeDetailTab === 'overview' && (
+                  <div className="animate-fade-in">
+                    <h4 className="text-xs font-bold text-slate-400 mb-1.5">เรื่องย่ออย่างย่อ:</h4>
+                    <div className="text-xs text-slate-300 leading-relaxed bg-slate-900/40 border border-slate-900 p-3.5 rounded-2xl relative">
+                      <p style={{ display: "-webkit-box", WebkitLineClamp: isOverviewExpanded ? "none" : 8, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                        {selectedGameDetail.overview || 'ไม่มีคำอธิบายสำหรับเกมนี้'}
+                      </p>
+                      {selectedGameDetail.overview && selectedGameDetail.overview.length > 300 && (
+                        <div className={`mt-2 flex justify-end ${!isOverviewExpanded ? 'pt-1' : ''}`}>
+                          <button
+                            type="button"
+                            onClick={() => setIsOverviewExpanded(!isOverviewExpanded)}
+                            className="text-[10px] font-black text-blue-500 hover:text-blue-400 bg-slate-955 hover:bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg cursor-pointer transition-all"
+                          >
+                            {isOverviewExpanded ? '◀ Show Less' : '▼ Read More'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 
-                {/* Overview */}
-                <div>
-                  <h4 className="text-xs font-bold text-slate-400 mb-1.5">เรื่องย่ออย่างย่อ:</h4>
-                  <p className="text-xs text-slate-300 leading-relaxed bg-slate-900/40 border border-slate-900 p-3.5 rounded-2xl animate-fade-in">
-                    {selectedGameDetail.overview}
-                  </p>
-                </div>
+                {activeDetailTab === 'screenshots' && (
+                  <div className="w-full max-w-full min-w-0 animate-fade-in">
+                    <h4 className="text-xs font-bold text-slate-400 mb-2">ภาพตัวอย่างเกม (Screenshots):</h4>
+                    {(() => {
+                      const screenshotsList = (selectedGameDetail.screenshots && selectedGameDetail.screenshots.length > 0)
+                        ? selectedGameDetail.screenshots
+                        : (!selectedGameDetail.id.startsWith('custom-') ? OFFICIAL_SCREENSHOT_PLACEHOLDERS : []);
 
-                {/* 3. SCREENSHOT SECTION (Carousel / Slider) */}
-                <div className="w-full max-w-full min-w-0">
-                  <h4 className="text-xs font-bold text-slate-400 mb-2">ภาพตัวอย่างเกม (Screenshots):</h4>
-                  {(() => {
-                    const screenshotsList = (selectedGameDetail.screenshots && selectedGameDetail.screenshots.length > 0)
-                      ? selectedGameDetail.screenshots
-                      : (!selectedGameDetail.id.startsWith('custom-') ? OFFICIAL_SCREENSHOT_PLACEHOLDERS : []);
-
-                    if (screenshotsList.length === 0) {
-                      return (
-                        <div className="text-center py-6 bg-slate-900/25 border border-dashed border-slate-800 rounded-2xl">
-                          <span className="text-slate-500 text-xs block">ไม่มีภาพตัวอย่างเกม (สามารถอัปโหลดได้ในเมนูแก้ไขประวัติ)</span>
-                        </div>
-                      );
-                    }
-
-                    // Safeguard index bounds
-                    const validIndex = activeScreenshotIndex >= screenshotsList.length ? 0 : activeScreenshotIndex;
-                    const currentImg = screenshotsList[validIndex];
-
-                    return (
-                      <div className="flex flex-col gap-2">
-                        {/* Large Image View */}
-                        <div className="aspect-video w-full max-h-[240px] sm:max-h-[300px] rounded-2xl overflow-hidden border border-slate-800 relative group bg-slate-950/40">
-                          <img
-                            src={currentImg}
-                            alt="screenshot large"
-                            onClick={() => setActiveScreenshotPreview(currentImg)}
-                            className="w-full h-full object-cover cursor-zoom-in group-hover:scale-[1.01] transition-transform duration-300"
-                          />
-
-                          {/* Left Navigation Arrow */}
-                          {screenshotsList.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveScreenshotIndex((prev) => (prev === 0 ? screenshotsList.length - 1 : prev - 1));
-                              }}
-                              className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-955/80 hover:bg-slate-900 border border-slate-800 text-white font-bold flex items-center justify-center cursor-pointer transition-all hover:scale-105 active:scale-95 z-10"
-                            >
-                              &lt;
-                            </button>
-                          )}
-
-                          {/* Right Navigation Arrow */}
-                          {screenshotsList.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveScreenshotIndex((prev) => (prev === screenshotsList.length - 1 ? 0 : prev + 1));
-                              }}
-                              className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-955/80 hover:bg-slate-900 border border-slate-800 text-white font-bold flex items-center justify-center cursor-pointer transition-all hover:scale-105 active:scale-95 z-10"
-                            >
-                              &gt;
-                            </button>
-                          )}
-
-                          {/* Counter Badge */}
-                          <div className="absolute bottom-3 right-3 bg-slate-955/90 backdrop-blur px-2.5 py-1 rounded-lg text-[10px] font-bold text-slate-300 border border-white/5">
-                            {validIndex + 1} / {screenshotsList.length}
+                      if (screenshotsList.length === 0) {
+                        return (
+                          <div className="text-center py-6 bg-slate-900/25 border border-dashed border-slate-800 rounded-2xl">
+                            <span className="text-slate-500 text-xs block">ไม่มีภาพตัวอย่างเกม (สามารถอัปโหลดได้ในเมนูแก้ไขประวัติ)</span>
                           </div>
-                        </div>
+                        );
+                      }
 
-                        {/* Thumbnail Navigation */}
-                        {screenshotsList.length > 1 && (
-                          <div className="flex gap-2 overflow-x-auto py-1 scrollbar-thin w-full max-w-full min-w-0">
-                            {(() => {
-                              const maxThumbnails = 3;
-                              const hasMore = screenshotsList.length > maxThumbnails;
-                              const visibleList = (!showAllScreenshots && hasMore) 
-                                ? screenshotsList.slice(0, maxThumbnails) 
-                                : screenshotsList;
+                      // Safeguard index bounds
+                      const validIndex = activeScreenshotIndex >= screenshotsList.length ? 0 : activeScreenshotIndex;
+                      const currentImg = screenshotsList[validIndex];
 
-                              return visibleList.map((src, idx) => {
-                                const isLastPlaceholder = !showAllScreenshots && hasMore && idx === maxThumbnails - 1;
-                                if (isLastPlaceholder) {
+                      return (
+                        <div className="flex flex-col gap-2">
+                          {/* Large Image View */}
+                          <div className="aspect-video w-full max-h-[240px] sm:max-h-[300px] rounded-2xl overflow-hidden border border-slate-800 relative group bg-slate-955/40">
+                            <img
+                              src={currentImg}
+                              alt="screenshot large"
+                              onClick={() => setActiveScreenshotPreview(currentImg)}
+                              className="w-full h-full object-cover cursor-zoom-in group-hover:scale-[1.01] transition-transform duration-300"
+                            />
+
+                            {/* Left Navigation Arrow */}
+                            {screenshotsList.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveScreenshotIndex((prev) => (prev === 0 ? screenshotsList.length - 1 : prev - 1));
+                                }}
+                                className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-955/80 hover:bg-slate-900 border border-slate-800 text-white font-bold flex items-center justify-center cursor-pointer transition-all hover:scale-105 active:scale-95 z-10"
+                              >
+                                &lt;
+                              </button>
+                            )}
+
+                            {/* Right Navigation Arrow */}
+                            {screenshotsList.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveScreenshotIndex((prev) => (prev === screenshotsList.length - 1 ? 0 : prev + 1));
+                                }}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-955/80 hover:bg-slate-900 border border-slate-800 text-white font-bold flex items-center justify-center cursor-pointer transition-all hover:scale-105 active:scale-95 z-10"
+                              >
+                                &gt;
+                              </button>
+                            )}
+
+                            {/* Counter Badge */}
+                            <div className="absolute bottom-3 right-3 bg-slate-955/90 backdrop-blur px-2.5 py-1 rounded-lg text-[10px] font-bold text-slate-300 border border-white/5">
+                              {validIndex + 1} / {screenshotsList.length}
+                            </div>
+                          </div>
+
+                          {/* Thumbnail Navigation */}
+                          {screenshotsList.length > 1 && (
+                            <div className="flex gap-2 overflow-x-auto py-1 scrollbar-thin w-full max-w-full min-w-0">
+                              {(() => {
+                                const maxThumbnails = 3;
+                                const hasMore = screenshotsList.length > maxThumbnails;
+                                const visibleList = (!showAllScreenshots && hasMore) 
+                                  ? screenshotsList.slice(0, maxThumbnails) 
+                                  : screenshotsList;
+
+                                return visibleList.map((src, idx) => {
+                                  const isLastPlaceholder = !showAllScreenshots && hasMore && idx === maxThumbnails - 1;
+                                  if (isLastPlaceholder) {
+                                    return (
+                                      <button
+                                        key={idx}
+                                        type="button"
+                                        onClick={() => {
+                                          setShowAllScreenshots(true);
+                                          setActiveScreenshotIndex(idx);
+                                        }}
+                                        className="w-16 sm:w-20 aspect-video rounded-lg overflow-hidden border shrink-0 transition-all border-slate-850 relative group bg-slate-955/65"
+                                      >
+                                        <img src={src} className="w-full h-full object-cover opacity-30" alt="" />
+                                        <div className="absolute inset-0 bg-slate-955/65 flex items-center justify-center text-xs font-bold text-white group-hover:bg-slate-950/50 transition-colors">
+                                          +{screenshotsList.length - (maxThumbnails - 1)}
+                                        </div>
+                                      </button>
+                                    );
+                                  }
+
                                   return (
                                     <button
                                       key={idx}
                                       type="button"
-                                      onClick={() => {
-                                        setShowAllScreenshots(true);
-                                        setActiveScreenshotIndex(idx);
-                                      }}
-                                      className="w-16 sm:w-20 aspect-video rounded-lg overflow-hidden border shrink-0 transition-all border-slate-850 relative group bg-slate-950/60"
+                                      onClick={() => setActiveScreenshotIndex(idx)}
+                                      className={`w-16 sm:w-20 aspect-video rounded-lg overflow-hidden border shrink-0 transition-all ${
+                                        validIndex === idx
+                                          ? 'border-blue-500 scale-95 ring-1 ring-blue-500'
+                                          : 'border-slate-850 opacity-60 hover:opacity-100 hover:scale-95'
+                                      }`}
                                     >
-                                      <img src={src} className="w-full h-full object-cover opacity-30" alt="" />
-                                      <div className="absolute inset-0 bg-slate-950/65 flex items-center justify-center text-xs font-bold text-white group-hover:bg-slate-950/50 transition-colors">
-                                        +{screenshotsList.length - (maxThumbnails - 1)}
-                                      </div>
+                                      <img src={src} className="w-full h-full object-cover" alt="" />
                                     </button>
                                   );
-                                }
+                                });
+                              })()}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
 
-                                return (
-                                  <button
-                                    key={idx}
-                                    type="button"
-                                    onClick={() => setActiveScreenshotIndex(idx)}
-                                    className={`w-16 sm:w-20 aspect-video rounded-lg overflow-hidden border shrink-0 transition-all ${
-                                      validIndex === idx
-                                        ? 'border-blue-500 scale-95 ring-1 ring-blue-500'
-                                        : 'border-slate-850 opacity-60 hover:opacity-100 hover:scale-95'
-                                    }`}
-                                  >
-                                    <img src={src} className="w-full h-full object-cover" alt="" />
-                                  </button>
-                                );
-                              });
-                            })()}
+                {activeDetailTab === 'changelog' && (
+                  <div className="w-full max-w-full min-w-0 animate-fade-in">
+                    <h4 className="text-xs font-bold text-slate-400 mb-2">ประวัติการบันทึกรุ่น (Changelog):</h4>
+                    <div className="flex flex-col gap-3 max-h-[260px] overflow-y-auto pr-1.5 scrollbar-thin">
+                      {(!selectedGameDetail.versions || selectedGameDetail.versions.length === 0) ? (
+                        <div className="text-center py-8 bg-slate-900/25 border border-dashed border-slate-800 rounded-2xl">
+                          <span className="text-slate-500 text-xs block">ยังไม่มีประวัติการบันทึกรุ่น (Changelog) สำหรับเกมนี้</span>
+                        </div>
+                      ) : (
+                        selectedGameDetail.versions.map((ver, idx) => (
+                          <div key={ver.id || idx} className="bg-slate-900/30 border border-slate-900 p-3.5 rounded-2xl flex flex-col gap-2">
+                            <div className="flex items-center justify-between border-b border-slate-850 pb-2">
+                              <span className="text-xs font-black text-blue-400">รุ่น: {ver.version_number}</span>
+                              {ver.release_date && (
+                                <span className="text-[10px] font-bold text-slate-500">
+                                  📅 {new Date(ver.release_date).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' })}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-slate-300 whitespace-pre-line leading-relaxed pl-1">
+                              {ver.changelog || 'ไม่มีรายละเอียดการอัปเดตในรุ่นนี้'}
+                            </p>
                           </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Action footer */}
                 <div className="mt-4 pt-4 pb-2 border-t border-slate-900 flex flex-col gap-2.5">
@@ -5353,7 +5529,7 @@ export default function App() {
           </div>
         </div>
       )}
-
+      
       {/* 2. IMAGE PREVIEW OVERLAY */}
       {activeScreenshotPreview && (
         <div className="modal-overlay" onClick={() => setActiveScreenshotPreview(null)} style={{ zIndex: 999 }}>
