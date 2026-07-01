@@ -650,3 +650,162 @@ export async function incrementTranslatedGameViews(id) {
   return { status: 'success' };
 }
 
+// ==========================================
+// VOTING CANDIDATES (สำหรับผู้ท้าชิงโหวต)
+// ==========================================
+export async function getVotingCandidates() {
+  try {
+    const { data, error } = await supabase
+      .from('voting_candidates')
+      .select('*')
+      .order('created_at', { ascending: true });
+      
+    if (error) {
+      if (error.code === 'PGRST116' || error.code === '42P01') {
+        console.warn('voting_candidates table does not exist yet. Returning empty.');
+        return [];
+      }
+      throw error;
+    }
+    return data || [];
+  } catch (err) {
+    console.warn('Failed to fetch voting candidates:', err);
+    return [];
+  }
+}
+
+export async function saveVotingCandidate(candidate) {
+  const payload = {
+    id: candidate.id || undefined,
+    title: candidate.title || '',
+    description: candidate.description || '',
+    cover_url: candidate.coverUrl || candidate.cover_url || '',
+    updated_at: new Date().toISOString()
+  };
+
+  const { error } = await supabase
+    .from('voting_candidates')
+    .upsert(payload);
+
+  if (error) throw error;
+  return { status: 'success' };
+}
+
+export async function deleteVotingCandidate(id) {
+  const { error } = await supabase
+    .from('voting_candidates')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
+  return { status: 'success' };
+}
+
+// ==========================================
+// TRANSLATION VOTES (สิทธิ์และคะแนนโหวต)
+// ==========================================
+export async function getTranslationVotes() {
+  try {
+    const { data, error } = await supabase
+      .from('translation_votes')
+      .select('*');
+      
+    if (error) {
+      if (error.code === 'PGRST116' || error.code === '42P01') {
+        console.warn('translation_votes table does not exist yet. Returning empty.');
+        return [];
+      }
+      throw error;
+    }
+    return data || [];
+  } catch (err) {
+    console.warn('Failed to fetch translation votes:', err);
+    return [];
+  }
+}
+
+export async function submitTranslationVote(userId, email, candidateId, isPremium) {
+  const payload = {
+    user_id: userId,
+    email: email,
+    candidate_id: candidateId,
+    is_premium: !!isPremium,
+    created_at: new Date().toISOString()
+  };
+
+  const { error } = await supabase
+    .from('translation_votes')
+    .upsert(payload, { onConflict: 'user_id' });
+
+  if (error) throw error;
+  return { status: 'success' };
+}
+
+export async function clearTranslationVotes() {
+  const { error } = await supabase
+    .from('translation_votes')
+    .delete()
+    .neq('id', '00000000-0000-0000-0000-000000000000');
+
+  if (error) throw error;
+  return { status: 'success' };
+}
+
+// ==========================================
+// BANNERS (แบนเนอร์ประกาศ)
+// ==========================================
+export async function getBanners() {
+  try {
+    const { data, error } = await supabase
+      .from('banners')
+      .select('*')
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: false });
+      
+    if (error) {
+      if (error.code === 'PGRST116' || error.code === '42P01') {
+        console.warn('banners table does not exist yet. Returning empty.');
+        return [];
+      }
+      throw error;
+    }
+    return data || [];
+  } catch (err) {
+    console.warn('Failed to fetch banners:', err);
+    return [];
+  }
+}
+
+export async function saveBanner(banner) {
+  const payload = {
+    id: banner.id || undefined,
+    type: banner.type || 'normal',
+    title: banner.title || '',
+    subtitle: banner.subtitle || '',
+    cover_url: banner.coverUrl || banner.cover_url || '',
+    bg_gradient: banner.bgGradient || banner.bg_gradient || 'from-slate-900/40 to-slate-900/40',
+    link_url: banner.linkUrl || banner.link_url || '',
+    target_game_id: banner.targetGameId || banner.target_game_id || '',
+    is_active: banner.isActive !== undefined ? !!banner.isActive : true,
+    sort_order: parseInt(banner.sortOrder || banner.sort_order || 0),
+    updated_at: new Date().toISOString()
+  };
+
+  const { error } = await supabase
+    .from('banners')
+    .upsert(payload);
+
+  if (error) throw error;
+  return { status: 'success' };
+}
+
+export async function deleteBanner(id) {
+  const { error } = await supabase
+    .from('banners')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
+  return { status: 'success' };
+}
+

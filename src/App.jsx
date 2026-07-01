@@ -568,6 +568,38 @@ export default function App() {
   const [isEditTranslatedOpen, setIsEditTranslatedOpen] = useState(false);
   const [editingTranslatedGame, setEditingTranslatedGame] = useState(null);
 
+  // --- CAROUSEL BANNERS & VOTING SYSTEM STATES ---
+  const [banners, setBanners] = useState([]);
+  const [votingCandidates, setVotingCandidates] = useState([]);
+  const [translationVotes, setTranslationVotes] = useState([]);
+  const [isVotingModalOpen, setIsVotingModalOpen] = useState(false);
+  const [activeBannerIndex, setActiveBannerIndex] = useState(0);
+
+  // Admin CRUD states
+  const [isAddBannerOpen, setIsAddBannerOpen] = useState(false);
+  const [isEditBannerOpen, setIsEditBannerOpen] = useState(false);
+  const [editingBanner, setEditingBanner] = useState(null);
+  
+  const [isAddCandidateOpen, setIsAddCandidateOpen] = useState(false);
+  const [isEditCandidateOpen, setIsEditCandidateOpen] = useState(false);
+  const [editingCandidate, setEditingCandidate] = useState(null);
+
+  // Temp form states for Banners
+  const [bannerFormType, setBannerFormType] = useState('normal');
+  const [bannerFormTitle, setBannerFormTitle] = useState('');
+  const [bannerFormSubtitle, setBannerFormSubtitle] = useState('');
+  const [bannerFormCoverUrl, setBannerFormCoverUrl] = useState('');
+  const [bannerFormBgGradient, setBannerFormBgGradient] = useState('from-blue-955/70 to-indigo-950/70');
+  const [bannerFormLinkUrl, setBannerFormLinkUrl] = useState('');
+  const [bannerFormTargetGameId, setBannerFormTargetGameId] = useState('');
+  const [bannerFormIsActive, setBannerFormIsActive] = useState(true);
+  const [bannerFormSortOrder, setBannerFormSortOrder] = useState(0);
+
+  // Temp form states for Candidates
+  const [candidateFormTitle, setCandidateFormTitle] = useState('');
+  const [candidateFormDescription, setCandidateFormDescription] = useState('');
+  const [candidateFormCoverUrl, setCandidateFormCoverUrl] = useState('');
+
   // Reset catalog page during render when search, tags, sort, or tab changes to avoid ESLint warning
   const [prevSearchQuery, setPrevSearchQuery] = useState(searchQuery);
   const [prevCatalogTags, setPrevCatalogTags] = useState(selectedCatalogTags);
@@ -748,6 +780,47 @@ export default function App() {
 
 
 
+  // --- DERIVED VOTING LEADERBOARD ---
+  const votingLeaderboard = useMemo(() => {
+    const stats = {};
+    votingCandidates.forEach(c => {
+      stats[c.id] = {
+        id: c.id,
+        title: c.title,
+        description: c.description,
+        coverUrl: c.cover_url || '',
+        premiumCount: 0,
+        normalCount: 0,
+        total: 0
+      };
+    });
+
+    translationVotes.forEach(v => {
+      if (stats[v.candidate_id]) {
+        if (v.is_premium) {
+          stats[v.candidate_id].premiumCount += 1;
+        } else {
+          stats[v.candidate_id].normalCount += 1;
+        }
+        stats[v.candidate_id].total += 1;
+      }
+    });
+
+    return Object.values(stats).sort((a, b) => b.total - a.total);
+  }, [votingCandidates, translationVotes]);
+
+  // --- AUTO-ROTATE CAROUSEL BANNERS ---
+  useEffect(() => {
+    const activeBanners = banners.filter(b => b.is_active);
+    if (activeBanners.length <= 1) return;
+    
+    const interval = setInterval(() => {
+      setActiveBannerIndex(prev => (prev === activeBanners.length - 1 ? 0 : prev + 1));
+    }, 6000);
+    
+    return () => clearInterval(interval);
+  }, [banners]);
+
   // Mount Effect: Load Supabase Data
   useEffect(() => {
     if (!isFirebaseEnabled) {
@@ -821,6 +894,30 @@ export default function App() {
         // 6. Fetch translated games
         const transList = await getTranslatedGames();
         setTranslatedGames(transList);
+
+        // 7. Fetch Banners
+        try {
+          const bannerList = await getBanners();
+          setBanners(bannerList);
+        } catch (err) {
+          console.warn('Failed to load banners:', err);
+        }
+
+        // 8. Fetch Voting Candidates
+        try {
+          const candidateList = await getVotingCandidates();
+          setVotingCandidates(candidateList);
+        } catch (err) {
+          console.warn('Failed to load voting candidates:', err);
+        }
+
+        // 9. Fetch Translation Votes
+        try {
+          const votesList = await getTranslationVotes();
+          setTranslationVotes(votesList);
+        } catch (err) {
+          console.warn('Failed to load translation votes:', err);
+        }
 
         setIsDbLoaded(true);
       } catch (err) {
@@ -2766,6 +2863,124 @@ export default function App() {
         {activeTab === 'online' && (
           <div className="flex flex-col gap-6 animate-fade-in-up">
             
+            {/* ANNOUNCEMENT BANNER CAROUSEL SYSTEM */}
+            {(() => {
+              const activeBanners = banners.filter(b => b.is_active);
+              if (activeBanners.length === 0) return null;
+
+              const currentBanner = activeBanners[activeBannerIndex >= activeBanners.length ? 0 : activeBannerIndex];
+
+              const handleBannerClick = () => {
+                if (currentBanner.type === 'normal') {
+                  if (currentBanner.link_url) {
+                    window.open(currentBanner.link_url, '_blank');
+                  }
+                } else if (currentBanner.type === 'game_promo') {
+                  if (currentBanner.target_game_id) {
+                    const target = officialGames.find(g => g.id === currentBanner.target_game_id);
+                    if (target) {
+                      handleOpenGameDetail(target);
+                    } else {
+                      const randomGame = officialGames[Math.floor(Math.random() * officialGames.length)];
+                      if (randomGame) handleOpenGameDetail(randomGame);
+                    }
+                  } else {
+                    const randomGame = officialGames[Math.floor(Math.random() * officialGames.length)];
+                    if (randomGame) handleOpenGameDetail(randomGame);
+                  }
+                } else if (currentBanner.type === 'voting') {
+                  setIsVotingModalOpen(true);
+                }
+              };
+
+              return (
+                <div className="relative glass-panel rounded-3xl overflow-hidden border border-slate-800/80 shadow-xl group transition-all duration-300 hover:border-slate-700/60">
+                  
+                  {/* Banner Content */}
+                  <div 
+                    onClick={handleBannerClick}
+                    className={`p-6 min-h-[140px] flex flex-col sm:flex-row items-center justify-between gap-6 cursor-pointer bg-gradient-to-r ${currentBanner.bg_gradient || 'from-blue-955/70 to-indigo-950/70'} relative`}
+                  >
+                    
+                    {/* Left details */}
+                    <div className="flex-1 flex flex-col gap-1.5 text-center sm:text-left">
+                      <span className="text-[10px] font-black text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20 uppercase tracking-widest self-center sm:self-start flex items-center gap-1 animate-pulse">
+                        {currentBanner.type === 'normal' && '📢 ประกาศข่าวสาร'}
+                        {currentBanner.type === 'game_promo' && '🔥 เกมแนะนำพิเศษ'}
+                        {currentBanner.type === 'voting' && '🗳️ กิจกรรมโหวตด่วน'}
+                      </span>
+                      <h2 className="text-base sm:text-lg font-black text-slate-100 mt-1 leading-snug">
+                        {currentBanner.title}
+                      </h2>
+                      <p className="text-xs text-slate-400 leading-relaxed font-medium">
+                        {currentBanner.subtitle}
+                      </p>
+                    </div>
+
+                    {/* Right details & Image */}
+                    <div className="shrink-0 flex items-center gap-4">
+                      {currentBanner.cover_url && (
+                        <div className="w-14 h-18 rounded-xl overflow-hidden border border-white/10 shadow-md">
+                          <img src={currentBanner.cover_url} className="w-full h-full object-cover" alt="" />
+                        </div>
+                      )}
+                      
+                      <div className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 h-9.5 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md group-hover:scale-105 active:scale-95">
+                        {currentBanner.type === 'normal' && (currentBanner.link_url ? '🔗 เปิดลิงก์' : '📖 รายละเอียด')}
+                        {currentBanner.type === 'game_promo' && '🎮 ดูข้อมูลเกม'}
+                        {currentBanner.type === 'voting' && '🗳️ ร่วมลงคะแนนโหวต'}
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Carousel Controllers */}
+                  {activeBanners.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveBannerIndex(prev => (prev === 0 ? activeBanners.length - 1 : prev - 1));
+                        }}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-950/85 hover:bg-slate-900 border border-slate-800 text-white font-bold flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:scale-105 active:scale-95 cursor-pointer z-10"
+                      >
+                        &lt;
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveBannerIndex(prev => (prev === activeBanners.length - 1 ? 0 : prev + 1));
+                        }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-950/85 hover:bg-slate-900 border border-slate-800 text-white font-bold flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:scale-105 active:scale-95 cursor-pointer z-10"
+                      >
+                        &gt;
+                      </button>
+
+                      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
+                        {activeBanners.map((_, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveBannerIndex(idx);
+                            }}
+                            className={`w-1.5 h-1.5 rounded-full transition-all cursor-pointer ${
+                              idx === (activeBannerIndex >= activeBanners.length ? 0 : activeBannerIndex) ? 'bg-blue-500 w-3' : 'bg-slate-600 hover:bg-slate-500'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                </div>
+              );
+            })()}
+
             {/* Search Input Panels */}
             <div className="flex flex-col md:flex-row gap-4 items-stretch justify-between w-full">
               <div className="flex flex-col sm:flex-row gap-4 flex-1">
@@ -5128,6 +5343,267 @@ export default function App() {
                     </button>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* BANNERS MANAGEMENT PANEL (ADMIN) */}
+            <div className="glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
+                    📢 จัดการแบนเนอร์ประกาศ ({banners.length})
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    เพิ่ม ลบ หรือแก้ไขแบนเนอร์ที่แสดงที่หน้าแรก (รองรับแบบธรรมดา ลิงก์เกมแนะนำ และกิจกรรมโหวต)
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setEditingBanner(null);
+                    setBannerFormType('normal');
+                    setBannerFormTitle('');
+                    setBannerFormSubtitle('');
+                    setBannerFormCoverUrl('');
+                    setBannerFormBgGradient('from-blue-955/70 to-indigo-950/70');
+                    setBannerFormLinkUrl('');
+                    setBannerFormTargetGameId('');
+                    setBannerFormIsActive(true);
+                    setBannerFormSortOrder(0);
+                    setIsAddBannerOpen(true);
+                  }}
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 h-10 rounded-xl flex items-center gap-1.5 text-xs transition-all cursor-pointer shrink-0"
+                >
+                  สร้างแบนเนอร์ใหม่
+                </button>
+              </div>
+
+              <div className="overflow-x-auto mt-2">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-slate-400">
+                      <th className="py-2.5 font-bold">ชื่อ / รายละเอียด</th>
+                      <th className="py-2.5 font-bold">ประเภท</th>
+                      <th className="py-2.5 font-bold">พื้นหลัง</th>
+                      <th className="py-2.5 font-bold">เป้าหมายลิงก์</th>
+                      <th className="py-2.5 font-bold">สถานะ</th>
+                      <th className="py-2.5 font-bold text-right">จัดการ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {banners.length === 0 ? (
+                      <tr>
+                        <td colSpan="6" className="py-8 text-center text-slate-500">
+                          ไม่มีข้อมูลแบนเนอร์ในระบบ
+                        </td>
+                      </tr>
+                    ) : (
+                      banners.map((banner) => (
+                        <tr key={banner.id} className="border-b border-slate-900 hover:bg-slate-900/10">
+                          <td className="py-3">
+                            <div className="flex items-center gap-3">
+                              {banner.cover_url && (
+                                <img src={banner.cover_url} className="w-8 h-10 object-cover rounded-lg" alt="" />
+                              )}
+                              <div>
+                                <span className="font-extrabold text-slate-200 block text-xs">{banner.title}</span>
+                                <span className="text-[10px] text-slate-400 block line-clamp-1 max-w-[200px]">{banner.subtitle}</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3">
+                            <span className="text-[10px] font-bold bg-slate-900 px-2 py-0.5 rounded border border-slate-800 text-slate-350">
+                              {banner.type === 'normal' && '📢 ประกาศ'}
+                              {banner.type === 'game_promo' && '🔥 แนะนำเกม'}
+                              {banner.type === 'voting' && '🗳️ กิจกรรมโหวต'}
+                            </span>
+                          </td>
+                          <td className="py-3 font-mono text-[10px] text-slate-400">
+                            {banner.bg_gradient}
+                          </td>
+                          <td className="py-3 text-[10px] text-slate-400 truncate max-w-[150px]">
+                            {banner.type === 'normal' && (banner.link_url || 'ไม่มี')}
+                            {banner.type === 'game_promo' && (banner.target_game_id || 'สุ่มเกมในระบบ')}
+                            {banner.type === 'voting' && 'หน้าโหวตแปลเกม'}
+                          </td>
+                          <td className="py-3">
+                            <span className={`text-[10px] font-bold ${banner.is_active ? 'text-emerald-450' : 'text-slate-500'}`}>
+                              {banner.is_active ? '🟢 เปิดใช้งาน' : '🔴 ปิด'}
+                            </span>
+                          </td>
+                          <td className="py-3 text-right">
+                            <div className="flex gap-2 justify-end">
+                              <button
+                                onClick={() => {
+                                  setEditingBanner(banner);
+                                  setBannerFormType(banner.type);
+                                  setBannerFormTitle(banner.title);
+                                  setBannerFormSubtitle(banner.subtitle || '');
+                                  setBannerFormCoverUrl(banner.cover_url || '');
+                                  setBannerFormBgGradient(banner.bg_gradient || 'from-blue-955/70 to-indigo-950/70');
+                                  setBannerFormLinkUrl(banner.link_url || '');
+                                  setBannerFormTargetGameId(banner.target_game_id || '');
+                                  setBannerFormIsActive(banner.is_active);
+                                  setBannerFormSortOrder(banner.sort_order || 0);
+                                  setIsEditBannerOpen(true);
+                                }}
+                                className="bg-blue-955/20 hover:bg-blue-900/30 border border-blue-500/10 hover:border-blue-500/30 text-blue-400 text-[10px] font-bold h-7 px-2.5 rounded-lg cursor-pointer transition-colors"
+                              >
+                                ✏️ แก้ไข
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (confirm(`คุณต้องการลบแบนเนอร์ "${banner.title}" หรือไม่?`)) {
+                                    deleteBanner(banner.id).then(() => {
+                                      setBanners(prev => prev.filter(b => b.id !== banner.id));
+                                      setToastMessage('ลบแบนเนอร์เรียบร้อยแล้ว!');
+                                    }).catch(err => {
+                                      alert('เกิดข้อผิดพลาด: ' + err.message);
+                                    });
+                                  }
+                                }}
+                                className="bg-rose-955/20 hover:bg-rose-900/30 border border-rose-500/10 hover:border-rose-500/30 text-rose-400 text-[10px] font-bold h-7 px-2.5 rounded-lg cursor-pointer transition-colors"
+                              >
+                                🗑️ ลบ
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* VOTING CANDIDATES PANEL (ADMIN) */}
+            <div className="glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
+                    🗳️ จัดการผู้ท้าชิงกิจกรรมโหวต ({votingCandidates.length})
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    เพิ่ม ลบ หรือแก้ไขตัวเลือกเกมสำหรับกิจกรรมให้ผู้เล่นร่วมลงคะแนนโหวตแปลไทย
+                  </p>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    onClick={() => {
+                      if (confirm('⚠️ คำเตือน: คุณต้องการล้างคะแนนโหวตของผู้เล่นทุกคนทั้งหมด เพื่อเตรียมเริ่มกิจกรรมรอบใหม่ใช่หรือไม่?')) {
+                        clearTranslationVotes().then(() => {
+                          setTranslationVotes([]);
+                          setToastMessage('🚨 ล้างคะแนนโหวตทั้งหมดเสร็จสิ้น!');
+                        }).catch(err => {
+                          alert('เกิดข้อผิดพลาด: ' + err.message);
+                        });
+                      }
+                    }}
+                    className="border border-rose-500/30 hover:bg-rose-500/10 text-rose-400 font-bold px-3.5 h-10 rounded-xl flex items-center gap-1 text-xs transition-all cursor-pointer"
+                  >
+                    🚨 ล้างคะแนนโหวตทั้งหมด
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditingCandidate(null);
+                      setCandidateFormTitle('');
+                      setCandidateFormDescription('');
+                      setCandidateFormCoverUrl('');
+                      setIsAddCandidateOpen(true);
+                    }}
+                    className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 h-10 rounded-xl flex items-center gap-1.5 text-xs transition-all cursor-pointer"
+                  >
+                    ➕ เพิ่มผู้ท้าชิงโหวต
+                  </button>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto mt-2">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-slate-400">
+                      <th className="py-2.5 font-bold">รูปปก</th>
+                      <th className="py-2.5 font-bold">ชื่อเกมผู้ท้าชิง</th>
+                      <th className="py-2.5 font-bold">คำอธิบาย</th>
+                      <th className="py-2.5 font-bold">ผลคะแนน (Premium / ทั่วไป)</th>
+                      <th className="py-2.5 font-bold text-right">จัดการ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {votingCandidates.length === 0 ? (
+                      <tr>
+                        <td colSpan="5" className="py-8 text-center text-slate-500">
+                          ไม่มีข้อมูลผู้ท้าชิงโหวตในระบบ
+                        </td>
+                      </tr>
+                    ) : (
+                      votingCandidates.map((candidate) => {
+                        const premiumVotes = translationVotes.filter(v => v.candidate_id === candidate.id && v.is_premium).length;
+                        const normalVotes = translationVotes.filter(v => v.candidate_id === candidate.id && !v.is_premium).length;
+                        const total = premiumVotes + normalVotes;
+
+                        return (
+                          <tr key={candidate.id} className="border-b border-slate-900 hover:bg-slate-900/10">
+                            <td className="py-3">
+                              <div className="w-10 h-14 rounded-lg overflow-hidden border border-white/5 bg-slate-900">
+                                {candidate.cover_url ? (
+                                  <img src={candidate.cover_url} className="w-full h-full object-cover" alt="" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center font-bold text-slate-600 text-[10px]">
+                                    {getInitials(candidate.title)}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3 font-extrabold text-slate-200">
+                              {candidate.title}
+                            </td>
+                            <td className="py-3 text-[10px] text-slate-400 max-w-[250px] line-clamp-2 mt-1">
+                              {candidate.description || 'ไม่มีคำอธิบาย'}
+                            </td>
+                            <td className="py-3">
+                              <div className="flex flex-col gap-0.5">
+                                <span className="font-extrabold text-slate-200 font-bold">รวม {total} เสียง</span>
+                                <span className="text-[10px] text-slate-500 font-medium">👑 Premium: {premiumVotes} | 👥 ทั่วไป: {normalVotes}</span>
+                              </div>
+                            </td>
+                            <td className="py-3 text-right">
+                              <div className="flex gap-2 justify-end">
+                                <button
+                                  onClick={() => {
+                                    setEditingCandidate(candidate);
+                                    setCandidateFormTitle(candidate.title);
+                                    setCandidateFormDescription(candidate.description || '');
+                                    setCandidateFormCoverUrl(candidate.cover_url || '');
+                                    setIsEditCandidateOpen(true);
+                                  }}
+                                  className="bg-blue-955/20 hover:bg-blue-900/30 border border-blue-500/10 hover:border-blue-500/30 text-blue-400 text-[10px] font-bold h-7 px-2.5 rounded-lg cursor-pointer transition-colors"
+                                >
+                                  ✏️ แก้ไข
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (confirm(`คุณต้องการลบผู้ท้าชิง "${candidate.title}" ใช่หรือไม่? (คะแนนโหวตทั้งหมดของตัวเลือกนี้จะถูกลบไปด้วย)`)) {
+                                      deleteVotingCandidate(candidate.id).then(() => {
+                                        setVotingCandidates(prev => prev.filter(c => c.id !== candidate.id));
+                                        setTranslationVotes(prev => prev.filter(v => v.candidate_id !== candidate.id));
+                                        setToastMessage('ลบผู้ท้าชิงโหวตเรียบร้อยแล้ว!');
+                                      }).catch(err => {
+                                        alert('เกิดข้อผิดพลาด: ' + err.message);
+                                      });
+                                    }
+                                  }}
+                                  className="bg-rose-955/20 hover:bg-rose-900/30 border border-rose-500/10 hover:border-rose-500/30 text-rose-400 text-[10px] font-bold h-7 px-2.5 rounded-lg cursor-pointer transition-colors"
+                                >
+                                  🗑️ ลบ
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
 
@@ -7610,6 +8086,437 @@ export default function App() {
                 className="w-full h-10 border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-slate-300 text-xs font-bold rounded-xl cursor-pointer transition-colors"
               >
                 ปิดหน้าต่างตรวจสอบ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. TRANSLATION VOTING POPUP MODAL */}
+      {isVotingModalOpen && (
+        <div className="modal-overlay animate-fade-in" onClick={() => setIsVotingModalOpen(false)}>
+          <div className="modal-content w-full max-w-2xl bg-slate-955/95 border border-slate-850 rounded-3xl p-6 relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            
+            <button
+              onClick={() => setIsVotingModalOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-855 w-9 h-9 border border-slate-800 rounded-full flex items-center justify-center cursor-pointer transition-colors"
+            >
+              ✕
+            </button>
+
+            <div className="flex flex-col gap-4.5">
+              <div>
+                <h2 className="text-lg font-black text-slate-100 flex items-center gap-2">
+                  🗳️ ร่วมโหวตโปรเจกต์แปลไทยเกมถัดไป
+                </h2>
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                  โหวตเกมที่คุณอยากให้เราทำการแปลภาษาไทยในโปรเจกต์ถัดไป! (คะแนนเสียงของผู้ใช้ Premium จะได้รับการพิจารณาเป็นพิเศษ)
+                </p>
+              </div>
+
+              {/* Leaderboard Cards Section */}
+              <div className="flex flex-col gap-3.5 max-h-[360px] overflow-y-auto pr-1.5 scrollbar-thin">
+                {votingLeaderboard.length === 0 ? (
+                  <div className="text-center py-8 bg-slate-900/25 border border-dashed border-slate-800 rounded-2xl">
+                    <span className="text-slate-500 text-xs block">ยังไม่มีผู้ท้าชิงเปิดให้โหวตในขณะนี้</span>
+                  </div>
+                ) : (
+                  votingLeaderboard.map((candidate, idx) => {
+                    const userVote = translationVotes.find(v => v.user_id === currentUser && v.candidate_id === candidate.id);
+                    const hasVotedThis = !!userVote;
+
+                    // Calculate progress percentages (max total in leaderboard)
+                    const maxVotes = Math.max(...votingLeaderboard.map(c => c.total), 1);
+                    const premiumPct = (candidate.premiumCount / maxVotes) * 100;
+                    const normalPct = (candidate.normalCount / maxVotes) * 100;
+
+                    const handleVote = async () => {
+                      if (isGuest) {
+                        setIsAuthModalOpen(true);
+                        setIsVotingModalOpen(false);
+                        setToastMessage('🔑 กรุณาเข้าสู่ระบบก่อนลงคะแนนโหวตครับ');
+                        return;
+                      }
+                      
+                      try {
+                        const isPremiumUser = subscriptionRole === 'premium';
+                        await submitTranslationVote(currentUser, currentUser, candidate.id, isPremiumUser);
+                        
+                        // Optimistically update votes list
+                        const newVote = {
+                          user_id: currentUser,
+                          email: currentUser,
+                          candidate_id: candidate.id,
+                          is_premium: isPremiumUser,
+                          created_at: new Date().toISOString()
+                        };
+                        setTranslationVotes(prev => {
+                          const filtered = prev.filter(v => v.user_id !== currentUser);
+                          return [...filtered, newVote];
+                        });
+                        setToastMessage(`🗳️ โหวตให้กับเกม "${candidate.title}" สำเร็จ!`);
+                      } catch (err) {
+                        console.error(err);
+                        alert('ไม่สามารถส่งผลโหวตได้: ' + err.message);
+                      }
+                    };
+
+                    return (
+                      <div key={candidate.id} className={`glass-card-minimal p-4 rounded-2xl flex gap-4 items-center border transition-all ${
+                        hasVotedThis ? 'border-amber-500/40 bg-amber-500/5' : 'border-slate-850'
+                      }`}>
+                        
+                        {/* Candidate Cover (Aspect 3/4) */}
+                        <div className="w-12 h-16 shrink-0 rounded-lg overflow-hidden border border-white/5 bg-slate-955 relative">
+                          {candidate.coverUrl ? (
+                            <img src={candidate.coverUrl} className="w-full h-full object-cover" alt="" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center font-black text-slate-600 text-xs">
+                              {getInitials(candidate.title)}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Middle info & stats */}
+                        <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                          <div className="flex justify-between items-center gap-2">
+                            <h4 className="text-xs font-extrabold text-slate-100 truncate">
+                              #{idx + 1} {candidate.title}
+                            </h4>
+                            {hasVotedThis && (
+                              <span className="text-[9px] font-black text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 uppercase tracking-widest animate-pulse">
+                                ✅ โหวตแล้ว
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-400 line-clamp-1 leading-relaxed">
+                            {candidate.description || 'ไม่มีรายละเอียดสำหรับเกมนี้'}
+                          </p>
+
+                          {/* Progress stacked bar */}
+                          <div className="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden flex border border-slate-800">
+                            {candidate.premiumCount > 0 && (
+                              <div 
+                                style={{ width: `${premiumPct}%` }} 
+                                className="bg-gradient-to-r from-amber-500 to-yellow-600 h-full"
+                                title={`Premium: ${candidate.premiumCount} เสียง`}
+                              />
+                            )}
+                            {candidate.normalCount > 0 && (
+                              <div 
+                                style={{ width: `${normalPct}%` }} 
+                                className="bg-gradient-to-r from-blue-500 to-indigo-600 h-full"
+                                title={`ทั่วไป: ${candidate.normalCount} เสียง`}
+                              />
+                            )}
+                          </div>
+
+                          <div className="flex items-center justify-between text-[9px] text-slate-500 font-bold">
+                            <span className="flex items-center gap-1.5">
+                              <span className="inline-block w-1.5 h-1.5 bg-amber-500 rounded-full" />
+                              Premium: {candidate.premiumCount}
+                              <span className="inline-block w-1.5 h-1.5 bg-blue-500 rounded-full ml-1" />
+                              ทั่วไป: {candidate.normalCount}
+                            </span>
+                            <span className="text-slate-400">
+                              รวม {candidate.total} เสียง
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Action buttons */}
+                        <div className="shrink-0">
+                          {isGuest ? (
+                            <button
+                              onClick={handleVote}
+                              className="bg-slate-900 hover:bg-slate-855 text-slate-400 hover:text-slate-200 border border-slate-800 hover:border-slate-700 text-[10px] font-black h-8 px-3 rounded-lg cursor-pointer transition-all"
+                            >
+                              🔑 ล็อกอิน
+                            </button>
+                          ) : (
+                            <button
+                              onClick={handleVote}
+                              disabled={hasVotedThis}
+                              className={`text-[10px] font-black h-8 px-3 rounded-lg cursor-pointer transition-all border ${
+                                hasVotedThis 
+                                  ? 'bg-amber-600/5 border-amber-500/20 text-amber-400 cursor-default'
+                                  : 'bg-blue-600 hover:bg-blue-500 border-blue-600 hover:border-blue-500 text-white active:scale-95'
+                              }`}
+                            >
+                              {hasVotedThis ? 'โหวตแล้ว' : 'โหวต'}
+                            </button>
+                          )}
+                        </div>
+
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Footer text */}
+              <div className="pt-3 border-t border-slate-900 flex justify-between items-center text-[10px] text-slate-500">
+                <span>
+                  * ข้อมูลการโหวตทั้งหมดอัปเดตแบบเรียลไทม์ (1 สิทธิ์ต่อ 1 บัญชีผู้ใช้)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsVotingModalOpen(false)}
+                  className="bg-slate-900 hover:bg-slate-855 text-slate-350 px-4 h-8.5 rounded-xl border border-slate-800 font-bold cursor-pointer transition-colors"
+                >
+                  ปิดหน้าต่าง
+                </button>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ADMIN ADD/EDIT BANNER MODAL */}
+      {(isAddBannerOpen || isEditBannerOpen) && (
+        <div className="modal-overlay animate-fade-in" onClick={() => { setIsAddBannerOpen(false); setIsEditBannerOpen(false); }}>
+          <div className="modal-content w-full max-w-lg bg-slate-955 border border-slate-850 rounded-3xl p-6 relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-extrabold text-slate-100 mb-4">
+              {isEditBannerOpen ? '✏️ แก้ไขแบนเนอร์ประกาศ' : '➕ สร้างแบนเนอร์ใหม่'}
+            </h3>
+            
+            <div className="flex flex-col gap-3 text-xs">
+              <div className="flex flex-col gap-1">
+                <label className="text-slate-400 font-bold">ประเภทแบนเนอร์</label>
+                <select
+                  value={bannerFormType}
+                  onChange={(e) => setBannerFormType(e.target.value)}
+                  className="glass-input h-9 px-3 rounded-xl text-slate-200"
+                >
+                  <option value="normal" className="bg-black text-slate-200">📢 ประกาศทั่วไป (พร้อมลิงก์เว็บอื่น)</option>
+                  <option value="game_promo" className="bg-black text-slate-200">🔥 โปรโมตเกม (ปักหมุดเกมในระบบ)</option>
+                  <option value="voting" className="bg-black text-slate-200">🗳️ กิจกรรมโหวตแปลเกมถัดไป</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-slate-400 font-bold">หัวข้อเด่น (Title)</label>
+                <input
+                  type="text"
+                  value={bannerFormTitle}
+                  onChange={(e) => setBannerFormTitle(e.target.value)}
+                  className="glass-input h-9 px-3 rounded-xl text-slate-200"
+                  placeholder="เช่น ร่วมโหวตแปลไทย, โปรโมชั่นพิเศษ..."
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-slate-400 font-bold">คำอธิบาย/คำโปรย (Subtitle)</label>
+                <textarea
+                  value={bannerFormSubtitle}
+                  onChange={(e) => setBannerFormSubtitle(e.target.value)}
+                  className="glass-input p-3 rounded-xl text-slate-200 h-16 resize-none"
+                  placeholder="เขียนคำอธิบายสั้นๆ..."
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-slate-400 font-bold">ลิงก์รูปภาพประกอบ (Cover Image URL - ตัวเลือก)</label>
+                <input
+                  type="text"
+                  value={bannerFormCoverUrl}
+                  onChange={(e) => setBannerFormCoverUrl(e.target.value)}
+                  className="glass-input h-9 px-3 rounded-xl text-slate-200"
+                  placeholder="https://..."
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-slate-400 font-bold">CSS Background Gradient</label>
+                <input
+                  type="text"
+                  value={bannerFormBgGradient}
+                  onChange={(e) => setBannerFormBgGradient(e.target.value)}
+                  className="glass-input h-9 px-3 rounded-xl text-slate-200 font-mono"
+                  placeholder="from-blue-955/70 to-indigo-950/70"
+                />
+              </div>
+
+              {bannerFormType === 'normal' && (
+                <div className="flex flex-col gap-1 animate-fade-in">
+                  <label className="text-slate-400 font-bold">ลิงก์ปลายทางเมื่อคลิก (Link URL - ปล่อยว่างถ้าคลิกไม่ได้)</label>
+                  <input
+                    type="text"
+                    value={bannerFormLinkUrl}
+                    onChange={(e) => setBannerFormLinkUrl(e.target.value)}
+                    className="glass-input h-9 px-3 rounded-xl text-slate-200"
+                    placeholder="https://..."
+                  />
+                </div>
+              )}
+
+              {bannerFormType === 'game_promo' && (
+                <div className="flex flex-col gap-1 animate-fade-in">
+                  <label className="text-slate-400 font-bold">เลือกเกมในระบบเพื่อปักหมุด (ปล่อยว่างเพื่อสุ่มเกมอัตโนมัติ)</label>
+                  <select
+                    value={bannerFormTargetGameId}
+                    onChange={(e) => setBannerFormTargetGameId(e.target.value)}
+                    className="glass-input h-9 px-3 rounded-xl text-slate-200"
+                  >
+                    <option value="" className="bg-black text-slate-400">🎲 สุ่มเกมในระบบอัตโนมัติ</option>
+                    {officialGames.map(g => (
+                      <option key={g.id} value={g.id} className="bg-black text-slate-200">
+                        {g.title} (โดย {g.developer})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="flex items-center gap-6 mt-1">
+                <label className="flex items-center gap-2 text-slate-350 cursor-pointer font-bold">
+                  <input
+                    type="checkbox"
+                    checked={bannerFormIsActive}
+                    onChange={(e) => setBannerFormIsActive(e.target.checked)}
+                    className="w-4 h-4 cursor-pointer"
+                  />
+                  เปิดใช้งานแบนเนอร์นี้
+                </label>
+
+                <div className="flex items-center gap-2">
+                  <label className="text-slate-400 font-bold shrink-0">ลำดับการแสดงผล:</label>
+                  <input
+                    type="number"
+                    value={bannerFormSortOrder}
+                    onChange={(e) => setBannerFormSortOrder(parseInt(e.target.value) || 0)}
+                    className="glass-input w-16 h-8 text-center rounded-lg text-slate-200"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-5 pt-3 border-t border-slate-900">
+              <button
+                type="button"
+                onClick={() => { setIsAddBannerOpen(false); setIsEditBannerOpen(false); }}
+                className="flex-1 h-10 border border-slate-800 hover:bg-slate-800 text-slate-400 text-xs font-bold rounded-xl cursor-pointer transition-colors"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!bannerFormTitle.trim()) {
+                    alert('กรุณากรอกหัวข้อเด่นก่อนครับ');
+                    return;
+                  }
+                  const payload = {
+                    id: editingBanner ? editingBanner.id : undefined,
+                    type: bannerFormType,
+                    title: bannerFormTitle.trim(),
+                    subtitle: bannerFormSubtitle.trim(),
+                    coverUrl: bannerFormCoverUrl.trim(),
+                    bgGradient: bannerFormBgGradient.trim(),
+                    linkUrl: bannerFormLinkUrl.trim(),
+                    targetGameId: bannerFormTargetGameId,
+                    isActive: bannerFormIsActive,
+                    sortOrder: bannerFormSortOrder
+                  };
+                  try {
+                    await saveBanner(payload);
+                    const bannerList = await getBanners();
+                    setBanners(bannerList);
+                    setIsAddBannerOpen(false);
+                    setIsEditBannerOpen(false);
+                    setToastMessage(editingBanner ? '✏️ แก้ไขแบนเนอร์สำเร็จ!' : '➕ เพิ่มแบนเนอร์สำเร็จ!');
+                  } catch (err) {
+                    alert('ไม่สามารถเซฟแบนเนอร์ได้: ' + err.message);
+                  }
+                }}
+                className="flex-1 h-10 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl cursor-pointer transition-all shadow-md"
+              >
+                บันทึกข้อมูล
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ADMIN ADD/EDIT CANDIDATE MODAL */}
+      {(isAddCandidateOpen || isEditCandidateOpen) && (
+        <div className="modal-overlay animate-fade-in" onClick={() => { setIsAddCandidateOpen(false); setIsEditCandidateOpen(false); }}>
+          <div className="modal-content w-full max-w-md bg-slate-955 border border-slate-850 rounded-3xl p-6 relative shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-extrabold text-slate-100 mb-4">
+              {isEditCandidateOpen ? '✏️ แก้ไขข้อมูลผู้ท้าชิง' : '➕ เพิ่มผู้ท้าชิงใหม่'}
+            </h3>
+
+            <div className="flex flex-col gap-3.5 text-xs">
+              <div className="flex flex-col gap-1">
+                <label className="text-slate-400 font-bold">ชื่อเกมผู้ท้าชิง</label>
+                <input
+                  type="text"
+                  value={candidateFormTitle}
+                  onChange={(e) => setCandidateFormTitle(e.target.value)}
+                  className="glass-input h-9 px-3 rounded-xl text-slate-200"
+                  placeholder="เช่น Eternum, Being a DIK..."
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-slate-400 font-bold">รายละเอียดคำอธิบายย่อ (Description)</label>
+                <textarea
+                  value={candidateFormDescription}
+                  onChange={(e) => setCandidateFormDescription(e.target.value)}
+                  className="glass-input p-3 rounded-xl text-slate-200 h-20 resize-none"
+                  placeholder="เช่น เรื่องราวแนวไซไฟสุดเร้าใจ..."
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-slate-400 font-bold">ลิงก์รูปหน้าปกเกม (Cover Image URL)</label>
+                <input
+                  type="text"
+                  value={candidateFormCoverUrl}
+                  onChange={(e) => setCandidateFormCoverUrl(e.target.value)}
+                  className="glass-input h-9 px-3 rounded-xl text-slate-200"
+                  placeholder="https://..."
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-5 pt-3 border-t border-slate-900">
+              <button
+                type="button"
+                onClick={() => { setIsAddCandidateOpen(false); setIsEditCandidateOpen(false); }}
+                className="flex-1 h-10 border border-slate-800 hover:bg-slate-800 text-slate-400 text-xs font-bold rounded-xl cursor-pointer transition-colors"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!candidateFormTitle.trim()) {
+                    alert('กรุณากรอกชื่อเกมผู้ท้าชิงก่อนครับ');
+                    return;
+                  }
+                  const payload = {
+                    id: editingCandidate ? editingCandidate.id : undefined,
+                    title: candidateFormTitle.trim(),
+                    description: candidateFormDescription.trim(),
+                    coverUrl: candidateFormCoverUrl.trim()
+                  };
+                  try {
+                    await saveVotingCandidate(payload);
+                    const candidateList = await getVotingCandidates();
+                    setVotingCandidates(candidateList);
+                    setIsAddCandidateOpen(false);
+                    setIsEditCandidateOpen(false);
+                    setToastMessage(editingCandidate ? '✏️ แก้ไขผู้ท้าชิงสำเร็จ!' : '➕ เพิ่มผู้ท้าชิงสำเร็จ!');
+                  } catch (err) {
+                    alert('ไม่สามารถบันทึกผู้ท้าชิงได้: ' + err.message);
+                  }
+                }}
+                className="flex-1 h-10 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl cursor-pointer transition-all shadow-md"
+              >
+                บันทึกข้อมูล
               </button>
             </div>
           </div>
