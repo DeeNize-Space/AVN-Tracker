@@ -780,6 +780,41 @@ export default function App() {
 
 
 
+  // Helper for stable random hashing
+  const sessionRandomSeed = useRef(Math.floor(Math.random() * 1000)).current;
+  const hashCode = (str) => {
+    let hash = 0;
+    if (!str) return hash;
+    for (let i = 0; i < str.length; i++) {
+      hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return hash;
+  };
+
+  // Selected promo games (either target_game_id or a stable random fallback for each banner ID)
+  const bannerPromoGames = useMemo(() => {
+    const promoMap = {};
+    if (officialGames.length === 0) return promoMap;
+    
+    banners.forEach(b => {
+      if (b.type === 'game_promo') {
+        if (b.target_game_id) {
+          const game = officialGames.find(g => g.id === b.target_game_id);
+          if (game) {
+            promoMap[b.id] = game;
+          } else {
+            const idx = Math.abs(hashCode(b.id) + sessionRandomSeed) % officialGames.length;
+            promoMap[b.id] = officialGames[idx];
+          }
+        } else {
+          const idx = Math.abs(hashCode(b.id) + sessionRandomSeed) % officialGames.length;
+          promoMap[b.id] = officialGames[idx];
+        }
+      }
+    });
+    return promoMap;
+  }, [banners, officialGames, sessionRandomSeed]);
+
   // --- DERIVED VOTING LEADERBOARD ---
   const votingLeaderboard = useMemo(() => {
     const stats = {};
@@ -2870,23 +2905,19 @@ export default function App() {
 
               const currentBanner = activeBanners[activeBannerIndex >= activeBanners.length ? 0 : activeBannerIndex];
 
+              const promoGame = bannerPromoGames[currentBanner.id];
+              const bannerCover = currentBanner.cover_url || (promoGame ? promoGame.coverUrl : '');
+              const bannerTitle = currentBanner.title || (promoGame ? promoGame.title : 'แนะนำเกมน่าเล่น');
+              const bannerSubtitle = currentBanner.subtitle || (promoGame ? promoGame.overview : '');
+
               const handleBannerClick = () => {
                 if (currentBanner.type === 'normal') {
                   if (currentBanner.link_url) {
                     window.open(currentBanner.link_url, '_blank');
                   }
                 } else if (currentBanner.type === 'game_promo') {
-                  if (currentBanner.target_game_id) {
-                    const target = officialGames.find(g => g.id === currentBanner.target_game_id);
-                    if (target) {
-                      handleOpenGameDetail(target);
-                    } else {
-                      const randomGame = officialGames[Math.floor(Math.random() * officialGames.length)];
-                      if (randomGame) handleOpenGameDetail(randomGame);
-                    }
-                  } else {
-                    const randomGame = officialGames[Math.floor(Math.random() * officialGames.length)];
-                    if (randomGame) handleOpenGameDetail(randomGame);
+                  if (promoGame) {
+                    handleOpenGameDetail(promoGame);
                   }
                 } else if (currentBanner.type === 'voting') {
                   setIsVotingModalOpen(true);
@@ -2910,18 +2941,18 @@ export default function App() {
                         {currentBanner.type === 'voting' && '🗳️ กิจกรรมโหวตด่วน'}
                       </span>
                       <h2 className="text-base sm:text-lg font-black text-slate-100 mt-1 leading-snug">
-                        {currentBanner.title}
+                        {bannerTitle}
                       </h2>
-                      <p className="text-xs text-slate-400 leading-relaxed font-medium">
-                        {currentBanner.subtitle}
+                      <p className="text-xs text-slate-400 leading-relaxed font-medium line-clamp-2 max-w-xl">
+                        {bannerSubtitle}
                       </p>
                     </div>
 
                     {/* Right details & Image */}
-                    <div className="shrink-0 flex items-center gap-4">
-                      {currentBanner.cover_url && (
-                        <div className="w-14 h-18 rounded-xl overflow-hidden border border-white/10 shadow-md">
-                          <img src={currentBanner.cover_url} className="w-full h-full object-cover" alt="" />
+                    <div className="shrink-0 flex items-center gap-4.5">
+                      {bannerCover && (
+                        <div className="w-16 h-22 sm:w-20 sm:h-28 rounded-2xl overflow-hidden border border-white/15 shadow-xl bg-slate-900/50 shrink-0">
+                          <img src={bannerCover} className="w-full h-full object-cover" alt="" />
                         </div>
                       )}
                       
