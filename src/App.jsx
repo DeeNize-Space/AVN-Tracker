@@ -30,7 +30,16 @@ import {
   getTranslatedGames,
   saveTranslatedGame,
   deleteTranslatedGame,
-  incrementTranslatedGameViews
+  incrementTranslatedGameViews,
+  getVotingCandidates,
+  saveVotingCandidate,
+  deleteVotingCandidate,
+  getTranslationVotes,
+  submitTranslationVote,
+  clearTranslationVotes,
+  getBanners,
+  saveBanner,
+  deleteBanner
 } from './supabase';
 
 // Mock Data for Translated Games Preview
