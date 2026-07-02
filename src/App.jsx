@@ -444,7 +444,7 @@ export default function App() {
     }
   }, []);
   const [isUpsellOpen, setIsUpsellOpen] = useState(false);
-  const [selectedPackage, setSelectedPackage] = useState('yearly');
+  const [selectedPackage, setSelectedPackage] = useState('monthly');
   const [isSendingSuggestion, setIsSendingSuggestion] = useState(false);
 
   // --- SLIP UPLOAD STATES ---
@@ -7683,33 +7683,15 @@ export default function App() {
               </div>
 
               {/* Price Selector */}
-              <div className="grid grid-cols-2 gap-3 mt-1">
+              <div className="mt-1">
                 <div 
-                  onClick={() => setSelectedPackage('monthly')}
-                  className={`p-3 rounded-2xl flex flex-col items-center justify-center relative cursor-pointer transition-all border ${
-                    selectedPackage === 'monthly'
-                      ? 'bg-slate-950 border-amber-500 shadow-md shadow-amber-500/5'
-                      : 'bg-slate-950 border-slate-800 opacity-60 hover:opacity-90'
-                  }`}
+                  className="p-3.5 rounded-2xl flex flex-col items-center justify-center relative transition-all border bg-slate-955 border-amber-500 shadow-md shadow-amber-500/5"
                 >
-                  <span className="text-[10px] text-slate-450 font-bold">รายเดือน</span>
-                  <span className="text-base font-black text-slate-200 mt-1">49 บาท</span>
-                  <span className="text-[9px] text-slate-500 mt-0.5">/เดือน</span>
-                </div>
-                <div 
-                  onClick={() => setSelectedPackage('yearly')}
-                  className={`p-3 rounded-2xl flex flex-col items-center justify-center relative cursor-pointer transition-all border ${
-                    selectedPackage === 'yearly'
-                      ? 'bg-slate-950 border-2 border-amber-500 shadow-md shadow-amber-500/10'
-                      : 'bg-slate-950 border-slate-800 opacity-60 hover:opacity-90'
-                  }`}
-                >
-                  <span className="absolute -top-2.5 bg-gradient-to-r from-amber-600 to-yellow-600 text-[8px] font-black text-white px-2 py-0.5 rounded-full uppercase tracking-wider">
-                    คุ้มที่สุด
+                  <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider">แพ็กเกจ Premium</span>
+                  <span className="text-lg font-black text-slate-100 mt-1 flex items-baseline gap-1">
+                    รายเดือน 49 บาท
+                    <span className="text-[10px] text-slate-400 font-normal font-sans">/เดือน</span>
                   </span>
-                  <span className="text-[10px] text-amber-400 font-black mt-1">รายปี (ประหยัด 15%)</span>
-                  <span className="text-base font-black text-slate-200 mt-1">499 บาท</span>
-                  <span className="text-[9px] text-slate-500 mt-0.5">ตกวันละ 1.37 บาท!</span>
                 </div>
               </div>
 
