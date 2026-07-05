@@ -100,7 +100,8 @@ export async function loginUser(usernameOrEmail, password) {
     email: profile.email,
     role: mappedRole,
     signupDate: profile.signup_date || '',
-    expiryDate: profile.expiry_date || ''
+    expiryDate: profile.expiry_date || '',
+    nickname: profile.nickname || ''
   };
 }
 
@@ -139,7 +140,8 @@ export async function getSession() {
     email: session.user.email,
     role: mappedRole,
     signupDate: profile?.signup_date || '',
-    expiryDate: profile?.expiry_date || ''
+    expiryDate: profile?.expiry_date || '',
+    nickname: profile?.nickname || ''
   };
 }
 
@@ -199,6 +201,16 @@ export async function updateUserRole(email, role, signupDate, expiryDate) {
   return { status: 'success' };
 }
 
+export async function updateNickname(email, nickname) {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ nickname: nickname.trim() })
+    .eq('email', email.trim().toLowerCase());
+
+  if (error) throw error;
+  return { status: 'success' };
+}
+
 export async function getUsersList() {
   const { data, error } = await supabase
     .from('profiles')
@@ -220,7 +232,8 @@ export async function getUsersList() {
       email: p.email || '',
       role: mappedRole,
       signupDate: p.signup_date || '',
-      expiryDate: p.expiry_date || ''
+      expiryDate: p.expiry_date || '',
+      nickname: p.nickname || ''
     };
   });
 }
@@ -330,7 +343,7 @@ export async function incrementGameViewCount(gameId) {
 export async function getOfficialGames() {
   const { data, error } = await supabase
     .from('official_games')
-    .select('*')
+    .select('id, title, developer, version, cover_url, rating, tags, view_count, created_at, updated_at')
     .order('title', { ascending: true });
 
   if (error) throw error;
@@ -340,21 +353,41 @@ export async function getOfficialGames() {
     title: g.title || '',
     developer: g.developer || '',
     version: g.version || '',
-    overview: g.overview || '',
+    overview: '',
     coverUrl: g.cover_url || '',
-    patreonUrl: g.patreon_url || '',
-    buyUrl: g.buy_url || '',
-    socialUrl: g.social_url || '',
+    patreonUrl: '',
+    buyUrl: '',
+    socialUrl: '',
     rating: parseFloat(g.rating) || 5.0,
     tags: g.tags || [],
-    screenshots: g.screenshots || [],
-    versions: g.versions || [],
+    screenshots: [],
+    versions: [],
     viewCount: g.view_count || 0,
     createdAt: g.created_at || '',
     updatedAt: g.updated_at || '',
     isCustom: false
   }));
 }
+
+export async function getOfficialGameDetail(id) {
+  const { data, error } = await supabase
+    .from('official_games')
+    .select('overview, patreon_url, buy_url, social_url, screenshots, versions')
+    .eq('id', id)
+    .single();
+
+  if (error) throw error;
+
+  return {
+    overview: data.overview || '',
+    patreonUrl: data.patreon_url || '',
+    buyUrl: data.buy_url || '',
+    socialUrl: data.social_url || '',
+    screenshots: data.screenshots || [],
+    versions: data.versions || []
+  };
+}
+
 
 export async function saveOfficialGame(game) {
   const payload = {

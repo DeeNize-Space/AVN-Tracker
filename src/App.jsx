@@ -14,6 +14,7 @@ import {
   getAllUserLibraries,
   incrementGameViewCount,
   getOfficialGames,
+  getOfficialGameDetail,
   saveOfficialGame,
   deleteOfficialGame,
   getSystemConfig,
@@ -332,6 +333,23 @@ const insertMarkdownDirect = (textareaId, markdownText) => {
   textarea.setSelectionRange(newPos, newPos);
 };
 
+const formatThaiExpiryDate = (dateStr) => {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    const year = parts[0];
+    const monthIndex = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+    const thaiMonths = [
+      'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
+      'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'
+    ];
+    const month = thaiMonths[monthIndex] || parts[1];
+    return `${day} ${month} ${year}`;
+  }
+  return dateStr;
+};
+
 export default function App() {
   // PWA (Install app) State and Handlers
   const [deferredPrompt, setDeferredPrompt] = useState(null);
@@ -428,6 +446,10 @@ export default function App() {
           setCurrentUser(sessionUser.email);
           setCurrentUsername(sessionUser.username);
           setUserRoles(prev => ({ ...prev, [sessionUser.email]: sessionUser.role }));
+          setUserPremiumDates(prev => ({
+            ...prev,
+            [sessionUser.email]: { signupDate: sessionUser.signupDate, expiryDate: sessionUser.expiryDate }
+          }));
           localStorage.setItem('avn_current_user_v7', sessionUser.email);
           localStorage.setItem('avn_current_username_v7', sessionUser.username);
           
@@ -634,6 +656,7 @@ export default function App() {
   const [adminReportTab, setAdminReportTab] = useState('update'); // 'update', 'error', 'new'
   const [showNotifications, setShowNotifications] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+  const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
 
   // --- MODALS STATE ---
   const [selectedGameDetail, setSelectedGameDetail] = useState(null);
@@ -652,7 +675,7 @@ export default function App() {
     setIsOverviewExpanded(false);
   }, [selectedGameDetail]);
 
-  const handleOpenGameDetail = (game) => {
+  const handleOpenGameDetail = async (game) => {
     if (!game) return;
     setSelectedGameDetail(game);
     // Increment viewCount for official games
@@ -662,6 +685,22 @@ export default function App() {
         incrementGameViewCount(game.id).catch(err => {
           console.error("Failed to increment view count on Sheets:", err);
         });
+      }
+      try {
+        if (isFirebaseEnabled) {
+          const detail = await getOfficialGameDetail(game.id);
+          setSelectedGameDetail(prev => {
+            if (prev && prev.id === game.id) {
+              return {
+                ...prev,
+                ...detail
+              };
+            }
+            return prev;
+          });
+        }
+      } catch (err) {
+        console.error("Failed to fetch official game detail:", err);
       }
     }
   };
@@ -909,7 +948,7 @@ export default function App() {
 
 
         // 3. Fetch user roles & premium dates
-        const usersList = await getUsersList();
+        // 3. Set default user roles & premium dates (profiles loaded on-demand for admin)
         const rolesObj = {
           'pattarasak.raksanarong@gmail.com': 'admin',
           'pattarasak.raksanrong@gmail.com': 'admin',
@@ -919,21 +958,12 @@ export default function App() {
           'pattarasak.raksanarong@gmail.com': { signupDate: '', expiryDate: '' },
           'pattarasak.raksanrong@gmail.com': { signupDate: '', expiryDate: '' }
         };
-        usersList.forEach(u => {
-          rolesObj[u.email] = u.role;
-          premiumObj[u.email] = { signupDate: u.signupDate, expiryDate: u.expiryDate };
-        });
         setUserRoles(rolesObj);
         setUserPremiumDates(premiumObj);
 
-        // 4. Fetch revenue transactions
-        const txList = await getTransactions();
-        txList.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-        setRevenueTransactions(txList);
-
-        // 5. Fetch reports
-        const reportsList = await getReports();
-        setReports(reportsList);
+        // 4. Initialize empty lists for admin-only tables on mount
+        setRevenueTransactions([]);
+        setReports([]);
 
         // 6. Fetch translated games
         const transList = await getTranslatedGames();
@@ -1006,6 +1036,7 @@ export default function App() {
   useEffect(() => {
     if (isFirebaseEnabled && isDbLoaded && activeTab === 'admin' && isAdmin) {
       fetchEngagementData(true);
+      fetchAdminData(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDbLoaded, activeTab, isAdmin, isFirebaseEnabled]);
@@ -1247,6 +1278,28 @@ export default function App() {
       return reports.filter((r) => r.status === 'pending');
     }
     
+    // Calculate Premium Expiry Notification
+    const premiumExpiryNotification = [];
+    if (subscriptionRole === 'premium') {
+      const sub = userPremiumDates[currentUser];
+      if (sub && sub.expiryDate) {
+        const now = new Date();
+        const expiry = new Date(sub.expiryDate);
+        expiry.setHours(23, 59, 59, 999); // Expiration is usually at end of the day
+        const timeDiff = expiry.getTime() - now.getTime();
+        const oneDayMs = 24 * 60 * 60 * 1000;
+        
+        if (timeDiff > 0 && timeDiff <= oneDayMs) {
+          const displayDate = formatThaiExpiryDate(sub.expiryDate);
+          premiumExpiryNotification.push({
+            id: `premium-expiry-${currentUser}`,
+            type: 'premium-expiry',
+            message: `👑 สิทธิ์ Premium ของคุณจะหมดอายุในวันที่ ${displayDate} (เหลือเวลาอีกไม่ถึง 24 ชั่วโมง) โปรดต่ออายุสมาชิก!`
+          });
+        }
+      }
+    }
+
     // Calculate local library update notifications
     const libraryUpdates = [];
     if (!isGuest) {
@@ -1268,7 +1321,7 @@ export default function App() {
     }
 
     if (subscriptionRole === 'free') {
-      return libraryUpdates;
+      return [...premiumExpiryNotification, ...libraryUpdates];
     }
     
     // For premium users, also merge the custom/official announcements from userNotifications
@@ -1283,8 +1336,8 @@ export default function App() {
         message: `เกม "${n.gameTitle}" มีการอัปเดตเป็นเวอร์ชัน ${n.version}!`
       }));
 
-    return [...libraryUpdates, ...newsNotifications];
-  }, [reports, currentUser, subscriptionRole, userNotifications, currentLibraryList, officialGames]);
+    return [...premiumExpiryNotification, ...libraryUpdates, ...newsNotifications];
+  }, [reports, currentUser, subscriptionRole, userNotifications, currentLibraryList, officialGames, userPremiumDates]);
 
   const googleUser = useMemo(() => {
     if (isGuest) return null;
@@ -1451,6 +1504,42 @@ export default function App() {
       setToastMessage('ไม่สามารถดึงข้อมูลคลังสมาชิกออนไลน์ได้: ' + err.message);
     } finally {
       if (!silent) setIsRefreshingEngage(false);
+    }
+  };
+
+  const fetchAdminData = async (silent = false) => {
+    if (!silent) setIsRefreshingAdmin(true);
+    try {
+      const usersList = await getUsersList();
+      const rolesObj = {
+        'pattarasak.raksanarong@gmail.com': 'admin',
+        'pattarasak.raksanrong@gmail.com': 'admin',
+        'Guest': 'free'
+      };
+      const premiumObj = {
+        'pattarasak.raksanarong@gmail.com': { signupDate: '', expiryDate: '' },
+        'pattarasak.raksanrong@gmail.com': { signupDate: '', expiryDate: '' }
+      };
+      usersList.forEach(u => {
+        rolesObj[u.email] = u.role;
+        premiumObj[u.email] = { signupDate: u.signupDate, expiryDate: u.expiryDate };
+      });
+      setUserRoles(rolesObj);
+      setUserPremiumDates(premiumObj);
+
+      const txList = await getTransactions();
+      txList.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      setRevenueTransactions(txList);
+
+      const reportsList = await getReports();
+      setReports(reportsList);
+
+      if (!silent) setToastMessage('โหลดข้อมูลแอดมินล่าสุดสำเร็จ');
+    } catch (err) {
+      console.error('Error fetching admin data:', err);
+      setToastMessage('ไม่สามารถดึงข้อมูลแอดมินได้: ' + err.message);
+    } finally {
+      if (!silent) setIsRefreshingAdmin(false);
     }
   };
 
@@ -2666,6 +2755,8 @@ export default function App() {
                                     if (libItem) {
                                       setEditingLocalItem(libItem);
                                     }
+                                  } else if (notif.type === 'premium-expiry') {
+                                    setIsUpsellOpen(true);
                                   } else {
                                     const target = officialGames.find((g) => g.id === notif.gameId);
                                     if (target) {
@@ -2789,6 +2880,11 @@ export default function App() {
                         }`}>
                           {subscriptionRole === 'admin' ? '🛡️ ผู้ดูแลระบบ (Admin)' : subscriptionRole === 'premium' ? '👑 สมาชิกพรีเมียม (Premium)' : '👥 สมาชิกทั่วไป (Free)'}
                         </span>
+                        {subscriptionRole === 'premium' && userPremiumDates[currentUser]?.expiryDate && (
+                          <span className="text-[10px] text-amber-500 mt-1.5 font-medium flex items-center gap-1">
+                            📅 หมดอายุ: {formatThaiExpiryDate(userPremiumDates[currentUser].expiryDate)}
+                          </span>
+                        )}
                       </div>
                       
                       {/* Personal Library Backup section */}
@@ -3816,6 +3912,23 @@ export default function App() {
         {/* ADMIN TAB */}
         {activeTab === 'admin' && isAdmin && (
           <div className="flex flex-col gap-6 animate-fade-in-up">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+                ⚙️ แผงควบคุมแอดมิน (Admin Control Panel)
+              </h2>
+              {isFirebaseEnabled && (
+                <button
+                  onClick={() => fetchAdminData(false)}
+                  disabled={isRefreshingAdmin}
+                  className="px-4 py-2 text-xs font-semibold text-slate-200 bg-slate-900 border border-slate-800 rounded-xl hover:bg-slate-850 hover:text-white transition-all duration-200 disabled:opacity-50 flex items-center gap-1.5 shadow-lg cursor-pointer"
+                >
+                  <svg className={`w-3.5 h-3.5 ${isRefreshingAdmin ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89M21 8h-5" />
+                  </svg>
+                  {isRefreshingAdmin ? 'กำลังโหลด...' : 'รีโหลดข้อมูลแอดมิน'}
+                </button>
+              )}
+            </div>
             {/* API URL Diagnostic Banner */}
             <div className="glass-panel p-4 rounded-2xl border border-blue-500/20 bg-blue-500/5 flex flex-col gap-1.5">
               <h4 className="text-xs font-bold text-blue-400 flex items-center gap-1.5">
