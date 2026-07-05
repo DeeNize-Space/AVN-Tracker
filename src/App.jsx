@@ -2659,7 +2659,7 @@ export default function App() {
               📚 คลังของฉัน
             </button>
 
-            {subscriptionRole === 'free' && !isGuest && (
+            {false && subscriptionRole === 'free' && !isGuest && (
               <button
                 onClick={() => setIsUpsellOpen(true)}
                 className="text-sm px-4 py-2.5 rounded-xl font-extrabold transition-all h-11 flex items-center gap-1.5 cursor-pointer text-amber-400 border border-amber-500/20 hover:border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10 active:scale-95 duration-150"
@@ -2800,7 +2800,7 @@ export default function App() {
                             </div>
                           ))}
 
-                          {subscriptionRole === 'free' && (
+                          {false && subscriptionRole === 'free' && (
                             <div className="text-center py-4 px-2 flex flex-col items-center gap-2 bg-slate-900/40 border border-slate-900 rounded-xl mt-1.5">
                               <p className="text-[10px] text-slate-400 font-bold leading-normal">
                                 👑 สมัคร Premium เพื่อรับการแจ้งเตือนอัปเดตเกมทั้งหมดบนแพลตฟอร์มทันที!
@@ -7853,64 +7853,16 @@ export default function App() {
               <div className="flex flex-col gap-2">
                 {!isSlipChecking && (
                   <>
-                    {/* Browse Slip File Input Area */}
-                    <div className="flex flex-col gap-2 mb-1">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        id="payment-slip-upload"
-                        onChange={(e) => {
-                          const file = e.target.files[0];
-                          if (file) {
-                            setSelectedSlipFile(file);
-                            setSelectedSlipFilePreview(URL.createObjectURL(file));
-                          }
-                        }}
-                        className="hidden"
-                      />
-                      
-                      {selectedSlipFilePreview ? (
-                        <div className="flex flex-col items-center bg-slate-950/40 p-3 rounded-2xl border border-slate-800 gap-2 relative">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedSlipFile(null);
-                              setSelectedSlipFilePreview(null);
-                            }}
-                            className="absolute top-2 right-2 text-slate-500 hover:text-slate-200 bg-slate-900 w-6 h-6 rounded-full flex items-center justify-center cursor-pointer text-[10px]"
-                          >
-                            ✕
-                          </button>
-                          <div className="w-16 h-24 rounded-lg overflow-hidden border border-slate-700 bg-slate-900">
-                            <img src={selectedSlipFilePreview} alt="Selected Slip" className="w-full h-full object-cover" />
-                          </div>
-                          <span className="text-[10px] text-slate-400 font-bold truncate max-w-[220px]">
-                            {selectedSlipFile.name}
-                          </span>
-                        </div>
-                      ) : (
-                        <label
-                          htmlFor="payment-slip-upload"
-                          className="w-full h-16 flex flex-col items-center justify-center gap-1 border border-dashed border-slate-700 hover:border-slate-600 bg-slate-950/20 hover:bg-slate-950/40 rounded-2xl cursor-pointer transition-all text-slate-400 hover:text-slate-350"
-                        >
-                          <span className="text-lg">📁</span>
-                          <span className="text-[10px] font-black">คลิกเพื่อเลือกไฟล์รูปภาพสลิป (Browse...)</span>
-                        </label>
-                      )}
+                    <div className="text-center py-2 px-3 bg-red-950/20 border border-red-900/30 rounded-xl mb-1 text-red-400 text-[10px] font-bold">
+                      ⚠️ ขณะนี้ระบบรับสมัครพรีเมียมและตรวจสลิปปิดปรับปรุงชั่วคราว ขออภัยในความไม่สะดวก
                     </div>
-
                     {/* Submit Button */}
                     <button
                       type="button"
-                      disabled={!selectedSlipFile}
-                      onClick={() => handleVerifySlip(selectedSlipFile)}
-                      className={`w-full h-11 flex items-center justify-center gap-2 text-white text-xs font-black rounded-xl transition-all shadow-lg cursor-pointer ${
-                        selectedSlipFile 
-                          ? 'bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 shadow-amber-500/15'
-                          : 'bg-slate-900 border border-slate-800 text-slate-500 cursor-not-allowed shadow-none'
-                      }`}
+                      disabled={true}
+                      className="w-full h-11 flex items-center justify-center gap-2 bg-slate-900 border border-slate-800 text-slate-500 text-xs font-black rounded-xl transition-all shadow-none cursor-not-allowed"
                     >
-                      📤 ส่งสลิปโอนเงินเพื่อตรวจสอบ
+                      🚫 ปิดรับสมัคร Premium ชั่วคราว
                     </button>
                   </>
                 )}
