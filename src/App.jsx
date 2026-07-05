@@ -2712,7 +2712,7 @@ export default function App() {
                 </button>
 
                 {showNotifications && (
-                  <div className="absolute right-0 mt-3 w-80 glass-panel border border-slate-805 rounded-2xl shadow-2xl z-50 p-4 animate-fade-in-up">
+                  <div className="absolute right-0 mt-3 w-80 solid-dropdown rounded-2xl shadow-2xl z-50 p-4 animate-fade-in-up">
                     <div className="flex items-center justify-between pb-2.5 border-b border-slate-800 mb-2.5">
                       <span className="text-xs font-bold text-slate-350 flex items-center gap-1.5">
                         🔔 การแจ้งเตือนอัปเดต ({notifications.length})
@@ -2860,7 +2860,7 @@ export default function App() {
                   </button>
 
                   {isUserDropdownOpen && (
-                    <div className="absolute right-0 mt-2.5 w-64 glass-panel border border-slate-800 rounded-2xl shadow-2xl z-50 p-4 animate-fade-in-up">
+                    <div className="absolute right-0 mt-2.5 w-64 solid-dropdown rounded-2xl shadow-2xl z-50 p-4 animate-fade-in-up">
                       <div className="flex flex-col items-center text-center pb-3.5 border-b border-slate-900 mb-3">
                         {googleUser?.avatar ? (
                           <img src={googleUser.avatar} alt={googleUser.name} className="w-14 h-14 rounded-full object-cover mb-2 border-2 border-blue-500/20 shadow-lg" />
@@ -3147,7 +3147,7 @@ export default function App() {
                   </button>
                   
                   {showTagFilterCatalog && (
-                    <div className="absolute left-0 mt-2 w-72 glass-panel border border-slate-805 rounded-2xl shadow-2xl z-50 p-4 animate-fade-in-up">
+                    <div className="absolute left-0 mt-2 w-72 solid-dropdown rounded-2xl shadow-2xl z-50 p-4 animate-fade-in-up">
                       <input
                         type="text"
                         placeholder="พิมพ์ค้นหาแท็ก..."
@@ -3627,7 +3627,7 @@ export default function App() {
                     </button>
                     
                     {showTagFilterLibrary && (
-                      <div className="absolute left-0 mt-2 w-72 glass-panel border border-slate-805 rounded-2xl shadow-2xl z-50 p-4 animate-fade-in-up">
+                      <div className="absolute left-0 mt-2 w-72 solid-dropdown rounded-2xl shadow-2xl z-50 p-4 animate-fade-in-up">
                         <input
                           type="text"
                           placeholder="พิมพ์ค้นหาแท็ก..."
