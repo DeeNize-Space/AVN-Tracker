@@ -958,8 +958,8 @@ export default function App() {
           'pattarasak.raksanarong@gmail.com': { signupDate: '', expiryDate: '' },
           'pattarasak.raksanrong@gmail.com': { signupDate: '', expiryDate: '' }
         };
-        setUserRoles(rolesObj);
-        setUserPremiumDates(premiumObj);
+        setUserRoles(prev => ({ ...rolesObj, ...prev }));
+        setUserPremiumDates(prev => ({ ...premiumObj, ...prev }));
 
         // 4. Initialize empty lists for admin-only tables on mount
         setRevenueTransactions([]);
