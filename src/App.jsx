@@ -2659,7 +2659,7 @@ export default function App() {
               📚 คลังของฉัน
             </button>
 
-            {false && subscriptionRole === 'free' && !isGuest && (
+            {subscriptionRole === 'free' && !isGuest && (
               <button
                 onClick={() => setIsUpsellOpen(true)}
                 className="text-sm px-4 py-2.5 rounded-xl font-extrabold transition-all h-11 flex items-center gap-1.5 cursor-pointer text-amber-400 border border-amber-500/20 hover:border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10 active:scale-95 duration-150"
@@ -2800,7 +2800,7 @@ export default function App() {
                             </div>
                           ))}
 
-                          {false && subscriptionRole === 'free' && (
+                          {subscriptionRole === 'free' && (
                             <div className="text-center py-4 px-2 flex flex-col items-center gap-2 bg-slate-900/40 border border-slate-900 rounded-xl mt-1.5">
                               <p className="text-[10px] text-slate-400 font-bold leading-normal">
                                 👑 สมัคร Premium เพื่อรับการแจ้งเตือนอัปเดตเกมทั้งหมดบนแพลตฟอร์มทันที!
@@ -7808,6 +7808,20 @@ export default function App() {
                 </div>
               </div>
 
+              <div className="my-2 p-3 rounded-2xl bg-amber-500/5 border border-amber-500/20 text-center flex flex-col items-center gap-1.5">
+                <span className="text-[11px] font-black text-amber-300">
+                  📩 เมื่อโอนเงินแล้ว กรุณาส่งสลิปไปที่ Facebook Page:
+                </span>
+                <a 
+                  href="https://web.facebook.com/deenizegames?locale=th_TH" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-xs font-black text-amber-400 hover:text-amber-300 underline transition-all flex items-center gap-1"
+                >
+                  DeeNize Games 🔗
+                </a>
+              </div>
+
               {/* Real PromptPay QR Code Image */}
               <div className="my-2 flex flex-col items-center">
                 <div className="w-[185px] h-[245px] border border-slate-700 rounded-2xl overflow-hidden shadow-2xl p-2 bg-slate-900 flex flex-col items-center justify-center">
@@ -7852,19 +7866,15 @@ export default function App() {
               {/* Action Buttons */}
               <div className="flex flex-col gap-2">
                 {!isSlipChecking && (
-                  <>
-                    <div className="text-center py-2 px-3 bg-red-950/20 border border-red-900/30 rounded-xl mb-1 text-red-400 text-[10px] font-bold">
-                      ⚠️ ขณะนี้ระบบรับสมัครพรีเมียมและตรวจสลิปปิดปรับปรุงชั่วคราว ขออภัยในความไม่สะดวก
-                    </div>
-                    {/* Submit Button */}
-                    <button
-                      type="button"
-                      disabled={true}
-                      className="w-full h-11 flex items-center justify-center gap-2 bg-slate-900 border border-slate-800 text-slate-500 text-xs font-black rounded-xl transition-all shadow-none cursor-not-allowed"
-                    >
-                      🚫 ปิดรับสมัคร Premium ชั่วคราว
-                    </button>
-                  </>
+                  <a
+                    href="https://web.facebook.com/deenizegames?locale=th_TH"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full h-11 flex items-center justify-center gap-2 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white text-xs font-black rounded-xl transition-all shadow-lg shadow-amber-500/15 cursor-pointer"
+                    style={{ textDecoration: 'none' }}
+                  >
+                    💬 ส่งสลิปให้แอดมิน
+                  </a>
                 )}
                 
                 <button
