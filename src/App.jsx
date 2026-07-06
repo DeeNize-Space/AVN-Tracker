@@ -7871,20 +7871,6 @@ export default function App() {
 
 
 
-              <div className="my-2 p-3 rounded-2xl bg-amber-500/5 border border-amber-500/20 text-center flex flex-col items-center gap-1.5">
-                <span className="text-[11px] font-black text-amber-300">
-                  โอนเงินแล้วส่งสลิปมาใน Facebook Page:
-                </span>
-                <a 
-                  href="https://web.facebook.com/deenizegames?locale=th_TH" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-xs font-black text-amber-400 hover:text-amber-300 underline transition-all flex items-center gap-1"
-                >
-                  DeeNize Games 🔗
-                </a>
-              </div>
-
               {/* Real PromptPay QR Code Image */}
               <div className="my-2 flex flex-col items-center">
                 <div className="w-[185px] h-[245px] border border-slate-700 rounded-2xl overflow-hidden shadow-2xl p-2 bg-slate-900 flex flex-col items-center justify-center">
@@ -7926,15 +7912,68 @@ export default function App() {
                 </div>
               )}
 
+              {/* Browse Slip File Input Area */}
+              {!isSlipChecking && (
+                <div className="flex flex-col gap-2 mb-1">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    id="payment-slip-upload"
+                    onChange={(e) => {
+                      const file = e.target.files[0];
+                      if (file) {
+                        setSelectedSlipFile(file);
+                        setSelectedSlipFilePreview(URL.createObjectURL(file));
+                      }
+                    }}
+                    className="hidden"
+                  />
+                  
+                  {selectedSlipFilePreview ? (
+                    <div className="flex flex-col items-center bg-slate-955/40 p-3 rounded-2xl border border-slate-800 gap-2 relative">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedSlipFile(null);
+                          setSelectedSlipFilePreview(null);
+                        }}
+                        className="absolute top-2 right-2 text-slate-500 hover:text-slate-200 bg-slate-900 w-6 h-6 rounded-full flex items-center justify-center cursor-pointer text-[10px]"
+                      >
+                        ✕
+                      </button>
+                      <div className="w-16 h-24 rounded-lg overflow-hidden border border-slate-700 bg-slate-900">
+                        <img src={selectedSlipFilePreview} alt="Selected Slip" className="w-full h-full object-cover" />
+                      </div>
+                      <span className="text-[10px] text-slate-450 font-bold truncate max-w-[220px]">
+                        {selectedSlipFile.name}
+                      </span>
+                    </div>
+                  ) : (
+                    <label
+                      htmlFor="payment-slip-upload"
+                      className="w-full h-16 flex flex-col items-center justify-center gap-1 border border-dashed border-slate-700 hover:border-slate-600 bg-slate-955/20 hover:bg-slate-955/40 rounded-2xl cursor-pointer transition-all text-slate-455 hover:text-slate-350"
+                    >
+                      <span className="text-lg">📁</span>
+                      <span className="text-[10px] font-black">คลิกเพื่อเลือกไฟล์รูปภาพสลิป (Browse...)</span>
+                    </label>
+                  )}
+                </div>
+              )}
+
               {/* Action Buttons */}
               <div className="flex flex-col gap-2">
                 {!isSlipChecking && (
                   <button
                     type="button"
-                    onClick={handleSubmitApprovalRequest}
-                    className="w-full h-11 flex items-center justify-center gap-2 text-white text-xs font-black rounded-xl transition-all shadow-lg bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 shadow-amber-500/15 cursor-pointer"
+                    disabled={!selectedSlipFile}
+                    onClick={() => handleVerifySlip(selectedSlipFile)}
+                    className={`w-full h-11 flex items-center justify-center gap-2 text-white text-xs font-black rounded-xl transition-all shadow-lg cursor-pointer ${
+                      selectedSlipFile 
+                        ? 'bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 shadow-amber-500/15'
+                        : 'bg-slate-900 border border-slate-850 text-slate-500 cursor-not-allowed shadow-none'
+                    }`}
                   >
-                    📤 ส่งให้แอดมินอนุมัติ
+                    📤 ส่งคำขออนุมัติ Premium
                   </button>
                 )}
                 
