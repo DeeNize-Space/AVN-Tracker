@@ -1916,6 +1916,94 @@ export default function App() {
     }
   };
 
+  const handleExportTransactionsToCSV = () => {
+    if (filteredTransactions.length === 0) {
+      alert("ไม่มีข้อมูลธุรกรรมที่ต้องการส่งออก");
+      return;
+    }
+
+    // CSV Headers
+    const headers = [
+      "รหัสธุรกรรม",
+      "Ref ธนาคาร",
+      "ชื่อผู้ใช้",
+      "อีเมล",
+      "ประเภทแพ็กเกจ",
+      "จำนวนเงิน (บาท)",
+      "วันที่ทำรายการ",
+      "วันเริ่มใช้งาน Premium",
+      "วันหมดอายุ Premium",
+      "สถานะ"
+    ];
+
+    // CSV Rows
+    const rows = filteredTransactions.map(tx => {
+      const isYearly = tx.package === 'yearly' || tx.packageName === 'yearly' || tx.packageName === 'รายปี' || tx.amount === 499;
+      const packageStr = isYearly ? "1 ปี (รายปี)" : "1 เดือน (รายเดือน)";
+      
+      // Get Premium Dates (Only for success/approved transactions)
+      let startDateStr = "-";
+      let expiryDateStr = "-";
+      
+      if (tx.status === 'success') {
+        const dates = userPremiumDates[tx.email];
+        if (dates && dates.signupDate) {
+          startDateStr = dates.signupDate;
+          expiryDateStr = dates.expiryDate || "-";
+        } else {
+          // Fallback calculation from transaction timestamp
+          try {
+            const txDate = new Date(tx.timestamp);
+            if (!isNaN(txDate.getTime())) {
+              startDateStr = txDate.toISOString().split('T')[0];
+              const expDate = new Date(txDate);
+              if (isYearly) {
+                expDate.setFullYear(txDate.getFullYear() + 1);
+              } else {
+                expDate.setMonth(txDate.getMonth() + 1);
+              }
+              expiryDateStr = expDate.toISOString().split('T')[0];
+            }
+          } catch (e) {
+            // ignore
+          }
+        }
+      }
+
+      let statusStr = "รอตรวจสอบ";
+      if (tx.status === 'success') statusStr = "สำเร็จ";
+      else if (tx.status === 'failed') statusStr = "ล้มเหลว";
+
+      return [
+        tx.id,
+        tx.transRef || tx.refNo || "-",
+        tx.username || "-",
+        tx.email,
+        packageStr,
+        tx.amount,
+        tx.timestamp ? tx.timestamp.split('T')[0] : "-",
+        startDateStr,
+        expiryDateStr,
+        statusStr
+      ];
+    });
+
+    // Build CSV string with UTF-8 BOM for Excel Thai language support
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map(e => e.map(val => `"${val.toString().replace(/"/g, '""')}"`).join(","))].join("\n");
+    
+    // Download trigger
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `AVN_Transactions_Export_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    setToastMessage("📥 ส่งออกไฟล์ CSV การเงินเรียบร้อยแล้ว!");
+  };
+
   const handleAddGmailUser = async (gmail) => {
     if (!gmail || !gmail.trim()) return;
     const email = gmail.trim().toLowerCase();
@@ -4202,6 +4290,14 @@ export default function App() {
                           <option value="pending" className="bg-black text-white">🟡 รอตรวจสอบ</option>
                           <option value="failed" className="bg-black text-white">🔴 ล้มเหลว</option>
                         </select>
+
+                        <button
+                          onClick={handleExportTransactionsToCSV}
+                          className="h-9 px-3 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl cursor-pointer transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-900/10 whitespace-nowrap"
+                          title="ส่งออกธุรกรรมการเงินในตารางเป็นไฟล์ CSV"
+                        >
+                          📥 ส่งออก CSV
+                        </button>
                       </div>
                     </div>
 
