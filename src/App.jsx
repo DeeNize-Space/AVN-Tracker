@@ -3718,7 +3718,48 @@ export default function App() {
 
                   {/* Body Content */}
                   <div className="p-6 overflow-y-auto flex flex-col gap-4 text-slate-300 scrollbar-thin text-xs sm:text-sm">
-                    {renderMarkdown(selectedTranslatedGame.description)}
+                    {(() => {
+                      const parsed = parseGameDescription(selectedTranslatedGame.description || '');
+                      return (
+                        <>
+                          {parsed.progress_config.show && parsed.progress_config.bars && parsed.progress_config.bars.length > 0 && (
+                            <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4.5 mb-2 shadow-inner">
+                              <div className="flex items-center justify-between mb-3.5">
+                                <h3 className="text-xs font-black text-slate-200 flex items-center gap-1.5 uppercase tracking-wider">
+                                  📊 ความคืบหน้าโครงการแปลภาษาไทย
+                                </h3>
+                                {(() => {
+                                  const total = parsed.progress_config.bars.reduce((sum, b) => sum + (b.percent || 0), 0);
+                                  const avg = Math.round(total / parsed.progress_config.bars.length);
+                                  return (
+                                    <span className="text-xs font-black text-blue-400 font-mono bg-blue-950/50 border border-blue-500/20 px-2.5 py-0.5 rounded-full">
+                                      ภาพรวม: {avg}%
+                                    </span>
+                                  );
+                                })()}
+                              </div>
+                              <div className="flex flex-col gap-3">
+                                {parsed.progress_config.bars.map((bar, idx) => (
+                                  <div key={idx} className="space-y-1">
+                                    <div className="flex justify-between text-[11px] font-bold text-slate-300">
+                                      <span>{bar.label || 'ความคืบหน้า'}</span>
+                                      <span className="font-mono text-blue-400">{bar.percent || 0}%</span>
+                                    </div>
+                                    <div className="w-full bg-slate-950 h-2.5 rounded-full overflow-hidden border border-slate-900">
+                                      <div
+                                        className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"
+                                        style={{ width: `${bar.percent || 0}%` }}
+                                      ></div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {renderMarkdown(parsed.description)}
+                        </>
+                      );
+                    })()}
                   </div>
 
                   {/* Footer */}
