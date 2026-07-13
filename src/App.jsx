@@ -3659,6 +3659,28 @@ export default function App() {
                         <h3 className="font-extrabold text-sm text-slate-100 group-hover:text-blue-400 transition-colors line-clamp-1">
                           {game.title}
                         </h3>
+                        {(() => {
+                          const parsed = parseGameDescription(game.description || '');
+                          if (parsed.progress_config.show && parsed.progress_config.bars && parsed.progress_config.bars.length > 0) {
+                            const total = parsed.progress_config.bars.reduce((sum, b) => sum + (b.percent || 0), 0);
+                            const avg = Math.round(total / parsed.progress_config.bars.length);
+                            return (
+                              <div className="mt-2.5 space-y-1 animate-fade-in">
+                                <div className="flex justify-between text-[9px] font-black text-slate-400">
+                                  <span className="uppercase tracking-wide">ความคืบหน้าแปลไทย</span>
+                                  <span className="font-mono text-blue-400">{avg}%</span>
+                                </div>
+                                <div className="w-full bg-slate-950 h-1.5 rounded-full overflow-hidden border border-slate-900">
+                                  <div
+                                    className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full rounded-full transition-all duration-500"
+                                    style={{ width: `${avg}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
                       </div>
 
                       <button
