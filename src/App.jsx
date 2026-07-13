@@ -62,6 +62,50 @@ function crc16(data) {
   return crc.toString(16).toUpperCase().padStart(4, '0');
 }
 
+const parseGameDescription = (desc) => {
+  if (!desc) return { description: '', progress_config: { show: false, bars: [] } };
+  
+  // 1. Check for markdown json-progress code block
+  const codeBlockMatch = desc.match(/```json-progress\s*([\s\S]*?)\s*```/);
+  if (codeBlockMatch) {
+    const cleanDesc = desc.replace(/```json-progress[\s\S]*?```/g, '').trim();
+    try {
+      const progress_config = JSON.parse(codeBlockMatch[1].trim());
+      return { description: cleanDesc, progress_config };
+    } catch (e) {
+      console.error('Failed to parse progress config from code block:', e);
+    }
+  }
+  
+  // 2. Check for legacy markers
+  const markerStart = '===PROGRESS_CONFIG_START===';
+  const markerEnd = '===PROGRESS_CONFIG_END===';
+  const startIndex = desc.indexOf(markerStart);
+  const endIndex = desc.indexOf(markerEnd);
+  
+  if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
+    const cleanDesc = desc.substring(0, startIndex).trim();
+    const configStr = desc.substring(startIndex + markerStart.length, endIndex).trim();
+    try {
+      const progress_config = JSON.parse(configStr);
+      return { description: cleanDesc, progress_config };
+    } catch (e) {
+      console.error('Failed to parse progress config from markers:', e);
+    }
+  }
+  
+  return { description: desc, progress_config: { show: false, bars: [] } };
+};
+
+const serializeGameDescription = (cleanDesc, progressConfig) => {
+  if (!progressConfig || !progressConfig.show || !progressConfig.bars || progressConfig.bars.length === 0) {
+    // strip any existing config blocks from cleanDesc
+    return cleanDesc.replace(/```json-progress[\s\S]*?```/g, '').replace(/===PROGRESS_CONFIG_START===[\s\S]*?===PROGRESS_CONFIG_END===/g, '').trim();
+  }
+  const strippedDesc = cleanDesc.replace(/```json-progress[\s\S]*?```/g, '').replace(/===PROGRESS_CONFIG_START===[\s\S]*?===PROGRESS_CONFIG_END===/g, '').trim();
+  return `${strippedDesc}\n\n\`\`\`json-progress\n${JSON.stringify(progressConfig, null, 2)}\n\`\`\``;
+};
+
 // Generate PromptPay EMVCo string for scannable QR
 function generatePromptPayQR(target, amount) {
   if (!target) return '';
@@ -598,6 +642,8 @@ export default function App() {
   const [isAddTranslatedOpen, setIsAddTranslatedOpen] = useState(false);
   const [isEditTranslatedOpen, setIsEditTranslatedOpen] = useState(false);
   const [editingTranslatedGame, setEditingTranslatedGame] = useState(null);
+  const [modalProgressShow, setModalProgressShow] = useState(false);
+  const [modalProgressBars, setModalProgressBars] = useState([]); // Array of { name, percentage }
 
   // --- CAROUSEL BANNERS & VOTING SYSTEM STATES ---
   const [banners, setBanners] = useState([]);
@@ -5513,6 +5559,8 @@ export default function App() {
                 </div>
                 <button
                   onClick={() => {
+                    setModalProgressShow(false);
+                    setModalProgressBars([]);
                     setIsAddTranslatedOpen(true);
                   }}
                   className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 h-10 rounded-xl flex items-center gap-1.5 text-xs transition-all cursor-pointer shrink-0"
@@ -5568,6 +5616,9 @@ export default function App() {
                             <div className="flex justify-end gap-1.5">
                               <button
                                 onClick={() => {
+                                  const parsed = parseGameDescription(game.description || '');
+                                  setModalProgressShow(parsed.progress_config.show || false);
+                                  setModalProgressBars(parsed.progress_config.bars || []);
                                   setEditingTranslatedGame(game);
                                   setIsEditTranslatedOpen(true);
                                 }}
@@ -6964,12 +7015,14 @@ export default function App() {
               onSubmit={(e) => {
                 e.preventDefault();
                 const formData = new FormData(e.target);
+                const rawDesc = formData.get('description') || '';
+                const description = serializeGameDescription(rawDesc, { show: modalProgressShow, bars: modalProgressBars });
                 const newGame = {
                   id: 'translated-' + Date.now(),
                   title: formData.get('title') || 'Untitled',
                   cover_url: formData.get('cover_url') || '',
                   version: formData.get('version') || 'v1.0 แปลไทย',
-                  description: formData.get('description') || '',
+                  description: description,
                   download_pc: '',
                   download_mobile: ''
                 };
@@ -7101,6 +7154,93 @@ export default function App() {
                 />
               </div>
 
+              {/* ส่วนจัดการความคืบหน้า (Progress Bars) */}
+              <div className="border border-slate-800 bg-slate-950/60 p-4 rounded-2xl">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="add-progress-show"
+                      checked={modalProgressShow}
+                      onChange={(e) => setModalProgressShow(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500 focus:ring-offset-slate-900 cursor-pointer"
+                    />
+                    <label htmlFor="add-progress-show" className="text-xs font-extrabold text-slate-200 cursor-pointer select-none">
+                      📊 แสดงแถบความคืบหน้า (Progress Bars) ในหน้าต่างรายละเอียดเกม
+                    </label>
+                  </div>
+                  {modalProgressShow && (
+                    <button
+                      type="button"
+                      onClick={() => setModalProgressBars([...modalProgressBars, { name: '', percentage: 0 }])}
+                      className="bg-blue-950/60 hover:bg-blue-900/60 border border-blue-500/20 text-[10px] font-extrabold text-blue-400 h-7 px-2.5 rounded-lg cursor-pointer transition-colors"
+                    >
+                      ➕ เพิ่มแถบความคืบหน้า
+                    </button>
+                  )}
+                </div>
+
+                {modalProgressShow && (
+                  <div className="flex flex-col gap-3 mt-3">
+                    {modalProgressBars.length === 0 ? (
+                      <p className="text-[11px] text-slate-500 text-center py-2">
+                        ยังไม่มีแถบความคืบหน้า กดปุ่ม "เพิ่มแถบความคืบหน้า" ด้านบนเพื่อเริ่มสร้าง
+                      </p>
+                    ) : (
+                      modalProgressBars.map((bar, index) => (
+                        <div key={index} className="flex flex-col sm:flex-row gap-2.5 items-end sm:items-center bg-slate-900/40 border border-slate-900 p-2.5 rounded-xl">
+                          <div className="flex-1 w-full">
+                            <label className="text-[10px] text-slate-400 font-bold block mb-1">หัวข้อ/งานย่อย</label>
+                            <input
+                              type="text"
+                              value={bar.name}
+                              onChange={(e) => {
+                                const newBars = [...modalProgressBars];
+                                newBars[index].name = e.target.value;
+                                setModalProgressBars(newBars);
+                              }}
+                              className="glass-input w-full h-8 px-3 text-xs rounded-lg text-slate-200"
+                              placeholder="เช่น แปลเนื้อหา, ตรวจทานอักษร"
+                              required
+                            />
+                          </div>
+                          <div className="w-full sm:w-28 flex items-center gap-2">
+                            <div className="flex-1">
+                              <label className="text-[10px] text-slate-400 font-bold block mb-1">ความคืบหน้า ({bar.percentage}%)</label>
+                              <input
+                                type="range"
+                                min="0"
+                                max="100"
+                                value={bar.percentage}
+                                onChange={(e) => {
+                                  const newBars = [...modalProgressBars];
+                                  newBars[index].percentage = parseInt(e.target.value, 10);
+                                  setModalProgressBars(newBars);
+                                }}
+                                className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                              />
+                            </div>
+                            <div className="w-10 text-right text-xs font-bold text-slate-300 pt-3">
+                              {bar.percentage}%
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newBars = modalProgressBars.filter((_, i) => i !== index);
+                              setModalProgressBars(newBars);
+                            }}
+                            className="bg-rose-950/60 hover:bg-rose-900/60 border border-rose-500/20 text-[10px] font-extrabold text-rose-400 h-8 px-2.5 rounded-lg cursor-pointer transition-colors mt-3 sm:mt-0"
+                          >
+                            🗑️ ลบ
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div className="mt-4 pt-4 border-t border-slate-900 flex justify-end gap-2.5">
                 <button
                   type="submit"
@@ -7144,12 +7284,14 @@ export default function App() {
               onSubmit={(e) => {
                 e.preventDefault();
                 const formData = new FormData(e.target);
+                const rawDesc = formData.get('description') || '';
+                const description = serializeGameDescription(rawDesc, { show: modalProgressShow, bars: modalProgressBars });
                 const updatedGame = {
                   ...editingTranslatedGame,
                   title: formData.get('title') || 'Untitled',
                   cover_url: formData.get('cover_url') || '',
                   version: formData.get('version') || 'v1.0 แปลไทย',
-                  description: formData.get('description') || '',
+                  description: description,
                   download_pc: '',
                   download_mobile: ''
                 };
@@ -7281,10 +7423,82 @@ export default function App() {
                   id="edit-translated-desc"
                   name="description"
                   required
-                  defaultValue={editingTranslatedGame.description}
+                  defaultValue={parseGameDescription(editingTranslatedGame.description || '').description}
                   className="glass-input w-full p-4 text-sm rounded-xl h-48 text-slate-200 leading-relaxed font-mono"
                   placeholder="พิมพ์ข้อความรายละเอียด หรือใช้แถบ Shortcut ด้านบนเพื่อช่วยสร้างหัวข้อและปุ่มดาวน์โหลดอย่างอิสระ..."
                 />
+              </div>
+
+              {/* Progress Config UI */}
+              <div className="bg-slate-950/60 border border-slate-900 rounded-2xl p-4.5">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">📊</span>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-200">แสดงความคืบหน้าการทำงาน (Progress Config)</h4>
+                      <p className="text-[10px] text-slate-400">แสดงแถบเปอร์เซ็นต์ความคืบหน้าในแถบการทำงานของเกมแปลไทย</p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer" 
+                      checked={modalProgressShow}
+                      onChange={(e) => setModalProgressShow(e.target.checked)}
+                    />
+                    <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-400 after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 peer-checked:after:bg-white"></div>
+                  </label>
+                </div>
+
+                {modalProgressShow && (
+                  <div className="flex flex-col gap-3 pt-2 border-t border-slate-900/60">
+                    {modalProgressBars.map((bar, idx) => (
+                      <div key={idx} className="flex gap-2 items-center">
+                        <input
+                          type="text"
+                          value={bar.label}
+                          onChange={(e) => {
+                            const newBars = [...modalProgressBars];
+                            newBars[idx].label = e.target.value;
+                            setModalProgressBars(newBars);
+                          }}
+                          className="glass-input h-9 px-3 text-xs rounded-lg text-slate-200 flex-1"
+                          placeholder="ชื่อหัวข้อความคืบหน้า เช่น แปลเนื้อเรื่อง, ตรวจสอบคำผิด"
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={bar.percent}
+                          onChange={(e) => {
+                            const newBars = [...modalProgressBars];
+                            newBars[idx].percent = Math.min(100, Math.max(0, parseInt(e.target.value) || 0));
+                            setModalProgressBars(newBars);
+                          }}
+                          className="glass-input h-9 px-3 text-xs rounded-lg text-slate-200 w-16 text-center"
+                          placeholder="0"
+                        />
+                        <span className="text-xs text-slate-400 font-mono">%</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setModalProgressBars(modalProgressBars.filter((_, i) => i !== idx));
+                          }}
+                          className="w-9 h-9 flex items-center justify-center bg-red-950/40 hover:bg-red-900/40 border border-red-500/20 rounded-lg text-red-400 hover:text-red-300 transition-colors cursor-pointer"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setModalProgressBars([...modalProgressBars, { label: '', percent: 0 }])}
+                      className="bg-slate-900 hover:bg-slate-800 border border-slate-800 border-dashed text-[10px] font-bold text-blue-400 hover:text-blue-300 py-2 rounded-lg cursor-pointer transition-all flex items-center justify-center gap-1.5 mt-1"
+                    >
+                      ➕ เพิ่มแถบความคืบหน้าใหม่
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="mt-4 pt-4 border-t border-slate-900 flex justify-end gap-2.5">
