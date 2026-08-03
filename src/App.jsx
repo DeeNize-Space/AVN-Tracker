@@ -848,7 +848,7 @@ export default function App() {
 
   // eslint-disable-next-line no-unused-vars
   const promptPayPayload = useMemo(() => {
-    return generatePromptPayQR(promptPayId, selectedPackage === 'monthly' ? 49 : 499);
+    return generatePromptPayQR(promptPayId, selectedPackage === 'monthly' ? 69 : 699);
   }, [promptPayId, selectedPackage]);
 
   // qrCodeUrl calculated inline in image rendering
@@ -1884,7 +1884,7 @@ export default function App() {
     const today = new Date();
     const expiry = new Date();
     // Expiration date calculation: 499 Baht/Yearly -> 1 year, else -> 1 month
-    if (tx.package === 'yearly' || tx.packageName === 'yearly' || tx.packageName === 'รายปี' || tx.amount === 499) {
+    if (tx.package === 'yearly' || tx.packageName === 'yearly' || tx.packageName === 'รายปี' || (tx.amount === 699 || tx.amount === 499)) {
       expiry.setFullYear(today.getFullYear() + 1);
     } else {
       expiry.setMonth(today.getMonth() + 1);
@@ -1984,7 +1984,7 @@ export default function App() {
 
     // CSV Rows
     const rows = filteredTransactions.map(tx => {
-      const isYearly = tx.package === 'yearly' || tx.packageName === 'yearly' || tx.packageName === 'รายปี' || tx.amount === 499;
+      const isYearly = tx.package === 'yearly' || tx.packageName === 'yearly' || tx.packageName === 'รายปี' || (tx.amount === 699 || tx.amount === 499);
       const packageStr = isYearly ? "1 ปี (รายปี)" : "1 เดือน (รายเดือน)";
       
       // Get Premium Dates (Only for success/approved transactions)
@@ -2288,7 +2288,7 @@ export default function App() {
       const txEmail = getUserGmail(currentUser);
       const transRef = 'ref-' + Date.now() + Math.floor(1000 + Math.random() * 9000);
       const txId = 'tx-' + Date.now();
-      const amountVal = selectedPackage === 'monthly' ? 49 : 499;
+      const amountVal = selectedPackage === 'monthly' ? 69 : 699;
 
       const newTxSupabase = {
         id: txId,
@@ -2350,7 +2350,7 @@ export default function App() {
         '🤖 [ระบบ] กำลังอัปโหลดสลิปเข้าสู่ Google Drive ของท่าน...'
       ]);
 
-      const amountVal = selectedPackage === 'monthly' ? 49 : 499;
+      const amountVal = selectedPackage === 'monthly' ? 69 : 699;
 
       const reader = new FileReader();
       reader.onloadend = async () => {
@@ -4297,7 +4297,7 @@ export default function App() {
                   }
                 });
                 
-                const mrrValue = (monthlyCount * 49) + (yearlyCount * (499 / 12));
+                const mrrValue = (monthlyCount * 69) + (yearlyCount * (699 / 12));
                 const totalPlans = monthlyCount + yearlyCount;
                 const monthlyPct = totalPlans > 0 ? Math.round((monthlyCount / totalPlans) * 100) : 0;
                 const yearlyPct = totalPlans > 0 ? 100 - monthlyPct : 0;
@@ -4363,11 +4363,11 @@ export default function App() {
                         <div className="flex gap-4 text-[10px] font-bold mt-1">
                           <div className="flex items-center gap-1.5">
                             <span className="w-2.5 h-2.5 rounded bg-blue-600 inline-block"/>
-                            <span className="text-slate-400">แพ็กเกจรายเดือน (49 บาท)</span>
+                            <span className="text-slate-400">แพ็กเกจรายเดือน (69 บาท)</span>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <span className="w-2.5 h-2.5 rounded bg-amber-500 inline-block"/>
-                            <span className="text-slate-400">แพ็กเกจรายปี (499 บาท)</span>
+                            <span className="text-slate-400">แพ็กเกจรายปี (699 บาท)</span>
                           </div>
                         </div>
                       )}
@@ -8241,7 +8241,7 @@ export default function App() {
                   }`}
                 >
                   <span className="text-[9px] font-bold uppercase tracking-wider">รายเดือน</span>
-                  <span className="text-sm font-black mt-0.5">49 บาท</span>
+                  <span className="text-sm font-black mt-0.5">69 บาท</span>
                 </button>
                 <button
                   type="button"
@@ -8253,7 +8253,7 @@ export default function App() {
                   }`}
                 >
                   <span className="text-[9px] font-bold uppercase tracking-wider">รายปี (คุ้มกว่า)</span>
-                  <span className="text-sm font-black mt-0.5">499 บาท</span>
+                  <span className="text-sm font-black mt-0.5">699 บาท</span>
                 </button>
               </div>
 
@@ -8269,7 +8269,7 @@ export default function App() {
                   />
                 </div>
                 <span className="text-[10px] font-black text-amber-400 mt-2 bg-slate-950/80 px-3 py-1 rounded-full border border-slate-800">
-                  Scan to Pay • DeeNize Games • ยอดโอน {selectedPackage === 'monthly' ? '49' : '499'} บาท
+                  Scan to Pay • DeeNize Games • ยอดโอน {selectedPackage === 'monthly' ? '69' : '699'} บาท
                 </span>
               </div>
 
