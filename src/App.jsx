@@ -8230,16 +8230,31 @@ export default function App() {
               </div>
 
               {/* Price Selector */}
-              <div className="mt-1">
-                <div 
-                  className="p-3.5 rounded-2xl flex flex-col items-center justify-center relative transition-all border bg-slate-955 border-amber-500 shadow-md shadow-amber-500/5"
+              <div className="mt-1 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedPackage('monthly')}
+                  className={`flex-1 p-3 rounded-2xl flex flex-col items-center justify-center transition-all border ${
+                    selectedPackage === 'monthly'
+                      ? 'bg-slate-950/80 border-amber-500 shadow-md shadow-amber-500/5 text-slate-100'
+                      : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:border-slate-700'
+                  }`}
                 >
-                  <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider">แพ็กเกจ Premium</span>
-                  <span className="text-lg font-black text-slate-100 mt-1 flex items-baseline gap-1">
-                    รายเดือน 49 บาท
-                    <span className="text-[10px] text-slate-400 font-normal font-sans">/เดือน</span>
-                  </span>
-                </div>
+                  <span className="text-[9px] font-bold uppercase tracking-wider">รายเดือน</span>
+                  <span className="text-sm font-black mt-0.5">49 บาท</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedPackage('yearly')}
+                  className={`flex-1 p-3 rounded-2xl flex flex-col items-center justify-center transition-all border ${
+                    selectedPackage === 'yearly'
+                      ? 'bg-slate-950/80 border-amber-500 shadow-md shadow-amber-500/5 text-slate-100'
+                      : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:border-slate-700'
+                  }`}
+                >
+                  <span className="text-[9px] font-bold uppercase tracking-wider">รายปี (คุ้มกว่า)</span>
+                  <span className="text-sm font-black mt-0.5">499 บาท</span>
+                </button>
               </div>
 
 
