@@ -846,6 +846,15 @@ export default function App() {
   const isAdmin = subscriptionRole === 'admin';
   const isGuest = currentUser === 'Guest';
 
+  const handleOpenUpsell = () => {
+    if (isGuest) {
+      setIsAuthModalOpen(true);
+      setToastMessage('🔐 กรุณาเข้าสู่ระบบ หรือ สมัครสมาชิก ก่อนเข้าสู่หน้าโอนเงิน');
+      return;
+    }
+    setIsUpsellOpen(true);
+  };
+
   // eslint-disable-next-line no-unused-vars
   const promptPayPayload = useMemo(() => {
     return generatePromptPayQR(promptPayId, selectedPackage === 'monthly' ? 69 : 699);
@@ -2854,9 +2863,9 @@ export default function App() {
               📚 คลังของฉัน
             </button>
 
-            {subscriptionRole === 'free' && !isGuest && (
+            {subscriptionRole === 'free' && (
               <button
-                onClick={() => setIsUpsellOpen(true)}
+                onClick={handleOpenUpsell}
                 className="text-sm px-4 py-2.5 rounded-xl font-extrabold transition-all h-11 flex items-center gap-1.5 cursor-pointer text-amber-400 border border-amber-500/20 hover:border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10 active:scale-95 duration-150"
               >
                 👑 สมัคร Premium
@@ -8194,6 +8203,29 @@ export default function App() {
             </div>
 
             {/* Content */}
+            {isGuest ? (
+              <div className="p-6 flex flex-col items-center justify-center text-center gap-4">
+                <div className="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-3xl shadow-inner">
+                  🔐
+                </div>
+                <div>
+                  <h4 className="text-base font-black text-amber-400">กรุณาเข้าสู่ระบบก่อนโอนเงิน</h4>
+                  <p className="text-xs text-slate-400 mt-2 leading-relaxed max-w-xs mx-auto">
+                    คุณกำลังใช้งานในฐานะผู้เยี่ยมชม (Guest) กรุณาเข้าสู่ระบบหรือลงทะเบียนบัญชีก่อน จึงจะสามารถเข้าสู่หน้าโอนเงินและสมัคร Premium ได้
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsUpsellOpen(false);
+                    setIsAuthModalOpen(true);
+                  }}
+                  className="w-full py-3.5 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-black text-xs rounded-xl shadow-lg shadow-amber-500/20 cursor-pointer transition-all active:scale-95 mt-2 flex items-center justify-center gap-2"
+                >
+                  🔑 เข้าสู่ระบบ / สมัครสมาชิก
+                </button>
+              </div>
+            ) : (
             <div className="p-5 flex flex-col gap-4 text-center max-h-[80vh] overflow-y-auto">
               <div>
                 <h4 className="text-base font-black text-amber-400">เข้าถึงสิทธิประโยชน์ระดับพรีเมียม</h4>
@@ -8381,6 +8413,7 @@ export default function App() {
                 </button>
               </div>
             </div>
+            )}
           </div>
         </div>
       )}
