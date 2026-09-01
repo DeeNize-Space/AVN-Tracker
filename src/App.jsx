@@ -32,6 +32,8 @@ import {
   saveTranslatedGame,
   deleteTranslatedGame,
   incrementTranslatedGameViews,
+  incrementTranslatedGameDownloads,
+  toggleTranslatedGamePublished,
   getVotingCandidates,
   saveVotingCandidate,
   deleteVotingCandidate,
@@ -293,7 +295,7 @@ const parseInlineStyles = (text) => {
 };
 
 // Line-by-line Markdown Parser
-const renderMarkdown = (content) => {
+const renderMarkdown = (content, onDownloadClick) => {
   if (!content) return null;
   const lines = content.split('\n');
   
@@ -329,12 +331,18 @@ const renderMarkdown = (content) => {
         btnStyle = "bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20";
       }
       
+      const isDownload = btnText.includes('ดาวน์โหลด') || btnText.includes('Download') || btnText.includes('โหลด') || btnText.includes('PC') || btnText.includes('Android') || btnText.includes('APK');
       return (
         <div key={idx} className="my-3">
           <a
             href={btnUrl}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => {
+              if (onDownloadClick) {
+                onDownloadClick(btnUrl, btnText, isDownload);
+              }
+            }}
             className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 text-white font-extrabold text-xs py-2.5 px-5 rounded-xl shadow-lg transition-all active:scale-98 cursor-pointer ${btnStyle}`}
           >
             {btnText}
@@ -622,7 +630,7 @@ export default function App() {
 
 
   // --- UI STATE ---
-  const [activeTab, setActiveTab] = useState('online'); // 'online', 'local', 'admin'
+  const [activeTab, setActiveTab] = useState('free'); // 'online', 'local', 'admin'
   const [searchQuery, setSearchQuery] = useState('');
   const [catalogPage, setCatalogPage] = useState(1);
   
@@ -853,6 +861,18 @@ export default function App() {
       return;
     }
     setIsUpsellOpen(true);
+  };
+
+  const handleTogglePublishGame = async (game) => {
+    const newStatus = !(game.is_published !== false);
+    try {
+      await toggleTranslatedGamePublished(game.id, newStatus);
+      setTranslatedGames(prev => prev.map(g => g.id === game.id ? { ...g, is_published: newStatus } : g));
+      setToastMessage(newStatus ? '🟢 เปิดแสดงผลบทความเกมแล้ว' : '🔴 ซ่อนบทความเกมเรียบร้อยแล้ว');
+    } catch (err) {
+      console.error('Error toggling publish status:', err);
+      setToastMessage('❌ ไม่สามารถเปลี่ยนสถานะได้');
+    }
   };
 
   // eslint-disable-next-line no-unused-vars
@@ -2829,55 +2849,44 @@ export default function App() {
           </div>
 
           {/* Navigation Tabs */}
-          <nav className="flex items-center gap-1 sm:gap-2">
+          <nav className="flex items-center gap-1.5 sm:gap-2">
             <button
-              onClick={() => handleTabChange('online')}
-              className={`text-sm px-4 py-2.5 rounded-xl font-bold transition-all h-11 flex items-center gap-1.5 cursor-pointer ${
-                activeTab === 'online'
-                  ? 'bg-blue-600/15 text-blue-400 border border-blue-500/30'
+              onClick={() => handleTabChange('free')}
+              className={`text-xs sm:text-sm px-3.5 sm:px-4 py-2.5 rounded-xl font-bold transition-all h-11 flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'free'
+                  ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40 shadow-sm shadow-blue-500/10'
                   : 'text-slate-400 hover:text-slate-200 border border-transparent'
               }`}
             >
-              🌐 แคตตาล็อก
+              🎁 เกมแปลไทยฟรี
             </button>
 
             <button
-              onClick={() => handleTabChange('translated')}
-              className={`text-sm px-4 py-2.5 rounded-xl font-bold transition-all h-11 flex items-center gap-1.5 cursor-pointer ${
-                activeTab === 'translated'
-                  ? 'bg-blue-600/15 text-blue-400 border border-blue-500/30'
-                  : 'text-slate-400 hover:text-slate-200 border border-transparent'
+              onClick={() => handleTabChange('premium')}
+              className={`text-xs sm:text-sm px-3.5 sm:px-4 py-2.5 rounded-xl font-bold transition-all h-11 flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'premium'
+                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-sm shadow-amber-500/10'
+                  : 'text-slate-400 hover:text-amber-300/80 border border-transparent'
               }`}
             >
-              🇹🇭 แปลไทย
-            </button>
-
-            <button
-              onClick={() => handleTabChange('local')}
-              className={`text-sm px-4 py-2.5 rounded-xl font-bold transition-all h-11 flex items-center gap-1.5 cursor-pointer ${
-                activeTab === 'local'
-                  ? 'bg-blue-600/15 text-blue-400 border border-blue-500/30'
-                  : 'text-slate-400 hover:text-slate-200 border border-transparent'
-            }`}
-            >
-              📚 คลังของฉัน
+              👑 เกมแปลไทยพรีเมียม
             </button>
 
             {subscriptionRole === 'free' && (
               <button
                 onClick={handleOpenUpsell}
-                className="text-sm px-4 py-2.5 rounded-xl font-extrabold transition-all h-11 flex items-center gap-1.5 cursor-pointer text-amber-400 border border-amber-500/20 hover:border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10 active:scale-95 duration-150"
+                className="text-xs sm:text-sm px-3.5 sm:px-4 py-2.5 rounded-xl font-extrabold transition-all h-11 flex items-center gap-1.5 cursor-pointer text-amber-400 border border-amber-500/20 hover:border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10 active:scale-95 duration-150"
               >
-                👑 สมัคร Premium
+                ⭐ สมัคร Premium
               </button>
             )}
 
             {isAdmin && (
               <button
                 onClick={() => handleTabChange('admin')}
-                className={`text-sm px-4 py-2.5 rounded-xl font-bold transition-all h-11 flex items-center gap-1.5 cursor-pointer ${
+                className={`text-xs sm:text-sm px-3.5 sm:px-4 py-2.5 rounded-xl font-bold transition-all h-11 flex items-center gap-1.5 cursor-pointer ${
                   activeTab === 'admin'
-                    ? 'bg-blue-600/15 text-blue-400 border border-blue-500/30'
+                    ? 'bg-purple-600/20 text-purple-400 border border-purple-500/40 shadow-sm shadow-purple-500/10'
                     : 'text-slate-400 hover:text-slate-200 border border-transparent'
                 }`}
               >
@@ -3091,98 +3100,7 @@ export default function App() {
                         )}
                       </div>
                       
-                      {/* Personal Library Backup section */}
-                      <div className="flex flex-col gap-2 py-3 border-b border-slate-900 mb-3 text-left">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">💾 สำรองคลังส่วนตัว</span>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              try {
-                                const libraryData = {
-                                  username: currentUser,
-                                  email: getUserGmail(currentUser),
-                                  library: userLibraries[currentUser] || [],
-                                  backupType: 'avn_personal_library_v7'
-                                };
-                                const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
-                                  JSON.stringify(libraryData, null, 2)
-                                )}`;
-                                const downloadAnchor = document.createElement('a');
-                                downloadAnchor.setAttribute('href', jsonString);
-                                downloadAnchor.setAttribute('download', `avn_library_backup_${currentUser}.json`);
-                                document.body.appendChild(downloadAnchor);
-                                downloadAnchor.click();
-                                downloadAnchor.remove();
-                                setToastMessage('ส่งออกคลังประวัติสำเร็จ!');
-                              } catch {
-                                alert('เกิดข้อผิดพลาดในการส่งออกคลังข้อมูล');
-                              }
-                            }}
-                            className="flex-1 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 text-[10px] font-bold py-1.5 rounded-lg cursor-pointer text-center"
-                            title="ดาวน์โหลดประวัติการเล่นเก็บไว้"
-                          >
-                            📤 ส่งออกคลัง
-                          </button>
-                          
-                          <div className="flex-1 relative">
-                            <input
-                              type="file"
-                              accept=".json"
-                              id="library-backup-import"
-                              onChange={(e) => {
-                                const file = e.target.files[0];
-                                if (!file) return;
-                                
-                                const reader = new FileReader();
-                                reader.onload = (event) => {
-                                  try {
-                                    const parsed = JSON.parse(event.target.result);
-                                    if (parsed.backupType !== 'avn_personal_library_v7' || !Array.isArray(parsed.library)) {
-                                      alert('ไฟล์ดังกล่าวไม่ใช่ประวัติคลังเกมนอนุมัติของระบบ AVN Star Hub');
-                                      return;
-                                    }
 
-                                    if (subscriptionRole === 'free' && currentUser !== 'Admin' && parsed.library.length > 5) {
-                                      setIsUpsellOpen(true);
-                                      setToastMessage('❌ โควตาคลังฟรีจำกัด 5 เกม ไม่สามารถนำเข้าข้อมูลที่มีเกมมากกว่า 5 เกมได้');
-                                      setIsUserDropdownOpen(false);
-                                      return;
-                                    }
-
-                                    setCustomConfirm({
-                                      title: 'นำเข้าข้อมูลคลังประวัติส่วนตัว',
-                                      message: `คุณต้องการกู้คืนประวัติคลังเกมจำนวน ${parsed.library.length} เกมมาทับข้อมูลปัจจุบันของคุณหรือไม่?`,
-                                      onConfirm: () => {
-                                        setUserLibraries(prev => ({
-                                          ...prev,
-                                          [currentUser]: parsed.library.map(item => ({
-                                            ...item,
-                                            status: normalizeStatus(item.status)
-                                          }))
-                                        }));
-                                        setToastMessage('📥 นำเข้าคลังประวัติส่วนตัวสำเร็จ!');
-                                        setIsUserDropdownOpen(false);
-                                      }
-                                    });
-                                  } catch {
-                                    alert('เกิดข้อผิดพลาดในการนำเข้าไฟล์ประวัติ');
-                                  }
-                                };
-                                reader.readAsText(file);
-                                e.target.value = '';
-                              }}
-                              className="hidden"
-                            />
-                            <label
-                              htmlFor="library-backup-import"
-                              className="w-full bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 text-[10px] font-bold py-1.5 rounded-lg cursor-pointer text-center flex items-center justify-center"
-                            >
-                              📥 นำเข้าคลัง
-                            </label>
-                          </div>
-                        </div>
-                      </div>
 
                       <button
                         onClick={handleLogout}
@@ -3203,430 +3121,167 @@ export default function App() {
       {/* MAIN CONTAINER */}
       <main className="flex-grow p-4 md:p-6 max-w-[1400px] mx-auto w-full">
         
-        {/* OFFICIAL CATALOG */}
-        {activeTab === 'online' && (
-          <div className="flex flex-col gap-6 animate-fade-in-up">
-            
-            {/* ANNOUNCEMENT BANNER CAROUSEL SYSTEM */}
-            {(() => {
-              const activeBanners = banners.filter(b => b.is_active);
-              if (activeBanners.length === 0) return null;
+        {/* ANNOUNCEMENT BANNER CAROUSEL SYSTEM */}
+        {(() => {
+          const activeBanners = banners.filter(b => b.is_active);
+          if (activeBanners.length === 0) return null;
 
-              const currentBanner = activeBanners[activeBannerIndex >= activeBanners.length ? 0 : activeBannerIndex];
+          const currentBanner = activeBanners[activeBannerIndex >= activeBanners.length ? 0 : activeBannerIndex];
+          const bannerCover = currentBanner.cover_url || '';
+          const bannerTitle = currentBanner.title || 'ประกาศและข่าวสาร';
+          const bannerSubtitle = currentBanner.subtitle || '';
 
-              const promoGame = bannerPromoGames[currentBanner.id];
-              const bannerCover = currentBanner.cover_url || (promoGame ? promoGame.coverUrl : '');
-              const bannerTitle = currentBanner.title || (promoGame ? promoGame.title : 'แนะนำเกมน่าเล่น');
-              const bannerSubtitle = currentBanner.subtitle || (promoGame ? promoGame.overview : '');
-
-              const handleBannerClick = () => {
-                if (currentBanner.type === 'normal') {
-                  if (currentBanner.link_url) {
-                    window.open(currentBanner.link_url, '_blank');
-                  }
-                } else if (currentBanner.type === 'game_promo') {
-                  if (promoGame) {
-                    handleOpenGameDetail(promoGame);
-                  }
-                } else if (currentBanner.type === 'voting') {
-                  setIsVotingModalOpen(true);
+          const handleBannerClick = () => {
+            if (currentBanner.link_url) {
+              window.open(currentBanner.link_url, '_blank');
+            } else if (currentBanner.target_game_id) {
+              const targetGame = translatedGames.find(g => g.id === currentBanner.target_game_id);
+              if (targetGame) {
+                const isPremium = subscriptionRole === 'premium' || isAdmin;
+                if (targetGame.access_type === 'premium' && !isPremium) {
+                  handleOpenUpsell();
+                  setToastMessage('👑 สมาชิก Premium เท่านั้นที่สามารถเข้าถึงเกมแปลไทยพรีเมียมนี้ได้');
+                } else {
+                  setSelectedTranslatedGame({
+                    ...targetGame,
+                    views: (targetGame.views || 0) + 1
+                  });
+                  setIsTranslatedModalOpen(true);
+                  incrementTranslatedGameViews(targetGame.id).catch(err => console.error("Error incrementing views:", err));
+                  setTranslatedGames(prev => prev.map(g => g.id === targetGame.id ? { ...g, views: (g.views || 0) + 1 } : g));
                 }
-              };
+              }
+            }
+          };
 
-              return (
-                <div className="relative glass-panel rounded-3xl overflow-hidden border border-slate-800/80 shadow-xl group transition-all duration-300 hover:border-slate-700/60">
-                  
-                  {/* Banner Content */}
-                  <div 
-                    onClick={handleBannerClick}
-                    className={`p-6 min-h-[140px] flex flex-col sm:flex-row items-center justify-between gap-6 cursor-pointer bg-gradient-to-r ${currentBanner.bg_gradient || 'from-blue-955/70 to-indigo-950/70'} relative`}
-                  >
-                    
-                    {/* Left details */}
-                    <div className="flex-1 flex flex-col gap-1.5 text-center sm:text-left">
-                      <span className="text-[10px] font-black text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20 uppercase tracking-widest self-center sm:self-start flex items-center gap-1 animate-pulse">
-                        {currentBanner.type === 'normal' && '📢 ประกาศข่าวสาร'}
-                        {currentBanner.type === 'game_promo' && '🔥 เกมแนะนำพิเศษ'}
-                        {currentBanner.type === 'voting' && '🗳️ กิจกรรมโหวตด่วน'}
-                      </span>
-                      <h2 className="text-base sm:text-lg font-black text-slate-100 mt-1 leading-snug">
-                        {bannerTitle}
-                      </h2>
-                      <p className="text-xs text-slate-400 leading-relaxed font-medium line-clamp-2 max-w-xl">
-                        {bannerSubtitle}
-                      </p>
-                    </div>
-
-                    {/* Right details & Image */}
-                    <div className="shrink-0 flex items-center gap-4.5">
-                      {bannerCover && (
-                        <div className="w-16 h-22 sm:w-20 sm:h-28 rounded-2xl overflow-hidden border border-white/15 shadow-xl bg-slate-900/50 shrink-0">
-                          <img src={bannerCover} className="w-full h-full object-cover" alt="" />
-                        </div>
-                      )}
-                      
-                      <div className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 h-9.5 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md group-hover:scale-105 active:scale-95">
-                        {currentBanner.type === 'normal' && (currentBanner.link_url ? '🔗 เปิดลิงก์' : '📖 รายละเอียด')}
-                        {currentBanner.type === 'game_promo' && '🎮 ดูข้อมูลเกม'}
-                        {currentBanner.type === 'voting' && '🗳️ ร่วมลงคะแนนโหวต'}
-                      </div>
-                    </div>
-
+          return (
+            <div className="relative mb-6 rounded-3xl overflow-hidden glass-panel border border-white/10 shadow-2xl group animate-fade-in">
+              <div className="relative min-h-[160px] sm:min-h-[190px] flex items-center justify-between p-6 sm:p-8 bg-gradient-to-r from-slate-950 via-slate-900/90 to-transparent">
+                {bannerCover && (
+                  <div className="absolute inset-0 -z-10 overflow-hidden">
+                    <img 
+                      src={bannerCover} 
+                      alt="" 
+                      className="w-full h-full object-cover opacity-25 filter blur-[2px] group-hover:scale-105 transition-transform duration-700" 
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-transparent"></div>
                   </div>
+                )}
 
-                  {/* Carousel Controllers */}
-                  {activeBanners.length > 1 && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActiveBannerIndex(prev => (prev === 0 ? activeBanners.length - 1 : prev - 1));
-                        }}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-950/85 hover:bg-slate-900 border border-slate-800 text-white font-bold flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:scale-105 active:scale-95 cursor-pointer z-10"
-                      >
-                        &lt;
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActiveBannerIndex(prev => (prev === activeBanners.length - 1 ? 0 : prev + 1));
-                        }}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-950/85 hover:bg-slate-900 border border-slate-800 text-white font-bold flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:scale-105 active:scale-95 cursor-pointer z-10"
-                      >
-                        &gt;
-                      </button>
-
-                      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
-                        {activeBanners.map((_, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveBannerIndex(idx);
-                            }}
-                            className={`w-1.5 h-1.5 rounded-full transition-all cursor-pointer ${
-                              idx === (activeBannerIndex >= activeBanners.length ? 0 : activeBannerIndex) ? 'bg-blue-500 w-3' : 'bg-slate-600 hover:bg-slate-500'
-                            }`}
-                          />
-                        ))}
-                      </div>
-                    </>
-                  )}
-
-                </div>
-              );
-            })()}
-
-            {/* Search Input Panels */}
-            <div className="flex flex-col md:flex-row gap-4 items-stretch justify-between w-full">
-              <div className="flex flex-col sm:flex-row gap-4 flex-1">
-                <div className="relative flex-1">
-                  <span className="absolute inset-y-0 left-4 flex items-center text-slate-500">🔍</span>
-                  <input
-                    type="text"
-                    placeholder="ค้นหาชื่อเกม หรือผู้พัฒนา..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="glass-input w-full h-11 pl-11 pr-4 text-sm rounded-xl focus:outline-none"
-                  />
-                </div>
-                
-                {/* Catalog Tag Filter Button & Dropdown */}
-                <div className="relative w-full sm:w-64 catalog-tag-filter-container">
-                  <button
-                    type="button"
-                    onClick={() => setShowTagFilterCatalog(!showTagFilterCatalog)}
-                    className={`glass-input w-full h-11 px-4 text-sm rounded-xl flex items-center justify-between cursor-pointer transition-colors ${
-                      selectedCatalogTags.length > 0 ? 'border-blue-500 text-blue-400 bg-blue-500/5' : 'text-slate-400'
-                    }`}
-                  >
-                    <span className="truncate">
-                      {selectedCatalogTags.length > 0 ? `ตัวกรองแท็ก (${selectedCatalogTags.length})` : '🔍 เลือกแท็กแนวเกม...'}
+                <div className="flex flex-col gap-2 max-w-xl z-10">
+                  <div className="flex items-center gap-2">
+                    <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                      📢 ประกาศข่าวสาร
                     </span>
-                    <span className="text-xs">▼</span>
-                  </button>
-                  
-                  {showTagFilterCatalog && (
-                    <div className="absolute left-0 mt-2 w-72 solid-dropdown rounded-2xl shadow-2xl z-50 p-4 animate-fade-in-up">
-                      <input
-                        type="text"
-                        placeholder="พิมพ์ค้นหาแท็ก..."
-                        value={catalogTagSearch}
-                        onChange={(e) => setCatalogTagSearch(e.target.value)}
-                        className="glass-input w-full h-8 px-2.5 text-xs rounded-lg mb-3"
-                      />
-                      
-                      <div className="max-h-48 overflow-y-auto flex flex-col gap-2 pr-1 scrollbar-thin">
-                        {allUniqueCatalogTags
-                          .filter(tag => tag.toLowerCase().includes(catalogTagSearch.toLowerCase()))
-                          .map(tag => {
-                            const isChecked = selectedCatalogTags.includes(tag);
-                            return (
-                              <label key={tag} className="flex items-center gap-2.5 text-xs text-slate-300 hover:text-slate-100 cursor-pointer py-0.5">
-                                <input
-                                  type="checkbox"
-                                  checked={isChecked}
-                                  onChange={() => {
-                                    if (isChecked) {
-                                      setSelectedCatalogTags(selectedCatalogTags.filter(t => t !== tag));
-                                    } else {
-                                      setSelectedCatalogTags([...selectedCatalogTags, tag]);
-                                    }
-                                  }}
-                                  className="w-4 h-4 accent-blue-500 rounded border-slate-700 bg-slate-900 cursor-pointer"
-                                />
-                                <span className="font-medium">#{tag}</span>
-                              </label>
-                            );
-                          })}
-                        {allUniqueCatalogTags.filter(tag => tag.toLowerCase().includes(catalogTagSearch.toLowerCase())).length === 0 && (
-                          <div className="text-center text-slate-550 py-3 text-xs italic">ไม่พบชื่อแท็กนี้</div>
-                        )}
-                      </div>
-                      
-                      <div className="mt-3.5 pt-2 border-t border-slate-900/60 flex justify-between gap-2">
-                        {selectedCatalogTags.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => setSelectedCatalogTags([])}
-                            className="text-[10px] font-bold text-red-400 hover:underline cursor-pointer"
-                          >
-                            ล้างทั้งหมด
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => setShowTagFilterCatalog(false)}
-                          className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-white text-[10px] font-bold px-3 py-1 rounded-md ml-auto cursor-pointer"
-                        >
-                          ปิด
-                        </button>
-                      </div>
+                  </div>
+                  <h2 className="text-lg sm:text-2xl font-black text-slate-100 leading-tight drop-shadow-md">
+                    {bannerTitle}
+                  </h2>
+                  {bannerSubtitle && (
+                    <p className="text-xs sm:text-sm text-slate-300 line-clamp-2 leading-relaxed">
+                      {bannerSubtitle}
+                    </p>
+                  )}
+                </div>
+
+                <div className="hidden sm:flex items-center gap-4 z-10">
+                  {bannerCover && (
+                    <div className="w-24 h-32 rounded-2xl overflow-hidden shadow-2xl border border-white/10 shrink-0 bg-slate-900">
+                      <img src={bannerCover} alt="" className="w-full h-full object-cover" />
                     </div>
                   )}
-                </div>
-
-                {/* Sort Dropdown */}
-                <div className="relative w-full sm:w-48">
-                  <select
-                    value={catalogSort}
-                    onChange={(e) => setCatalogSort(e.target.value)}
-                    className="glass-input w-full h-11 px-4 pr-8 text-sm rounded-xl focus:outline-none bg-slate-900/60 border border-slate-800 hover:border-slate-700 text-slate-300 font-medium cursor-pointer transition-colors appearance-none"
-                    style={{
-                      backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%2394a3b8' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3E%3C/svg%3E")`,
-                      backgroundPosition: 'right 0.5rem center',
-                      backgroundSize: '1.5em 1.5em',
-                      backgroundRepeat: 'no-repeat'
-                    }}
-                  >
-                    <option value="views-desc" className="bg-slate-950 text-slate-300">🔥 ยอดวิว: มาก ➔ น้อย</option>
-                    <option value="views-asc" className="bg-slate-950 text-slate-300">❄️ ยอดวิว: น้อย ➔ มาก</option>
-                    <option value="rating-desc" className="bg-slate-950 text-slate-300">⭐ คะแนน: มาก ➔ น้อย</option>
-                    <option value="rating-asc" className="bg-slate-950 text-slate-300">⭐ คะแนน: น้อย ➔ มาก</option>
-                    <option value="date-desc" className="bg-slate-950 text-slate-300">📅 วันที่อัปเดต: ใหม่ ➔ เก่า</option>
-                    <option value="date-asc" className="bg-slate-950 text-slate-300">📅 วันที่อัปเดต: เก่า ➔ ใหม่</option>
-                    <option value="title-asc" className="bg-slate-950 text-slate-300">🔤 ชื่อเกม: A ➔ Z</option>
-                  </select>
+                  {(currentBanner.link_url || currentBanner.target_game_id) && (
+                    <button
+                      onClick={handleBannerClick}
+                      className="px-5 py-3 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-black text-xs shadow-lg shadow-blue-500/25 transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
+                    >
+                      🔗 เปิดดูข้อมูล
+                    </button>
+                  )}
                 </div>
               </div>
 
-              <button
-                onClick={() => {
-                  if (isGuest) {
+              {activeBanners.length > 1 && (
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20">
+                  {activeBanners.map((_, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setActiveBannerIndex(idx)}
+                      className={`h-1.5 rounded-full transition-all cursor-pointer ${
+                        idx === activeBannerIndex ? 'w-6 bg-blue-500' : 'w-2 bg-slate-700 hover:bg-slate-500'
+                      }`}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
-                    setIsAuthModalOpen(true);
-                    setToastMessage('กรุณาลงชื่อเข้าใช้เพื่อเสนอแนะเกมใหม่');
-                  } else {
-                    openSuggestNew();
-                  }
-                }}
-                className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-5 h-11 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-blue-500/25 active:scale-95 text-sm cursor-pointer w-full md:w-auto justify-center animate-fade-in"
-              >
-                ➕ เสนอแนะเกมใหม่
-              </button>
+        {/* SEARCH & FILTER BAR */}
+        {(activeTab === 'free' || activeTab === 'premium') && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
+            <div className="relative w-full sm:w-96">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="🔍 ค้นหาชื่อเกมแปลไทย..."
+                className="w-full h-11 pl-4 pr-10 rounded-2xl bg-slate-900/60 border border-slate-800 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500/50 transition-colors"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs cursor-pointer"
+                >
+                  ✕
+                </button>
+              )}
             </div>
 
-
-
-            {/* Catalog Grid */}
-            <div>
-              <div className="flex justify-between items-center mb-4">
-                <span className="text-xs font-extrabold text-slate-500">แสดงเกมที่ {displayStart}-{displayEnd} จาก {totalCatalogItems} รายการ</span>
-              </div>
-
-              {totalCatalogItems === 0 ? (
-                <div className="text-center py-24 glass-panel rounded-3xl border border-slate-900">
-                  <span className="text-5xl block mb-3">🔍</span>
-                  <p className="text-slate-450 font-bold text-base">ไม่พบเกมตามเงื่อนไขที่คุณค้นหา</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-                  {paginatedCatalog.map((game) => {
-                    const libraryItem = currentLibraryList.find((item) => item.gameId === game.id);
-                    const isInLib = !!libraryItem;
-
-                    return (
-                      <div
-                        key={game.id}
-                        onClick={() => handleOpenGameDetail(game)}
-                        className="glass-card-minimal rounded-3xl overflow-hidden flex flex-col cursor-pointer group relative"
-                      >
-                        {/* Cover Image */}
-                        <div className="aspect-[3/4] w-full overflow-hidden relative custom-placeholder">
-                          {game.coverUrl ? (
-                            <img
-                              src={game.coverUrl}
-                              alt={game.title}
-                              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center font-black text-slate-600 text-2xl">
-                              {getInitials(game.title)}
-                            </div>
-                          )}
-                          <div className="absolute top-3 right-3 bg-slate-955/90 backdrop-blur border border-white/10 px-2 py-0.5 rounded-lg text-xs font-extrabold text-blue-400">
-                            v{game.version}
-                          </div>
-                        </div>
-
-                        {/* Details */}
-                        <div className="p-4.5 flex flex-col flex-1 gap-2.5">
-                          <div>
-                            <h3 className="text-base font-extrabold text-slate-100 truncate group-hover:text-blue-400 transition-colors" title={game.title}>
-                              {game.title}
-                            </h3>
-                            <span className="text-xs text-slate-455 font-semibold block mt-0.5">โดย {game.developer}</span>
-                          </div>
-
-                          <div className="flex items-center justify-between mt-auto pt-2.5 border-t border-slate-900">
-                            {renderReviewStars(game.rating)}
-                            <span className="text-xs font-extrabold text-slate-400">{game.rating.toFixed(1)}</span>
-                          </div>
-
-                          {/* Action Button */}
-                          <div className="mt-1" onClick={(e) => e.stopPropagation()}>
-                            {isGuest ? (
-                              <button
-                                onClick={() => {
-              
-                                  setIsAuthModalOpen(true);
-                                  setToastMessage('กรุณาลงชื่อเข้าใช้เพื่อเพิ่มเกมเข้าคลัง');
-                                }}
-                                className="w-full h-9 bg-blue-600/10 hover:bg-blue-600 hover:text-white border border-blue-500/25 rounded-xl flex items-center justify-center text-xs text-blue-400 font-bold transition-all cursor-pointer animate-fade-in"
-                              >
-                                ➕ เพิ่มเกมเข้าคลัง
-                              </button>
-                            ) : isInLib ? (
-                              <div className="w-full h-9 bg-emerald-500/10 border border-emerald-500/25 rounded-xl flex items-center justify-center gap-1.5 text-xs text-emerald-450 font-black animate-fade-in">
-                                <span>✔️ ในคลัง: {libraryItem.status}</span>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => handleAddToLibrary(game)}
-                                className="w-full h-9 bg-blue-600/10 hover:bg-blue-600 hover:text-white border border-blue-500/25 rounded-xl flex items-center justify-center text-xs text-blue-400 font-bold transition-all cursor-pointer animate-fade-in"
-                              >
-                                ➕ เพิ่มเกมเข้าคลัง
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Pagination Controls */}
-              {totalCatalogPages > 1 && (
-                <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-8 pt-6 border-t border-slate-900/40 animate-fade-in">
-                  <span className="text-xs font-extrabold text-slate-500">
-                    แสดงเกมที่ {displayStart}-{displayEnd} จาก {totalCatalogItems} รายการ
-                  </span>
-                  
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setCatalogPage(prev => Math.max(prev - 1, 1))}
-                      disabled={catalogPage === 1}
-                      className="h-9 w-9 flex items-center justify-center rounded-xl border border-slate-800 bg-slate-900/40 text-slate-400 hover:text-white hover:bg-slate-800/60 disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer"
-                      title="หน้าก่อนหน้า"
-                    >
-                      ‹
-                    </button>
-                    
-                    {Array.from({ length: totalCatalogPages }).map((_, idx) => {
-                      const pageNum = idx + 1;
-                      const isNear = Math.abs(catalogPage - pageNum) <= 1;
-                      const isFirstOrLast = pageNum === 1 || pageNum === totalCatalogPages;
-                      
-                      if (!isNear && !isFirstOrLast) {
-                        if (pageNum === 2 || pageNum === totalCatalogPages - 1) {
-                          return <span key={pageNum} className="text-slate-600 text-xs px-1">...</span>;
-                        }
-                        return null;
-                      }
-                      
-                      return (
-                        <button
-                          key={pageNum}
-                          type="button"
-                          onClick={() => setCatalogPage(pageNum)}
-                          className={`h-9 min-w-9 px-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                            catalogPage === pageNum
-                              ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/25'
-                              : 'border-slate-800 bg-slate-900/40 text-slate-400 hover:text-white hover:bg-slate-800/60'
-                          }`}
-                        >
-                          {pageNum}
-                        </button>
-                      );
-                    })}
-                    
-                    <button
-                      type="button"
-                      onClick={() => setCatalogPage(prev => Math.min(prev + 1, totalCatalogPages))}
-                      disabled={catalogPage === totalCatalogPages}
-                      className="h-9 w-9 flex items-center justify-center rounded-xl border border-slate-800 bg-slate-900/40 text-slate-400 hover:text-white hover:bg-slate-800/60 disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer"
-                      title="หน้าถัดไป"
-                    >
-                      ›
-                    </button>
-                  </div>
-                </div>
-              )}
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
+              <span>จำนวนเกมทั้งหมด: </span>
+              <span className="text-blue-400 font-mono">
+                {translatedGames.filter(g => (activeTab === 'free' ? g.access_type !== 'premium' : g.access_type === 'premium') && (isAdmin || g.is_published !== false)).length} เกม
+              </span>
             </div>
           </div>
         )}
 
-        {/* TRANSLATED GAMES PORTAL */}
-        {activeTab === 'translated' && (
+        {/* FREE TRANSLATED GAMES PORTAL */}
+        {activeTab === 'free' && (
           <div className="flex flex-col gap-6 animate-fade-in-up">
-            <div className="text-center py-6">
+            <div className="text-center py-4">
               <h2 className="text-2xl font-black text-slate-100 flex items-center justify-center gap-2">
-                🇹🇭 เกมแปลไทยโดยผู้พัฒนา
+                🎁 เกมแปลไทยฟรี (Free Translated Games)
               </h2>
-              <p className="text-sm text-slate-400 mt-2 max-w-xl mx-auto">
-                คลังดาวน์โหลดเกมแนว Visual Novel ที่ได้รับการแปลเป็นภาษาไทยอย่างสมบูรณ์แบบโดยทีมงานของเรา คุณสามารถเข้าอ่านรีวิว ตรวจสอบวิธีติดตั้ง และดาวน์โหลดไปเล่นได้ฟรี!
+              <p className="text-xs sm:text-sm text-slate-400 mt-2 max-w-xl mx-auto">
+                คลังดาวน์โหลดเกมแนว Visual Novel แปลไทยที่เปิดให้สมาชิกทุกคนเข้าอ่านรีวิว ตรวจสอบวิธีติดตั้ง และดาวน์โหลดไปเล่นได้ฟรี!
               </p>
             </div>
 
-            {translatedGames.length === 0 ? (
-              <div className="text-center py-20 glass-panel rounded-3xl border border-slate-900">
-                <span className="text-5xl block mb-3">📦</span>
-                <p className="text-slate-450 font-bold text-base">กำลังปรับปรุงข้อมูลเกมแปลไทยในขณะนี้</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                {translatedGames.map((game) => (
-                  <div
-                    key={game.id}
-                    onClick={() => {
-                      const isPremium = subscriptionRole === 'premium' || subscriptionRole === 'admin';
-                      if (isPremium) {
+            {(() => {
+              const freeGames = translatedGames.filter(g => 
+                (g.access_type !== 'premium') && 
+                (isAdmin || g.is_published !== false) &&
+                (!searchQuery || g.title.toLowerCase().includes(searchQuery.toLowerCase()) || (g.version && g.version.toLowerCase().includes(searchQuery.toLowerCase())))
+              );
+
+              if (freeGames.length === 0) {
+                return (
+                  <div className="text-center py-20 glass-panel rounded-3xl border border-slate-900">
+                    <span className="text-5xl block mb-3">📦</span>
+                    <p className="text-slate-450 font-bold text-base">ไม่พบเกมแปลไทยฟรีในขณะนี้</p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                  {freeGames.map((game) => (
+                    <div
+                      key={game.id}
+                      onClick={() => {
                         setSelectedTranslatedGame({
                           ...game,
                           views: (game.views || 0) + 1
@@ -3634,547 +3289,365 @@ export default function App() {
                         setIsTranslatedModalOpen(true);
                         incrementTranslatedGameViews(game.id).catch(err => console.error("Error incrementing views:", err));
                         setTranslatedGames(prev => prev.map(g => g.id === game.id ? { ...g, views: (g.views || 0) + 1 } : g));
-                      } else {
-                        setIsUpsellOpen(true);
-                        setToastMessage('👑 สมาชิก Premium เท่านั้นที่สามารถเปิดอ่านบทความและดาวน์โหลดเกมแปลไทยได้');
-                      }
-                    }}
-                    className="glass-panel group hover:border-blue-500/40 rounded-2xl overflow-hidden cursor-pointer flex flex-col transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/5 hover:-translate-y-1 relative"
-                  >
-                    {/* Cover image */}
-                    <div className="aspect-[4/5] relative overflow-hidden bg-slate-950/45 shrink-0">
-                      {game.cover_url ? (
-                        <img
-                          src={game.cover_url}
-                          alt={game.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-blue-900 to-purple-900 flex items-center justify-center font-bold text-slate-300">
-                          {game.title.substring(0, 2)}
+                      }}
+                      className="glass-panel group hover:border-blue-500/40 rounded-2xl overflow-hidden cursor-pointer flex flex-col transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/5 hover:-translate-y-1 relative"
+                    >
+                      {/* Cover image */}
+                      <div className="aspect-[4/5] relative overflow-hidden bg-slate-950/45 shrink-0">
+                        {game.cover_url ? (
+                          <img
+                            src={game.cover_url}
+                            alt={game.title}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-blue-900 to-purple-900 flex items-center justify-center font-bold text-slate-300">
+                            {game.title.substring(0, 2)}
+                          </div>
+                        )}
+                        <div className="absolute top-3 left-3 bg-blue-600/90 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-full shadow-lg shadow-blue-500/20 uppercase tracking-wide">
+                          {game.version}
                         </div>
-                      )}
-                      <div className="absolute top-3 left-3 bg-blue-600/90 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-full shadow-lg shadow-blue-500/20 uppercase tracking-wide">
-                        {game.version}
-                      </div>
-                      <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-sm text-slate-300 text-[10px] font-bold px-2 py-1 rounded-full shadow-lg flex items-center gap-1">
-                        👁️ {game.views || 0}
-                      </div>
-                    </div>
-
-                    {/* Card Content */}
-                    <div className="p-4 flex flex-col flex-grow justify-between gap-3">
-                      <div>
-                        <h3 className="font-extrabold text-sm text-slate-100 group-hover:text-blue-400 transition-colors line-clamp-1">
-                          {game.title}
-                        </h3>
-                        {(() => {
-                          const parsed = parseGameDescription(game.description || '');
-                          if (parsed.progress_config.show && parsed.progress_config.bars && parsed.progress_config.bars.length > 0) {
-                            const total = parsed.progress_config.bars.reduce((sum, b) => sum + (b.percent || 0), 0);
-                            const avg = Math.round(total / parsed.progress_config.bars.length);
-                            return (
-                              <div className="mt-2.5 space-y-1 animate-fade-in">
-                                <div className="flex justify-between text-[9px] font-black text-slate-400">
-                                  <span className="uppercase tracking-wide">ความคืบหน้าแปลไทย</span>
-                                  <span className="font-mono text-blue-400">{avg}%</span>
-                                </div>
-                                <div className="w-full bg-slate-950 h-1.5 rounded-full overflow-hidden border border-slate-900">
-                                  <div
-                                    className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full rounded-full transition-all duration-500"
-                                    style={{ width: `${avg}%` }}
-                                  ></div>
-                                </div>
-                              </div>
-                            );
-                          }
-                          return null;
-                        })()}
+                        <div className="absolute top-3 right-3 bg-black/70 backdrop-blur-sm text-slate-300 text-[10px] font-bold px-2.5 py-1 rounded-full shadow-lg flex items-center gap-2 font-mono">
+                          <span title="ยอดเข้าชม">👁️ {game.views || 0}</span>
+                          <span className="text-slate-600">|</span>
+                          <span title="ยอดดาวน์โหลด" className="text-emerald-400">📥 {game.downloads || 0}</span>
+                        </div>
+                        {game.is_published === false && (
+                          <div className="absolute bottom-3 left-3 bg-rose-600/90 text-white text-[9px] font-black px-2 py-0.5 rounded-md shadow">
+                            🔴 ซ่อนอยู่ (Draft)
+                          </div>
+                        )}
                       </div>
 
-                      <button
-                        type="button"
-                        className="w-full bg-slate-900/60 hover:bg-blue-600 text-slate-200 hover:text-white border border-slate-800 hover:border-blue-500 text-xs font-bold py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-2"
-                      >
-                        📖 อ่านรีวิว & ดาวน์โหลด
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* TRANSLATED GAME DETAIL MODAL */}
-            {isTranslatedModalOpen && selectedTranslatedGame && (
-              <div className="modal-overlay fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                <div
-                  className="glass-panel w-full max-w-2xl rounded-3xl border border-white/10 shadow-2xl flex flex-col overflow-hidden max-h-[90vh] animate-scale-up"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {/* Header / Cover Hero */}
-                  <div className="h-44 sm:h-56 relative bg-slate-950/60 shrink-0">
-                    {selectedTranslatedGame.cover_url ? (
-                      <img
-                        src={selectedTranslatedGame.cover_url}
-                        alt={selectedTranslatedGame.title}
-                        className="w-full h-full object-cover opacity-40 blur-sm animate-pulse-slow"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-gradient-to-r from-blue-950 to-purple-950"></div>
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 to-transparent"></div>
-                    
-                    <button
-                      type="button"
-                      onClick={() => setIsTranslatedModalOpen(false)}
-                      className="absolute top-4 right-4 w-9 h-9 flex items-center justify-center rounded-full bg-black/50 hover:bg-slate-900 text-slate-400 hover:text-white transition-colors cursor-pointer border border-white/5"
-                    >
-                      ✕
-                    </button>
-
-                    <div className="absolute bottom-4 left-6 right-6 flex items-end gap-4 sm:gap-5">
-                      <div className="w-20 sm:w-24 aspect-[4/5] rounded-xl overflow-hidden shadow-2xl border border-white/10 shrink-0 bg-slate-900 hidden sm:block">
-                        <img src={selectedTranslatedGame.cover_url} alt="" className="w-full h-full object-cover" />
-                      </div>
-                      <div className="flex-grow pb-1">
-                        <span className="text-[10px] sm:text-xs font-bold text-blue-400 uppercase tracking-wider block mb-1">
-                          {selectedTranslatedGame.version} • 👁️ {selectedTranslatedGame.views || 0} views
-                        </span>
-                        <h2 className="text-lg sm:text-2xl font-black text-slate-100 leading-tight">
-                          {selectedTranslatedGame.title}
-                        </h2>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Body Content */}
-                  <div className="p-6 overflow-y-auto flex flex-col gap-4 text-slate-300 scrollbar-thin text-xs sm:text-sm">
-                    {(() => {
-                      const parsed = parseGameDescription(selectedTranslatedGame.description || '');
-                      return (
-                        <>
-                          {parsed.progress_config.show && parsed.progress_config.bars && parsed.progress_config.bars.length > 0 && (
-                            <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4.5 mb-2 shadow-inner">
-                              <div className="flex items-center justify-between mb-3.5">
-                                <h3 className="text-xs font-black text-slate-200 flex items-center gap-1.5 uppercase tracking-wider">
-                                  📊 ความคืบหน้าโครงการแปลภาษาไทย
-                                </h3>
-                                {(() => {
-                                  const total = parsed.progress_config.bars.reduce((sum, b) => sum + (b.percent || 0), 0);
-                                  const avg = Math.round(total / parsed.progress_config.bars.length);
-                                  return (
-                                    <span className="text-xs font-black text-blue-400 font-mono bg-blue-950/50 border border-blue-500/20 px-2.5 py-0.5 rounded-full">
-                                      ภาพรวม: {avg}%
-                                    </span>
-                                  );
-                                })()}
-                              </div>
-                              <div className="flex flex-col gap-3">
-                                {parsed.progress_config.bars.map((bar, idx) => (
-                                  <div key={idx} className="space-y-1">
-                                    <div className="flex justify-between text-[11px] font-bold text-slate-300">
-                                      <span>{bar.label || 'ความคืบหน้า'}</span>
-                                      <span className="font-mono text-blue-400">{bar.percent || 0}%</span>
-                                    </div>
-                                    <div className="w-full bg-slate-950 h-2.5 rounded-full overflow-hidden border border-slate-900">
-                                      <div
-                                        className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"
-                                        style={{ width: `${bar.percent || 0}%` }}
-                                      ></div>
-                                    </div>
+                      {/* Card Content */}
+                      <div className="p-4 flex flex-col flex-grow justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[9px] font-bold px-2 py-0.5 rounded-md">
+                              🎁 ฟรี
+                            </span>
+                          </div>
+                          <h3 className="font-extrabold text-sm text-slate-100 group-hover:text-blue-400 transition-colors line-clamp-1">
+                            {game.title}
+                          </h3>
+                          {(() => {
+                            const parsed = parseGameDescription(game.description || '');
+                            if (parsed.progress_config.show && parsed.progress_config.bars && parsed.progress_config.bars.length > 0) {
+                              const total = parsed.progress_config.bars.reduce((sum, b) => sum + (b.percent || 0), 0);
+                              const avg = Math.round(total / parsed.progress_config.bars.length);
+                              return (
+                                <div className="mt-2.5 space-y-1 animate-fade-in">
+                                  <div className="flex justify-between text-[9px] font-black text-slate-400">
+                                    <span className="uppercase tracking-wide">ความคืบหน้าแปลไทย</span>
+                                    <span className="font-mono text-blue-400">{avg}%</span>
                                   </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          {renderMarkdown(parsed.description)}
-                        </>
-                      );
-                    })()}
-                  </div>
+                                  <div className="w-full bg-slate-950 h-1.5 rounded-full overflow-hidden border border-slate-900">
+                                    <div
+                                      className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full rounded-full transition-all duration-500"
+                                      style={{ width: `${avg}%` }}
+                                    ></div>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
+                        </div>
 
-                  {/* Footer */}
-                  <div className="px-6 py-4 bg-slate-950/40 border-t border-slate-900 flex justify-end shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setIsTranslatedModalOpen(false)}
-                      className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-350 text-xs font-bold h-10 px-5 rounded-xl transition-colors cursor-pointer"
-                    >
-                      ปิดหน้านี้
-                    </button>
-                  </div>
+                        <button
+                          type="button"
+                          className="w-full bg-slate-900/60 hover:bg-blue-600 text-slate-200 hover:text-white border border-slate-800 hover:border-blue-500 text-xs font-bold py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-2"
+                        >
+                          📖 อ่านรีวิว & ดาวน์โหลด
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         )}
 
-        {/* MY LIBRARY (Compact Layout & Card Grid) */}
-        {activeTab === 'local' && (
-          isGuest ? (
-            <div className="max-w-md mx-auto w-full animate-fade-in-up py-16 px-6 glass-panel rounded-3xl border border-white/5 flex flex-col items-center text-center gap-6 shadow-2xl relative overflow-hidden backdrop-blur-2xl my-8">
-              {/* Decorative background aura */}
-              <div className="absolute -top-20 -left-20 w-40 h-40 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
-              <div className="absolute -bottom-20 -right-20 w-40 h-40 bg-purple-500/10 rounded-full blur-3xl pointer-events-none"></div>
-              
-              <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-blue-600/20 to-purple-600/20 border border-blue-500/30 flex items-center justify-center text-4xl shadow-inner animate-pulse">
-                🔒
-              </div>
-              <div>
-                <h2 className="text-xl font-black text-slate-100 mb-2">เข้าสู่คลังส่วนตัวของคุณ</h2>
-                <p className="text-sm text-slate-400 leading-relaxed">
-                  กรุณาลงชื่อเข้าใช้เพื่อเปิดใช้งานพื้นที่บันทึกคลังประวัติเกมส่วนตัว การให้คะแนน และการบันทึกโน้ตย่อของคุณ
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-
-                  setIsAuthModalOpen(true);
-                }}
-                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-extrabold h-12 px-6 rounded-2xl transition-all shadow-lg focus:outline-none border border-white/10 cursor-pointer"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h3a3 3 0 013 3v1" />
-                </svg>
-                <span>ลงชื่อเข้าใช้งานระบบ</span>
-              </button>
-            </div>
-          ) : (
-            <div className="max-w-4xl mx-auto w-full animate-fade-in-up flex flex-col gap-6">
-            
-            {/* User Library Stats Dashboard */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div className="glass-panel p-4.5 rounded-2xl flex flex-col items-center justify-center text-center">
-                <span className="text-slate-450 text-xs font-semibold mb-1">วางแผนจะเล่น</span>
-                <span className="text-2xl font-black text-slate-200">{libraryStats.planToPlay}</span>
-              </div>
-              <div className="glass-panel p-4.5 rounded-2xl flex flex-col items-center justify-center text-center">
-                <span className="text-emerald-400 text-xs font-semibold mb-1">กำลังเล่น</span>
-                <span className="text-2xl font-black text-emerald-400">{libraryStats.playing}</span>
-              </div>
-              <div className="glass-panel p-4.5 rounded-2xl flex flex-col items-center justify-center text-center">
-                <span className="text-blue-400 text-xs font-semibold mb-1">จบแล้ว</span>
-                <span className="text-2xl font-black text-blue-400">{libraryStats.completed}</span>
-              </div>
-              <div className="glass-panel p-4.5 rounded-2xl flex flex-col items-center justify-center text-center">
-                <span className="text-amber-400 text-xs font-semibold mb-1">เวลาเล่นสะสม</span>
-                <span className="text-xl font-black text-amber-400">{libraryStats.totalPlayTime.toFixed(1)} ชม.</span>
-              </div>
+        {/* PREMIUM TRANSLATED GAMES PORTAL */}
+        {activeTab === 'premium' && (
+          <div className="flex flex-col gap-6 animate-fade-in-up">
+            <div className="text-center py-4">
+              <h2 className="text-2xl font-black text-amber-400 flex items-center justify-center gap-2">
+                👑 เกมแปลไทยพรีเมียม (Premium Translated Games)
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-400 mt-2 max-w-xl mx-auto">
+                คลังเกมแปลไทยพิเศษและบทความเอ็กซ์คลูซีฟ ดาวน์โหลดเวอร์ชันล่าสุดก่อนใคร สำหรับสมาชิกพรีเมียมเท่านั้น
+              </p>
             </div>
 
-            {/* Filters panel */}
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col sm:flex-row gap-4 items-stretch justify-between w-full">
-                <div className="flex flex-col sm:flex-row gap-4 flex-1">
-                  <div className="relative flex-1">
-                    <span className="absolute inset-y-0 left-4 flex items-center text-slate-500">🔍</span>
-                    <input
-                      type="text"
-                      placeholder="ค้นหาชื่อเกมในคลังของคุณ..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="glass-input w-full h-11 pl-11 pr-4 text-sm rounded-xl focus:outline-none"
-                    />
+            {subscriptionRole !== 'premium' && !isAdmin && (
+              <div className="p-6 rounded-3xl bg-gradient-to-r from-amber-950/40 via-slate-900 to-amber-950/40 border border-amber-500/30 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl shadow-amber-500/5">
+                <div className="flex items-center gap-4 text-center sm:text-left">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-2xl shrink-0">
+                    👑
                   </div>
-                  
-                  {/* Library Tag Filter Button & Dropdown */}
-                  <div className="relative w-full sm:w-56 library-tag-filter-container">
-                    <button
-                      type="button"
-                      onClick={() => setShowTagFilterLibrary(!showTagFilterLibrary)}
-                      className={`glass-input w-full h-11 px-4 text-sm rounded-xl flex items-center justify-between cursor-pointer transition-colors ${
-                        selectedLibraryTags.length > 0 ? 'border-blue-500 text-blue-400 bg-blue-500/5' : 'text-slate-400'
-                      }`}
-                    >
-                      <span className="truncate">
-                        {selectedLibraryTags.length > 0 ? `ตัวกรองแท็ก (${selectedLibraryTags.length})` : '🔍 เลือกแท็กแนวเกม...'}
-                      </span>
-                      <span className="text-xs">▼</span>
-                    </button>
-                    
-                    {showTagFilterLibrary && (
-                      <div className="absolute left-0 mt-2 w-72 solid-dropdown rounded-2xl shadow-2xl z-50 p-4 animate-fade-in-up">
-                        <input
-                          type="text"
-                          placeholder="พิมพ์ค้นหาแท็ก..."
-                          value={libraryTagSearch}
-                          onChange={(e) => setLibraryTagSearch(e.target.value)}
-                          className="glass-input w-full h-8 px-2.5 text-xs rounded-lg mb-3"
-                        />
-                        
-                        <div className="max-h-48 overflow-y-auto flex flex-col gap-2 pr-1 scrollbar-thin">
-                          {allUniqueLibraryTags
-                            .filter(tag => tag.toLowerCase().includes(libraryTagSearch.toLowerCase()))
-                            .map(tag => {
-                              const isChecked = selectedLibraryTags.includes(tag);
-                              return (
-                                <label key={tag} className="flex items-center gap-2.5 text-xs text-slate-300 hover:text-slate-100 cursor-pointer py-0.5">
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={() => {
-                                      if (isChecked) {
-                                        setSelectedLibraryTags(selectedLibraryTags.filter(t => t !== tag));
-                                      } else {
-                                        setSelectedLibraryTags([...selectedLibraryTags, tag]);
-                                      }
-                                    }}
-                                    className="w-4 h-4 accent-blue-500 rounded border-slate-700 bg-slate-900 cursor-pointer"
-                                  />
-                                  <span className="font-medium">#{tag}</span>
-                                </label>
-                              );
-                            })}
-                          {allUniqueLibraryTags.filter(tag => tag.toLowerCase().includes(libraryTagSearch.toLowerCase())).length === 0 && (
-                            <div className="text-center text-slate-550 py-3 text-xs italic">ไม่พบชื่อแท็กนี้</div>
-                          )}
-                        </div>
-                        
-                        <div className="mt-3.5 pt-2 border-t border-slate-900/60 flex justify-between gap-2">
-                          {selectedLibraryTags.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => setSelectedLibraryTags([])}
-                              className="text-[10px] font-bold text-red-400 hover:underline cursor-pointer"
-                            >
-                              ล้างทั้งหมด
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => setShowTagFilterLibrary(false)}
-                            className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-white text-[10px] font-bold px-3 py-1 rounded-md ml-auto cursor-pointer"
-                          >
-                            ปิด
-                          </button>
-                        </div>
-                      </div>
-                    )}
+                  <div>
+                    <h3 className="text-sm font-black text-amber-300">ปลดล็อกการเข้าถึงเกมพรีเมียมทั้งหมด</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      สมัครสมาชิก Premium เพื่อเข้าอ่านบทความพิเศษและดาวน์โหลดเกมแปลไทยทุกเกมได้แบบไม่จำกัด
+                    </p>
                   </div>
                 </div>
-
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <button
-                    onClick={() => {
-                      if (isGuest) {
-    
-                        setIsAuthModalOpen(true);
-                        setToastMessage('กรุณาลงชื่อเข้าใช้เพื่อส่งคำขอเพิ่มเกม');
-                      } else {
-                        openSuggestNew();
-                      }
-                    }}
-                    className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 h-11 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-blue-500/25 active:scale-95 text-xs cursor-pointer justify-center animate-fade-in"
-                  >
-                    ➕ เสนอแนะขอเพิ่มเกมยอดนิยม
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={handleOpenUpsell}
+                  className="px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-black text-xs shadow-lg shadow-amber-500/20 transition-all active:scale-95 cursor-pointer shrink-0"
+                >
+                  ⭐ สมัครสมาชิก Premium
+                </button>
               </div>
+            )}
 
-              {/* Status Filters */}
-              <div className="flex flex-col gap-2 pb-1.5">
-                <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin">
-                  <button
-                    onClick={() => setLibraryStatusFilter('All')}
-                    className={`px-4 py-2 text-xs font-bold rounded-full border transition-all shrink-0 cursor-pointer ${
-                      libraryStatusFilter === 'All'
-                        ? 'bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-500/20'
-                        : 'bg-slate-900/40 border-slate-850 text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                    }`}
-                  >
-                    ทั้งหมด ({currentLibraryList.length})
-                  </button>
-                  {STATUS_CATEGORIES.map((cat) => {
-                    const count = currentLibraryList.filter((item) => item.status === cat).length;
-                    return (
-                      <button
-                        key={cat}
-                        onClick={() => setLibraryStatusFilter(cat)}
-                        className={`px-4 py-2 text-xs font-bold rounded-full border transition-all shrink-0 cursor-pointer ${
-                          libraryStatusFilter === cat
-                            ? 'bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-500/20'
-                            : 'bg-slate-900/40 border-slate-850 text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                        }`}
-                      >
-                        {cat} ({count})
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
+            {(() => {
+              const premiumGames = translatedGames.filter(g => 
+                (g.access_type === 'premium') && 
+                (isAdmin || g.is_published !== false) &&
+                (!searchQuery || g.title.toLowerCase().includes(searchQuery.toLowerCase()) || (g.version && g.version.toLowerCase().includes(searchQuery.toLowerCase())))
+              );
 
-            {/* My Library Vertical Grid of Cards */}
-            <div>
-              <div className="flex justify-between items-center mb-4">
-                <span className="text-xs font-extrabold text-slate-500">แสดงคลังข้อมูล {filteredLibrary.length} รายการ</span>
-              </div>
+              if (premiumGames.length === 0) {
+                return (
+                  <div className="text-center py-20 glass-panel rounded-3xl border border-slate-900">
+                    <span className="text-5xl block mb-3">👑</span>
+                    <p className="text-slate-450 font-bold text-base">ไม่พบเกมแปลไทยพรีเมียมในขณะนี้</p>
+                  </div>
+                );
+              }
 
-              {filteredLibrary.length === 0 ? (
-                <div className="text-center py-20 glass-panel rounded-3xl border border-slate-900">
-                  <span className="text-4xl block mb-2">📚</span>
-                  <p className="text-slate-450 font-bold text-sm">ไม่พบเกมตามเงื่อนไขในคลังส่วนตัวของคุณ</p>
-                </div>
-              ) : (
+              const isPremiumUser = subscriptionRole === 'premium' || isAdmin;
+
+              return (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                  {filteredLibrary.map((item) => {
-                    const origGame = officialGames.find((og) => og.id === item.gameId);
-                    return (
-                      <div
-                        key={item.gameId}
-                        onClick={() => {
-                          handleOpenGameDetail(origGame || {
-                            id: item.gameId,
-                            title: item.title,
-                            developer: item.developer,
-                            version: item.version,
-                            overview: item.overview,
-                            tags: item.tags,
-                            rating: item.rating || 5,
-                            coverUrl: item.coverUrl,
-                            patreonUrl: item.patreonUrl,
-                            buyUrl: item.buyUrl,
-                            socialUrl: item.socialUrl,
-                            screenshots: item.screenshots || []
+                  {premiumGames.map((game) => (
+                    <div
+                      key={game.id}
+                      onClick={() => {
+                        if (isPremiumUser) {
+                          setSelectedTranslatedGame({
+                            ...game,
+                            views: (game.views || 0) + 1
                           });
-                        }}
-                        className="glass-card-minimal rounded-3xl overflow-hidden flex flex-col cursor-pointer group relative"
-                      >
-                        {/* Cover Image aspect-[3/4] */}
-                        <div className="aspect-[3/4] w-full overflow-hidden relative custom-placeholder">
-                          {item.coverUrl ? (
-                            <img
-                              src={item.coverUrl}
-                              alt={item.title}
-                              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center font-black text-slate-600 text-2xl">
-                              {getInitials(item.title)}
-                            </div>
-                          )}
-                          
-                          {/* Badges on cover */}
-                          <div className="absolute top-3 right-3 bg-slate-955/90 backdrop-blur border border-white/10 px-2 py-0.5 rounded-lg text-xs font-extrabold text-blue-400">
-                            v{item.version}
+                          setIsTranslatedModalOpen(true);
+                          incrementTranslatedGameViews(game.id).catch(err => console.error("Error incrementing views:", err));
+                          setTranslatedGames(prev => prev.map(g => g.id === game.id ? { ...g, views: (g.views || 0) + 1 } : g));
+                        } else {
+                          handleOpenUpsell();
+                          setToastMessage('👑 สมาชิก Premium เท่านั้นที่สามารถเข้าถึงเกมแปลไทยพรีเมียมได้');
+                        }
+                      }}
+                      className="glass-panel group border border-amber-500/30 hover:border-amber-500/60 rounded-2xl overflow-hidden cursor-pointer flex flex-col transition-all duration-300 hover:shadow-xl hover:shadow-amber-500/10 hover:-translate-y-1 relative bg-slate-950/40"
+                    >
+                      {/* Cover image */}
+                      <div className="aspect-[4/5] relative overflow-hidden bg-slate-950/45 shrink-0">
+                        {game.cover_url ? (
+                          <img
+                            src={game.cover_url}
+                            alt={game.title}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-amber-900 to-purple-900 flex items-center justify-center font-bold text-slate-300">
+                            {game.title.substring(0, 2)}
                           </div>
-
-                          {origGame && isVersionOlder(item.version, origGame.version) && (
-                            <div className="absolute top-10 right-3 bg-red-650/95 backdrop-blur border border-red-500/20 px-2 py-0.5 rounded-lg text-[9px] font-black text-white uppercase tracking-wider animate-pulse shadow-lg shadow-red-500/20">
-                              อัปเดตใหม่ v{origGame.version}
-                            </div>
-                          )}
-                          
-                          {item.isCustom && (
-                            <div className="absolute top-3 left-3 bg-amber-500/90 backdrop-blur border border-white/10 px-2 py-0.5 rounded-lg text-[9px] font-black text-white uppercase tracking-wider">
-                              กำหนดเอง
-                            </div>
-                          )}
+                        )}
+                        <div className="absolute top-3 left-3 bg-amber-500 text-slate-950 text-[10px] font-black px-2.5 py-1 rounded-full shadow-lg shadow-amber-500/30 uppercase tracking-wide flex items-center gap-1">
+                          👑 PREMIUM
                         </div>
-
-                        {/* Card Body */}
-                        <div className="p-4.5 flex flex-col flex-1 gap-2.5">
-                          <div>
-                            <h3 className="text-base font-extrabold text-slate-100 truncate group-hover:text-blue-400 transition-colors" title={item.title}>
-                              {item.title}
-                            </h3>
-                            <span className="text-xs text-slate-455 font-semibold block mt-0.5">โดย {item.developer}</span>
-                          </div>
-
-                          {/* Inline Controls */}
-                          <div className="flex flex-col gap-2 pt-1 border-t border-slate-900/60">
-                            
-                            {/* Status selector */}
-                            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                              <select
-                                value={item.status}
-                                onChange={(e) => handleUpdateItemStatus(item.gameId, e.target.value)}
-                                className={`h-8 px-2.5 text-xs font-bold rounded-lg border cursor-pointer w-full focus:ring-1 focus:ring-blue-500/20 bg-black text-white ${
-                                  STATUS_COLORS[item.status] || 'text-slate-400 border-slate-900'
-                                }`}
-                              >
-                                {STATUS_CATEGORIES.map((cat) => (
-                                  <option key={cat} value={cat} className="bg-black text-white">
-                                    {cat}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-
-                            {/* Playtime and Star Rating */}
-                            <div className="flex items-center justify-between gap-1.5" onClick={(e) => e.stopPropagation()}>
-                              <div className="flex items-center gap-1.5 text-xs text-slate-455">
-                                <span className="font-bold">เวลา:</span>
-                                <input
-                                  type="number"
-                                  step="0.1"
-                                  min="0"
-                                  value={item.playTime || 0}
-                                  onChange={(e) => handleUpdateItemPlayTime(item.gameId, e.target.value)}
-                                  className="glass-input w-12 h-7 text-center rounded-lg text-slate-200 text-xs focus:outline-none"
-                                />
-                                <span className="font-bold">ชม.</span>
-                              </div>
-                              
-                              <div className="flex items-center">
-                                {renderReviewStars(item.rating || 0, true, (rating) => handleUpdateItemRating(item.gameId, rating))}
-                              </div>
-                            </div>
-
-                            {/* Quick Note Input */}
-                            <div className="w-full" onClick={(e) => e.stopPropagation()}>
-                              <input
-                                type="text"
-                                value={item.notes || ''}
-                                onChange={(e) => handleUpdateItemNotes(item.gameId, e.target.value)}
-                                className="glass-input w-full px-2.5 py-1.5 text-[11px] rounded-lg text-slate-350 placeholder-slate-600 focus:outline-none"
-                                placeholder="พิมพ์โน้ตย่อด่วน..."
-                              />
-                            </div>
-                          </div>
-
-                          {/* Action Buttons (Text only, no emoji icons only) */}
-                          <div className="flex items-center justify-between gap-1 mt-auto pt-2.5 border-t border-slate-900/60" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              onClick={() => openEditLocalItem(item)}
-                              className="flex-grow py-1 px-1 text-[11px] font-black rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-850 hover:border-slate-700 text-slate-300 transition-colors cursor-pointer text-center"
-                            >
-                              แก้ไข
-                            </button>
-                            <button
-                              onClick={() => openReportGame(item)}
-                              className="flex-grow py-1 px-1 text-[11px] font-black rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-850 hover:border-slate-700 text-amber-450 transition-colors cursor-pointer text-center"
-                            >
-                              รายงาน
-                            </button>
-                            <button
-                              onClick={() => {
-                                setCustomConfirm({
-                                  title: 'ลบเกมออกจากคลังส่วนตัว',
-                                  message: 'คุณต้องการลบเกมนี้ออกจากคลังประวัติส่วนตัวหรือไม่?',
-                                  onConfirm: () => {
-                                    handleDeleteLibraryItem(item.gameId);
-                                  }
-                                });
-                              }}
-                              className="flex-grow py-1 px-1 text-[11px] font-black rounded-lg bg-red-955/25 border border-red-900/30 hover:bg-red-900/40 hover:border-red-750/50 text-red-400 transition-colors cursor-pointer text-center"
-                            >
-                              ลบเกม
-                            </button>
-                          </div>
-
+                        <div className="absolute top-3 right-3 bg-black/70 backdrop-blur-sm text-slate-300 text-[10px] font-bold px-2.5 py-1 rounded-full shadow-lg flex items-center gap-2 font-mono">
+                          <span title="ยอดเข้าชม">👁️ {game.views || 0}</span>
+                          <span className="text-slate-600">|</span>
+                          <span title="ยอดดาวน์โหลด" className="text-emerald-400">📥 {game.downloads || 0}</span>
                         </div>
+                        {game.is_published === false && (
+                          <div className="absolute bottom-3 left-3 bg-rose-600/90 text-white text-[9px] font-black px-2 py-0.5 rounded-md shadow">
+                            🔴 ซ่อนอยู่ (Draft)
+                          </div>
+                        )}
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
 
+                      {/* Card Content */}
+                      <div className="p-4 flex flex-col flex-grow justify-between gap-3">
+                        <div>
+                          <div className="flex items-center justify-between gap-1.5 mb-1">
+                            <span className="bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[9px] font-bold px-2 py-0.5 rounded-md">
+                              {game.version}
+                            </span>
+                            {!isPremiumUser && (
+                              <span className="text-[10px] text-amber-400/80 font-bold flex items-center gap-1">
+                                🔒 ล็อก
+                              </span>
+                            )}
+                          </div>
+                          <h3 className="font-extrabold text-sm text-slate-100 group-hover:text-amber-400 transition-colors line-clamp-1">
+                            {game.title}
+                          </h3>
+                          {(() => {
+                            const parsed = parseGameDescription(game.description || '');
+                            if (parsed.progress_config.show && parsed.progress_config.bars && parsed.progress_config.bars.length > 0) {
+                              const total = parsed.progress_config.bars.reduce((sum, b) => sum + (b.percent || 0), 0);
+                              const avg = Math.round(total / parsed.progress_config.bars.length);
+                              return (
+                                <div className="mt-2.5 space-y-1 animate-fade-in">
+                                  <div className="flex justify-between text-[9px] font-black text-slate-400">
+                                    <span className="uppercase tracking-wide text-amber-400/80">ความคืบหน้าแปลไทย</span>
+                                    <span className="font-mono text-amber-400">{avg}%</span>
+                                  </div>
+                                  <div className="w-full bg-slate-950 h-1.5 rounded-full overflow-hidden border border-slate-900">
+                                    <div
+                                      className="bg-gradient-to-r from-amber-500 to-yellow-500 h-full rounded-full transition-all duration-500"
+                                      style={{ width: `${avg}%` }}
+                                    ></div>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
+                        </div>
+
+                        <button
+                          type="button"
+                          className={`w-full text-xs font-bold py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-2 ${
+                            isPremiumUser
+                              ? 'bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white shadow-md shadow-amber-500/10'
+                              : 'bg-slate-900/80 hover:bg-slate-800 border border-amber-500/30 text-amber-400'
+                          }`}
+                        >
+                          {isPremiumUser ? '👑 อ่านบทความ & ดาวน์โหลด' : '🔒 สมัคร Premium เพื่อดาวน์โหลด'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {/* TRANSLATED GAME DETAIL MODAL */}
+        {isTranslatedModalOpen && selectedTranslatedGame && (
+          <div className="modal-overlay fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setIsTranslatedModalOpen(false)}>
+            <div
+              className="glass-panel w-full max-w-2xl rounded-3xl border border-white/10 shadow-2xl flex flex-col overflow-hidden max-h-[90vh] animate-scale-up"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header / Cover Hero */}
+              <div className="h-44 sm:h-56 relative bg-slate-950/60 shrink-0">
+                {selectedTranslatedGame.cover_url ? (
+                  <img
+                    src={selectedTranslatedGame.cover_url}
+                    alt={selectedTranslatedGame.title}
+                    className="w-full h-full object-cover opacity-40 blur-sm animate-pulse-slow"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-r from-blue-950 to-purple-950"></div>
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 to-transparent"></div>
+                
+                <button
+                  type="button"
+                  onClick={() => setIsTranslatedModalOpen(false)}
+                  className="absolute top-4 right-4 w-9 h-9 flex items-center justify-center rounded-full bg-black/50 hover:bg-slate-900 text-slate-400 hover:text-white transition-colors cursor-pointer border border-white/5"
+                >
+                  ✕
+                </button>
+
+                <div className="absolute bottom-4 left-6 right-6 flex items-end gap-4 sm:gap-5">
+                  <div className="w-20 sm:w-24 aspect-[4/5] rounded-xl overflow-hidden shadow-2xl border border-white/10 shrink-0 bg-slate-900 hidden sm:block">
+                    <img src={selectedTranslatedGame.cover_url} alt="" className="w-full h-full object-cover" />
+                  </div>
+                  <div className="flex-grow pb-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
+                        selectedTranslatedGame.access_type === 'premium'
+                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                          : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                      }`}>
+                        {selectedTranslatedGame.access_type === 'premium' ? '👑 พรีเมียม' : '🎁 ฟรี'} • {selectedTranslatedGame.version}
+                      </span>
+                      <span className="text-[10px] sm:text-xs text-slate-400 font-mono">
+                        👁️ {selectedTranslatedGame.views || 0} views • 📥 {selectedTranslatedGame.downloads || 0} downloads
+                      </span>
+                    </div>
+                    <h2 className="text-lg sm:text-2xl font-black text-slate-100 leading-tight">
+                      {selectedTranslatedGame.title}
+                    </h2>
+                  </div>
+                </div>
               </div>
-            )
-          )}
+
+              {/* Body Content */}
+              <div className="p-6 overflow-y-auto flex flex-col gap-4 text-slate-300 scrollbar-thin text-xs sm:text-sm">
+                {(() => {
+                  const parsed = parseGameDescription(selectedTranslatedGame.description || '');
+                  return (
+                    <>
+                      {parsed.progress_config.show && parsed.progress_config.bars && parsed.progress_config.bars.length > 0 && (
+                        <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4.5 mb-2 shadow-inner">
+                          <div className="flex items-center justify-between mb-3.5">
+                            <h3 className="text-xs font-black text-slate-200 flex items-center gap-1.5 uppercase tracking-wider">
+                              📊 ความคืบหน้าโครงการแปลภาษาไทย
+                            </h3>
+                            {(() => {
+                              const total = parsed.progress_config.bars.reduce((sum, b) => sum + (b.percent || 0), 0);
+                              const avg = Math.round(total / parsed.progress_config.bars.length);
+                              return (
+                                <span className="text-xs font-black text-blue-400 font-mono bg-blue-950/50 border border-blue-500/20 px-2.5 py-0.5 rounded-full">
+                                  ภาพรวม: {avg}%
+                                </span>
+                              );
+                            })()}
+                          </div>
+                          <div className="flex flex-col gap-3">
+                            {parsed.progress_config.bars.map((bar, idx) => (
+                              <div key={idx} className="space-y-1">
+                                <div className="flex justify-between text-[11px] font-bold text-slate-300">
+                                  <span>{bar.label || 'ความคืบหน้า'}</span>
+                                  <span className="font-mono text-blue-400">{bar.percent || 0}%</span>
+                                </div>
+                                <div className="w-full bg-slate-950 h-2.5 rounded-full overflow-hidden border border-slate-900">
+                                  <div
+                                    className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"
+                                    style={{ width: `${bar.percent || 0}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {renderMarkdown(parsed.description, (btnUrl, btnText, isDownload) => {
+                        if (isDownload && selectedTranslatedGame) {
+                          incrementTranslatedGameDownloads(selectedTranslatedGame.id).catch(err => console.error("Error updating download count:", err));
+                          setSelectedTranslatedGame(prev => prev ? { ...prev, downloads: (prev.downloads || 0) + 1 } : null);
+                          setTranslatedGames(prev => prev.map(g => g.id === selectedTranslatedGame.id ? { ...g, downloads: (g.downloads || 0) + 1 } : g));
+                        }
+                      })}
+                    </>
+                  );
+                })()}
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-4 bg-slate-950/40 border-t border-slate-900 flex justify-end shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsTranslatedModalOpen(false)}
+                  className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-350 text-xs font-bold h-10 px-5 rounded-xl transition-colors cursor-pointer"
+                >
+                  ปิดหน้านี้
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ADMIN TAB */}
         {activeTab === 'admin' && isAdmin && (
@@ -4928,225 +4401,6 @@ export default function App() {
                   💾 บันทึกการตั้งค่าระบบ
                 </button>
               </div>
-
-              {/* Game Engagement Panel */}
-              <div className="glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
-                    📊 แผงวิเคราะห์ความสนใจเกม (Game Engagement)
-                  </h3>
-                  {isFirebaseEnabled && (
-                    <button
-                      onClick={() => fetchEngagementData(false)}
-                      disabled={isRefreshingEngage}
-                      className="text-xs bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 font-bold px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors flex items-center gap-1 disabled:opacity-50"
-                    >
-                      {isRefreshingEngage ? (
-                        <>
-                          <div className="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div>
-                          <span>กำลังซิงค์...</span>
-                        </>
-                      ) : (
-                        <span>🔄 ซิงค์ข้อมูล</span>
-                      )}
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex flex-col gap-3 flex-1 justify-between">
-                  <p className="text-[11px] text-slate-400 leading-normal">
-                    แสดงยอดผู้เล่นที่ดึงเข้าคลัง และคะแนนรีวิวเฉลี่ยจากผู้ใช้งานทั้งหมดในระบบ {isFirebaseEnabled ? '(ซิงค์จากฐานข้อมูลคลาวด์)' : '(แสดงข้อมูลจำลอง)'}
-                  </p>
-
-                  {/* Filters and Search */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="text"
-                      placeholder="🔍 ค้นหาชื่อเกม/ผู้พัฒนา..."
-                      value={engageSearch}
-                      onChange={(e) => setEngageSearch(e.target.value)}
-                      className="glass-input h-9 px-3 text-xs rounded-xl text-slate-200 w-full"
-                    />
-                    <select
-                      value={engageSort}
-                      onChange={(e) => setEngageSort(e.target.value)}
-                      className="glass-input h-9 px-2 text-xs rounded-xl bg-black text-white cursor-pointer w-full"
-                    >
-                      <option value="engage-desc">👤 ยอดเข้าคลัง (มาก → น้อย)</option>
-                      <option value="engage-asc">👤 ยอดเข้าคลัง (น้อย → มาก)</option>
-                      <option value="views-desc">👁️ ยอดคนดู (มาก → น้อย)</option>
-                      <option value="views-asc">👁️ ยอดคนดู (น้อย → มาก)</option>
-                      <option value="rating-desc">⭐ คะแนนรีวิว (สูง → ต่ำ)</option>
-                      <option value="rating-asc">⭐ คะแนนรีวิว (ต่ำ → สูง)</option>
-                    </select>
-                  </div>
-
-                  {/* Game List Display */}
-                  <div className="bg-slate-950/80 border border-slate-900 rounded-xl p-2 h-44 overflow-y-auto flex flex-col gap-1.5 scrollbar-thin">
-                    {filteredEngagement.length === 0 ? (
-                      <span className="text-slate-600 italic text-[11px] p-2 text-center">ไม่พบข้อมูลสถิติเกม</span>
-                    ) : (
-                      filteredEngagement.map((game) => (
-                        <div key={game.id} className="flex items-center justify-between p-1.5 rounded-lg hover:bg-slate-900/40 transition-colors border border-white/0 hover:border-white/5">
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <div className="w-6 h-8 rounded overflow-hidden shrink-0 border border-white/10">
-                              {game.coverUrl ? (
-                                <img src={game.coverUrl} alt="" className="w-full h-full object-cover" />
-                              ) : (
-                                <div className="w-full h-full bg-slate-900 flex items-center justify-center text-[7px] font-black text-slate-500">
-                                  {game.title ? game.title.substring(0, 2).toUpperCase() : 'VN'}
-                                </div>
-                              )}
-                            </div>
-                            <div className="min-w-0">
-                              <div className="text-xs font-bold text-slate-200 truncate" title={game.title}>{game.title}</div>
-                              <div className="text-[10px] text-slate-400 truncate">{game.developer}</div>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400" title="ยอดเข้าชม">
-                              👁️ {game.viewCount}
-                            </span>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-400" title="ยอดเข้าคลัง">
-                              👤 {game.engageCount}
-                            </span>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
-                              game.ratingCount > 0 
-                                ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' 
-                                : 'bg-slate-900 border-slate-800 text-slate-500'
-                            }`} title="คะแนนเฉลี่ย">
-                              ★ {game.averageUserRating}
-                            </span>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  <button
-                    onClick={handleExportEngagementCsv}
-                    className="h-10 px-4 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/15 flex items-center justify-center gap-2 cursor-pointer transition-all w-full animate-fade-in"
-                  >
-                    <span>📤 ส่งออกรายงาน CSV (ภาษาไทย)</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Full System Backup & Restore */}
-              <div className="glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
-                <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
-                  💾 สำรองและกู้คืนข้อมูลระบบ (System Backup & Restore)
-                </h3>
-                <div className="flex flex-col gap-3.5 flex-1 justify-between">
-                  <p className="text-[11px] text-slate-400 leading-normal">
-                    ดาวน์โหลดหรือนำเข้าข้อมูลโครงสร้างทั้งหมดของแอปพลิเคชัน (รวมถึงแคตตาล็อกหลัก, บัญชีผู้ใช้, สิทธิ์ Premium, รายการธุรกรรม, และประวัติคลังข้อมูลของทุกคน) ในรูปแบบไฟล์ JSON
-                  </p>
-                  
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        try {
-                          const backupData = {
-                            avn_current_user_v7: currentUser,
-                            avn_user_roles_v9: userRoles,
-                            avn_user_premium_dates_v9: userPremiumDates,
-                            avn_official_games_v9: officialGames,
-                            avn_user_libraries_v7: userLibraries,
-                            avn_reports_v7: reports,
-                            avn_global_tags_v9: globalTags,
-                            avn_web_title_v8: webTitle,
-                            avn_web_meta_desc_v9: webMetaDescription,
-                            avn_web_tagline_v9: webTagline,
-                            avn_web_logo_v8: webLogo,
-                            avn_web_logo_type_v8: webLogoType,
-                            avn_ticker_message_v7: tickerMessage,
-                            avn_show_ticker_v7: showTicker,
-                            avn_revenue_transactions_v9: revenueTransactions
-                          };
-                          
-                          const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
-                            JSON.stringify(backupData, null, 2)
-                          )}`;
-                          const downloadAnchor = document.createElement('a');
-                          const date = new Date().toISOString().slice(0, 10);
-                          downloadAnchor.setAttribute('href', jsonString);
-                          downloadAnchor.setAttribute('download', `avn_star_hub_system_backup_${date}.json`);
-                          document.body.appendChild(downloadAnchor);
-                          downloadAnchor.click();
-                          downloadAnchor.remove();
-                          setToastMessage('ส่งออกข้อมูลสำรองระบบสำเร็จ!');
-                        } catch {
-                          alert('เกิดข้อผิดพลาดในการสำรองข้อมูลระบบ');
-                        }
-                      }}
-                      className="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold h-10 px-4 rounded-xl cursor-pointer transition-colors flex items-center justify-center gap-1.5"
-                    >
-                      📤 ส่งออกข้อมูลระบบ (JSON)
-                    </button>
-                    
-                    <div className="flex-1 relative">
-                      <input
-                        type="file"
-                        accept=".json"
-                        id="system-backup-import"
-                        onChange={(e) => {
-                          const file = e.target.files[0];
-                          if (!file) return;
-                          
-                          const reader = new FileReader();
-                          reader.onload = (event) => {
-                            try {
-                              const parsed = JSON.parse(event.target.result);
-                              
-                              if ((!parsed.avn_official_games_v9 && !parsed.avn_official_games_v8 && !parsed.avn_official_games_v7) || !parsed.avn_user_libraries_v7 || !parsed.avn_user_roles_v9) {
-                                alert('รูปแบบไฟล์ข้อมูลสำรองระบบไม่ถูกต้อง ไม่พบโครงสร้างฐานข้อมูลหลัก');
-                                return;
-                              }
-                              
-                              setCustomConfirm({
-                                title: 'กู้คืนข้อมูลระบบหลัก',
-                                message: '⚠️ คำเตือน: การกู้คืนข้อมูลระบบจะเขียนทับข้อมูลและค่าตั้งค่าทั้งหมดในปัจจุบัน คุณแน่ใจที่จะดำเนินการต่อหรือไม่?',
-                                onConfirm: () => {
-                                  if (parsed.avn_official_games_v9) setOfficialGames(parsed.avn_official_games_v9);
-                                  else if (parsed.avn_official_games_v8) setOfficialGames(parsed.avn_official_games_v8);
-                                  else if (parsed.avn_official_games_v7) setOfficialGames(parsed.avn_official_games_v7);
-                                  if (parsed.avn_user_libraries_v7) setUserLibraries(parsed.avn_user_libraries_v7);
-                                  if (parsed.avn_user_roles_v9) setUserRoles(parsed.avn_user_roles_v9);
-                                  if (parsed.avn_user_premium_dates_v9) setUserPremiumDates(parsed.avn_user_premium_dates_v9);
-                                  if (parsed.avn_reports_v7) setReports(parsed.avn_reports_v7);
-                                  if (parsed.avn_global_tags_v9) setGlobalTags(parsed.avn_global_tags_v9);
-                                  if (parsed.avn_web_title_v8) setWebTitle(parsed.avn_web_title_v8);
-                                  if (parsed.avn_web_meta_desc_v9) setWebMetaDescription(parsed.avn_web_meta_desc_v9);
-                                  if (parsed.avn_web_tagline_v9) setWebTagline(parsed.avn_web_tagline_v9);
-                                  if (parsed.avn_web_logo_v8) setWebLogo(parsed.avn_web_logo_v8);
-                                  if (parsed.avn_web_logo_type_v8) setWebLogoType(parsed.avn_web_logo_type_v8);
-                                  if (parsed.avn_ticker_message_v7) setTickerMessage(parsed.avn_ticker_message_v7);
-                                  if (parsed.avn_show_ticker_v7) setShowTicker(parsed.avn_show_ticker_v7);
-                                  if (parsed.avn_revenue_transactions_v9) setRevenueTransactions(parsed.avn_revenue_transactions_v9);
-                                  
-                                  setToastMessage('⚡ กู้คืนข้อมูลระบบทั้งหมดสำเร็จแล้ว!');
-                                }
-                              });
-                            } catch {
-                              alert('เกิดข้อผิดพลาดในการอ่านไฟล์ JSON กรุณาตรวจสอบไฟล์');
-                            }
-                          };
-                          reader.readAsText(file);
-                          e.target.value = '';
-                        }}
-                        className="hidden"
-                      />
-                      <label
-                        htmlFor="system-backup-import"
-                        className="w-full bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-750 text-slate-300 text-xs font-bold h-10 rounded-xl cursor-pointer transition-all flex items-center justify-center gap-1.5"
-                      >
-                        📥 นำเข้าข้อมูลระบบ (JSON)
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
 
             {/* Inbox Reports Manager */}
@@ -5314,310 +4568,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Catalog Manager Table */}
-            <div className="glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
-              <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
-                <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
-                  🗄️ ตัวจัดการแคตตาล็อกระบบหลัก ({officialGames.length})
-                </h3>
-
-                <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-                  {selectedAdminGameIds.length > 0 && (
-                    <button
-                      onClick={handleSendBulkUpdateNotification}
-                      className="bg-amber-600 hover:bg-amber-500 text-white font-bold px-4 h-10 rounded-xl flex items-center gap-1.5 text-xs transition-all cursor-pointer shrink-0 animate-fade-in shadow-lg shadow-amber-900/20"
-                    >
-                      📢 ส่งแจ้งเตือนอัปเดต ({selectedAdminGameIds.length} เกม) ให้สมาชิก Premium
-                    </button>
-                  )}
-                  <input
-                    type="text"
-                    placeholder="ค้นหาชื่อเกมเพื่อจัดการ..."
-                    value={adminCatalogSearch}
-                    onChange={(e) => {
-                      setAdminCatalogSearch(e.target.value);
-                      setSelectedAdminGameIds([]);
-                    }}
-                    className="glass-input h-10 px-4 text-xs rounded-xl focus:outline-none w-full sm:w-64"
-                  />
-                  <button
-                    onClick={() => {
-                      handleResetAdminForm();
-                      setAdminFormMode('add');
-                      setAdminAddGameOpen(true);
-                    }}
-                    className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 h-10 rounded-xl flex items-center gap-1.5 text-xs transition-all cursor-pointer shrink-0 animate-fade-in"
-                  >
-                    ➕ เพิ่มเกมใหม่
-                  </button>
-
-                  <div className="relative shrink-0 animate-fade-in">
-                    <input
-                      type="file"
-                      accept=".json"
-                      id="admin-import-games-json"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files[0];
-                        if (!file) return;
-                        
-                        const reader = new FileReader();
-                        reader.onload = (event) => {
-                          try {
-                            const importedGames = JSON.parse(event.target.result);
-                            
-                            // Validate that it's an array and check basic structure
-                            if (!Array.isArray(importedGames)) {
-                              alert('รูปแบบไฟล์ไม่ถูกต้อง คาดหวังข้อมูลที่เป็น Array ของเกม');
-                              return;
-                            }
-                            
-                            if (importedGames.length > 0 && (!importedGames[0].title || !importedGames[0].id)) {
-                              alert('รูปแบบไฟล์ไม่ถูกต้อง ข้อมูลในอาร์เรย์ต้องมีฟิลด์ title และ id/slug');
-                              return;
-                            }
-                            
-                            setCustomConfirm({
-                              title: 'นำเข้าข้อมูลแคตตาล็อก',
-                              message: `คุณต้องการนำเข้าเกมจำนวน ${importedGames.length} รายการจากไฟล์นี้หรือไม่?\n(เกมที่มีชื่อหรือ ID/Slug ซ้ำจะถูกเขียนทับด้วยข้อมูลจากไฟล์นี้)`,
-                              onConfirm: () => {
-                                setOfficialGames(prev => {
-                                  const merged = [...prev];
-                                  let addedCount = 0;
-                                  let updatedCount = 0;
-                                  
-                                  importedGames.forEach(newGame => {
-                                    const idx = merged.findIndex(g => 
-                                      g.id.toLowerCase() === newGame.id.toLowerCase() || 
-                                      g.title.trim().toLowerCase() === newGame.title.trim().toLowerCase()
-                                    );
-                                    
-                                    const mapped = {
-                                      id: newGame.id,
-                                      title: newGame.title,
-                                      developer: newGame.developer || 'Unknown',
-                                      version: newGame.version || '0.1.0',
-                                      overview: newGame.overview || '',
-                                      patreonUrl: newGame.patreonUrl || '',
-                                      buyUrl: newGame.buyUrl || '',
-                                      socialUrl: newGame.socialUrl || '',
-                                      tags: newGame.tags || [],
-                                      rating: typeof newGame.rating === 'number' ? newGame.rating : 5.0,
-                                      coverUrl: newGame.coverUrl || '',
-                                      screenshots: newGame.screenshots || []
-                                    };
-                                    
-                                    if (idx !== -1) {
-                                      merged[idx] = { ...merged[idx], ...mapped };
-                                      updatedCount++;
-                                    } else {
-                                      merged.push(mapped);
-                                      addedCount++;
-                                    }
-
-                                    if (isFirebaseEnabled) {
-                                      saveOfficialGame(mapped)
-                                        .catch(err => console.error('Error saving imported game to Firestore:', err));
-                                    }
-                                  });
-                                  
-                                  alert(`นำเข้าข้อมูลเรียบร้อยแล้ว!\n- อัปเดตข้อมูลเกมเดิม: ${updatedCount} รายการ\n- เพิ่มเกมใหม่: ${addedCount} รายการ`);
-                                  return merged;
-                                });
-                              }
-                            });
-                          } catch (err) {
-                            alert('เกิดข้อผิดพลาดในการอ่านไฟล์ JSON: ' + err.message);
-                          }
-                        };
-                        reader.readAsText(file);
-                        // Reset input value to allow uploading same file again
-                        e.target.value = '';
-                      }}
-                    />
-                    <label
-                      htmlFor="admin-import-games-json"
-                      className="bg-slate-800 hover:bg-slate-700 border border-slate-700/60 text-slate-200 font-bold px-4 h-10 rounded-xl flex items-center justify-center gap-1.5 text-xs transition-all cursor-pointer shrink-0"
-                    >
-                      📥 นำเข้าแคตตาล็อก (JSON)
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              {/* Table Container */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-900 text-slate-400 font-bold">
-                      <th className="pb-3 pl-2 w-10">
-                        <input
-                          type="checkbox"
-                          checked={
-                            adminCatalogPaginatedList.length > 0 &&
-                            adminCatalogPaginatedList.every((game) => selectedAdminGameIds.includes(game.id))
-                          }
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              const visibleIds = adminCatalogPaginatedList.map((g) => g.id);
-                              setSelectedAdminGameIds((prev) => {
-                                const newSelection = new Set([...prev, ...visibleIds]);
-                                return Array.from(newSelection);
-                              });
-                            } else {
-                              const visibleIds = adminCatalogPaginatedList.map((g) => g.id);
-                              setSelectedAdminGameIds((prev) =>
-                                prev.filter((id) => !visibleIds.includes(id))
-                              );
-                            }
-                          }}
-                          className="w-4 h-4 rounded border-slate-800 text-blue-600 focus:ring-blue-500 bg-slate-900 cursor-pointer"
-                        />
-                      </th>
-                      <th className="pb-3">รูปปก</th>
-                      <th className="pb-3">ชื่อเกม</th>
-                      <th className="pb-3">ผู้พัฒนา</th>
-                      <th className="pb-3">เวอร์ชัน</th>
-                      <th className="pb-3">คะแนนรีวิว</th>
-                      <th className="pb-3 text-right pr-2">การจัดการ</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-900/60">
-                    {adminCatalogPaginatedList.map((game) => (
-                      <tr key={game.id} className="hover:bg-slate-900/30 transition-colors">
-                        <td className="py-2.5 pl-2 w-10">
-                          <input
-                            type="checkbox"
-                            checked={selectedAdminGameIds.includes(game.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedAdminGameIds((prev) => [...prev, game.id]);
-                              } else {
-                                setSelectedAdminGameIds((prev) =>
-                                  prev.filter((id) => id !== game.id)
-                                );
-                              }
-                            }}
-                            className="w-4 h-4 rounded border-slate-800 text-blue-600 focus:ring-blue-500 bg-slate-900 cursor-pointer"
-                          />
-                        </td>
-                        <td className="py-2.5">
-                          <div className="w-8 h-10 rounded-lg overflow-hidden custom-placeholder border border-white/5">
-                            {game.coverUrl ? (
-                              <img src={game.coverUrl} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-[8px] font-black text-slate-650">
-                                {getInitials(game.title)}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="py-2.5 font-bold text-slate-200">{game.title}</td>
-                        <td className="py-2.5 text-slate-400">{game.developer}</td>
-                        <td className="py-2.5 text-blue-400 font-extrabold">v{game.version}</td>
-                        <td className="py-2.5 font-bold text-amber-400">★ {game.rating.toFixed(1)}</td>
-                        <td className="py-2.5 text-right pr-2">
-                          <div className="inline-flex items-center gap-1">
-                            <button
-                              onClick={() => handleSendUpdateNotification(game)}
-                              className="w-7 h-7 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-400 rounded flex items-center justify-center cursor-pointer"
-                              title="แจ้งเตือนอัปเดตไปยังผู้ใช้ Premium"
-                            >
-                              📢
-                            </button>
-                            <button
-                              onClick={() => {
-                                handleSelectGameForEdit(game);
-                                setAdminEditGameOpen(true);
-                              }}
-                              className="w-7 h-7 bg-slate-900 hover:bg-slate-800 rounded border border-slate-800 flex items-center justify-center cursor-pointer"
-                              title="แก้ไขเกม"
-                            >
-                              ✏️
-                            </button>
-                            <button
-                              onClick={() => handleDeleteOfficialGame(game.id)}
-                              className="w-7 h-7 bg-red-955/25 border border-red-900/30 text-red-400 hover:bg-red-900/40 rounded flex items-center justify-center cursor-pointer"
-                              title="ลบเกม"
-                            >
-                              🗑️
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Pagination Controls */}
-              {adminCatalogTotalPages > 1 && (
-                <div className="flex flex-col sm:flex-row items-center justify-between border-t border-slate-900/60 pt-4 mt-2 gap-3">
-                  <div className="text-xs text-slate-400">
-                    แสดง {(adminCatalogPage - 1) * adminCatalogPageSize + 1} - {Math.min(adminCatalogPage * adminCatalogPageSize, adminFilteredCatalog.length)} จาก {adminFilteredCatalog.length} เกม
-                  </div>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => setAdminCatalogPage(1)}
-                      disabled={adminCatalogPage === 1}
-                      className="px-2.5 h-8 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-xs font-bold cursor-pointer"
-                    >
-                      หน้าแรก
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAdminCatalogPage(prev => Math.max(prev - 1, 1))}
-                      disabled={adminCatalogPage === 1}
-                      className="px-2.5 h-8 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-xs font-bold flex items-center justify-center cursor-pointer"
-                    >
-                      ‹ ย้อนกลับ
-                    </button>
-                    
-                    {/* Render page numbers */}
-                    {Array.from({ length: adminCatalogTotalPages }, (_, i) => i + 1)
-                      .filter(p => p === 1 || p === adminCatalogTotalPages || Math.abs(p - adminCatalogPage) <= 1)
-                      .map((p, idx, arr) => {
-                        const showEllipsisBefore = idx > 0 && p - arr[idx - 1] > 1;
-                        return (
-                          <Fragment key={p}>
-                            {showEllipsisBefore && <span className="text-slate-655 text-xs px-1 select-none">...</span>}
-                            <button
-                              type="button"
-                              onClick={() => setAdminCatalogPage(p)}
-                              className={`w-8 h-8 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                                adminCatalogPage === p
-                                  ? 'bg-blue-600 text-white font-extrabold shadow-lg shadow-blue-500/20'
-                                  : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200'
-                              }`}
-                            >
-                              {p}
-                            </button>
-                          </Fragment>
-                        );
-                      })}
-
-                    <button
-                      type="button"
-                      onClick={() => setAdminCatalogPage(prev => Math.min(prev + 1, adminCatalogTotalPages))}
-                      disabled={adminCatalogPage === adminCatalogTotalPages}
-                      className="px-2.5 h-8 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-xs font-bold flex items-center justify-center cursor-pointer"
-                    >
-                      ถัดไป ›
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAdminCatalogPage(adminCatalogTotalPages)}
-                      disabled={adminCatalogPage === adminCatalogTotalPages}
-                      className="px-2.5 h-8 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-xs font-bold cursor-pointer"
-                    >
-                      หน้าสุดท้าย
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
             {/* Translated Games Management Panel */}
             <div className="glass-panel p-5.5 rounded-3xl flex flex-col gap-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -5626,7 +4576,7 @@ export default function App() {
                     🇹🇭 จัดการบทความเกมแปลไทย ({translatedGames.length})
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    จัดการข้อมูลหน้าปกเกม อัปเดตเนื้อหาบทความความคืบหน้างานแปล และลิงก์ดาวน์โหลดสำหรับเกมแปลไทย
+                    จัดการข้อมูลหน้าปกเกม เปิด/ปิดการแสดงผลบทความ กำหนดประเภทฟรี/พรีเมียม และสถิติยอดวิว/ดาวน์โหลด
                   </p>
                 </div>
                 <button
@@ -5646,17 +4596,18 @@ export default function App() {
                   <thead>
                     <tr className="border-b border-slate-900 text-slate-400 font-bold">
                       <th className="pb-3 pl-2 w-16">ปกเกม</th>
-                      <th className="pb-3">ชื่อเกม</th>
-                      <th className="pb-3 w-32">เวอร์ชันงานแปล</th>
-                      <th className="pb-3 w-44">ตัวอย่างเนื้อหา</th>
+                      <th className="pb-3">ชื่อเกม & เวอร์ชัน</th>
+                      <th className="pb-3 w-28">ประเภทสิทธิ์</th>
+                      <th className="pb-3 w-32 text-center">สถานะแสดงผล</th>
+                      <th className="pb-3 w-36 text-center">สถิติการใช้งาน</th>
                       <th className="pb-3 text-right pr-2 w-28">การจัดการ</th>
                     </tr>
                   </thead>
                   <tbody>
                     {translatedGames.length === 0 ? (
                       <tr>
-                        <td colSpan="5" className="py-6 text-center text-slate-500 italic">
-                          ยังไม่มีข้อมูลบทความแปลไทย (รันอยู่ในโหมดพรีวิวโลคัล)
+                        <td colSpan="6" className="py-6 text-center text-slate-500 italic">
+                          ยังไม่มีข้อมูลบทความแปลไทย
                         </td>
                       </tr>
                     ) : (
@@ -5674,15 +4625,43 @@ export default function App() {
                             </div>
                           </td>
                           <td className="py-2.5 font-bold text-slate-200">
-                            {game.title}
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-slate-100">{game.title}</span>
+                              <span className="text-[10px] text-blue-400 font-mono">{game.version}</span>
+                            </div>
                           </td>
                           <td className="py-2.5">
-                            <span className="bg-blue-950 text-blue-400 border border-blue-500/20 text-[9px] font-bold px-2 py-0.5 rounded-md">
-                              {game.version}
-                            </span>
+                            {game.access_type === 'premium' ? (
+                              <span className="bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[10px] font-black px-2.5 py-1 rounded-full inline-flex items-center gap-1">
+                                👑 พรีเมียม
+                              </span>
+                            ) : (
+                              <span className="bg-blue-500/15 text-blue-400 border border-blue-500/30 text-[10px] font-black px-2.5 py-1 rounded-full inline-flex items-center gap-1">
+                                🎁 ฟรี
+                              </span>
+                            )}
                           </td>
-                          <td className="py-2.5 text-[10px] text-slate-400 max-w-[200px] truncate pr-4">
-                            {game.description ? game.description.replace(/\n/g, ' ').substring(0, 50) + '...' : '-'}
+                          <td className="py-2.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleTogglePublishGame(game)}
+                              className={`px-3 py-1 rounded-full text-[10px] font-black transition-all cursor-pointer border flex items-center gap-1.5 mx-auto ${
+                                game.is_published !== false
+                                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/25'
+                                  : 'bg-rose-500/15 border-rose-500/40 text-rose-400 hover:bg-rose-500/25'
+                              }`}
+                              title="คลิกเพื่อสลับสถานะเปิด/ปิดบทความ"
+                            >
+                              <span className={`w-2 h-2 rounded-full ${game.is_published !== false ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`}></span>
+                              <span>{game.is_published !== false ? '🟢 เผยแพร่' : '🔴 ซ่อน'}</span>
+                            </button>
+                          </td>
+                          <td className="py-2.5 text-center">
+                            <div className="inline-flex items-center gap-2 bg-slate-900/60 px-2.5 py-1 rounded-lg border border-slate-800 text-[10px] font-mono">
+                              <span title="ยอดวิว">👁️ {game.views || 0}</span>
+                              <span className="text-slate-600">|</span>
+                              <span title="ยอดดาวน์โหลด" className="text-emerald-400">📥 {game.downloads || 0}</span>
+                            </div>
                           </td>
                           <td className="py-2.5 text-right pr-2">
                             <div className="flex justify-end gap-1.5">
@@ -7094,9 +6073,13 @@ export default function App() {
                   title: formData.get('title') || 'Untitled',
                   cover_url: formData.get('cover_url') || '',
                   version: formData.get('version') || 'v1.0 แปลไทย',
+                  access_type: formData.get('access_type') || 'free',
+                  is_published: formData.get('is_published') === 'true',
                   description: description,
                   download_pc: '',
-                  download_mobile: ''
+                  download_mobile: '',
+                  views: 0,
+                  downloads: 0
                 };
 
                 saveTranslatedGame(newGame).then(() => {
@@ -7140,6 +6123,31 @@ export default function App() {
                     className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
                     placeholder="เช่น https://..."
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">ประเภทสิทธิ์การเข้าถึง (Access Type) *</label>
+                  <select
+                    name="access_type"
+                    defaultValue="free"
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200 bg-slate-900 cursor-pointer"
+                  >
+                    <option value="free">🎁 เกมแปลไทยฟรี (ทุกคนเข้าถึงได้)</option>
+                    <option value="premium">👑 เกมแปลไทยพรีเมียม (เฉพาะสมาชิก Premium)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">สถานะการแสดงผล (Publish Status) *</label>
+                  <select
+                    name="is_published"
+                    defaultValue="true"
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200 bg-slate-900 cursor-pointer"
+                  >
+                    <option value="true">🟢 เผยแพร่ทันที (แสดงบนหน้าเว็บ)</option>
+                    <option value="false">🔴 ซ่อน / แบบร่าง (ไม่แสดงให้ผู้ใช้เห็น)</option>
+                  </select>
                 </div>
               </div>
 
@@ -7363,6 +6371,8 @@ export default function App() {
                   title: formData.get('title') || 'Untitled',
                   cover_url: formData.get('cover_url') || '',
                   version: formData.get('version') || 'v1.0 แปลไทย',
+                  access_type: formData.get('access_type') || 'free',
+                  is_published: formData.get('is_published') === 'true',
                   description: description,
                   download_pc: '',
                   download_mobile: ''
@@ -7414,6 +6424,31 @@ export default function App() {
                     className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
                     placeholder="เช่น https://..."
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">ประเภทสิทธิ์การเข้าถึง (Access Type) *</label>
+                  <select
+                    name="access_type"
+                    defaultValue={editingTranslatedGame.access_type || 'free'}
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200 bg-slate-900 cursor-pointer"
+                  >
+                    <option value="free">🎁 เกมแปลไทยฟรี (ทุกคนเข้าถึงได้)</option>
+                    <option value="premium">👑 เกมแปลไทยพรีเมียม (เฉพาะสมาชิก Premium)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 font-bold block mb-1">สถานะการแสดงผล (Publish Status) *</label>
+                  <select
+                    name="is_published"
+                    defaultValue={editingTranslatedGame.is_published !== false ? 'true' : 'false'}
+                    className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200 bg-slate-900 cursor-pointer"
+                  >
+                    <option value="true">🟢 เผยแพร่ทันที (แสดงบนหน้าเว็บ)</option>
+                    <option value="false">🔴 ซ่อน / แบบร่าง (ไม่แสดงให้ผู้ใช้เห็น)</option>
+                  </select>
                 </div>
               </div>
 
@@ -8237,26 +7272,14 @@ export default function App() {
               {/* Benefits list */}
               <div className="text-left bg-slate-950/60 border border-slate-900 rounded-2xl p-4 flex flex-col gap-2.5">
                 <span className="text-xs font-bold text-amber-400 block mb-1">✨ สิ่งที่คุณจะได้รับเมื่อสมัคร Premium:</span>
-                <ul className="text-[11px] text-slate-300 flex flex-col gap-2 leading-relaxed">
+                <ul className="text-[11px] text-slate-300 flex flex-col gap-2.5 leading-relaxed">
                   <li className="flex items-start gap-2">
                     <span className="text-amber-500 font-bold">1.</span>
-                    <span>สามารถบันทึกสถานะของเกมได้ไม่จำกัด (จากปกติฟรีได้แค่ 5 เกม)</span>
+                    <span>ดาวน์โหลดเกมแปลไทยเวอร์ชันล่าสุดได้ทุกเกม (ปลดล็อกแท็บเกมแปลไทยพรีเมียมและบทความพิเศษ)</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-amber-500 font-bold">2.</span>
-                    <span>ระบบแจ้งเตือนเกมผ่านกระดิ่งเมื่อมีเวอร์ชันใหม่ออกมาให้เล่น</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-amber-500 font-bold">3.</span>
-                    <span>ร่วมสนับสนุนการพัฒนาฟีเจอร์ใหม่ๆ เพื่อประสบการณ์ผู้ใช้ที่ดียิ่งขึ้น</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-amber-500 font-bold">4.</span>
-                    <span>ช่วยสนับสนุนค่ารันเซิร์ฟเวอร์หลักของระบบให้ยังคงเปิดอยู่ได้</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-amber-500 font-bold">5.</span>
-                    <span>เป็นค่ากาแฟและกำลังใจเล็กๆ น้อยๆ ให้แอดมินผู้พัฒนา</span>
+                    <span>สนับสนุนค่ากาแฟและกำลังใจเล็กๆ น้อยๆ ให้แอดมินผู้พัฒนา</span>
                   </li>
                 </ul>
               </div>
