@@ -6073,7 +6073,7 @@ export default function App() {
                   title: formData.get('title') || 'Untitled',
                   cover_url: formData.get('cover_url') || '',
                   version: formData.get('version') || 'v1.0 แปลไทย',
-                  access_type: formData.get('access_type') || 'free',
+                  access_type: formData.get('access_type') || 'premium',
                   is_published: formData.get('is_published') === 'true',
                   description: description,
                   download_pc: '',
@@ -6131,7 +6131,7 @@ export default function App() {
                   <label className="text-xs text-slate-400 font-bold block mb-1">ประเภทสิทธิ์การเข้าถึง (Access Type) *</label>
                   <select
                     name="access_type"
-                    defaultValue="free"
+                    defaultValue="premium"
                     className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200 bg-slate-900 cursor-pointer"
                   >
                     <option value="free">🎁 เกมแปลไทยฟรี (ทุกคนเข้าถึงได้)</option>
@@ -6371,7 +6371,7 @@ export default function App() {
                   title: formData.get('title') || 'Untitled',
                   cover_url: formData.get('cover_url') || '',
                   version: formData.get('version') || 'v1.0 แปลไทย',
-                  access_type: formData.get('access_type') || 'free',
+                  access_type: formData.get('access_type') || 'premium',
                   is_published: formData.get('is_published') === 'true',
                   description: description,
                   download_pc: '',
@@ -6432,7 +6432,7 @@ export default function App() {
                   <label className="text-xs text-slate-400 font-bold block mb-1">ประเภทสิทธิ์การเข้าถึง (Access Type) *</label>
                   <select
                     name="access_type"
-                    defaultValue={editingTranslatedGame.access_type || 'free'}
+                    defaultValue={editingTranslatedGame.access_type || 'premium'}
                     className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200 bg-slate-900 cursor-pointer"
                   >
                     <option value="free">🎁 เกมแปลไทยฟรี (ทุกคนเข้าถึงได้)</option>

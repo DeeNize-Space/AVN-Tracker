@@ -622,7 +622,7 @@ export async function getTranslatedGames() {
     views: g.views || 0,
     downloads: g.downloads || 0,
     is_published: g.is_published !== undefined ? g.is_published : true,
-    access_type: g.access_type || 'free',
+    access_type: g.access_type || 'premium',
     createdAt: g.created_at || '',
     updatedAt: g.updated_at || ''
   }));
@@ -640,7 +640,7 @@ export async function saveTranslatedGame(game) {
     views: game.views || 0,
     downloads: game.downloads || 0,
     is_published: game.is_published !== undefined ? !!game.is_published : true,
-    access_type: game.access_type || 'free',
+    access_type: game.access_type || 'premium',
     updated_at: new Date().toISOString()
   };
 
