@@ -294,6 +294,22 @@ const parseInlineStyles = (text) => {
   });
 };
 
+// URL Routing Helpers
+const getTabFromPathname = (pathname) => {
+  if (!pathname) return 'premium';
+  const cleanPath = pathname.toLowerCase().replace(/\/+$/, '');
+  if (cleanPath === '/free-translated-game') return 'free';
+  if (cleanPath === '/admin') return 'admin';
+  if (cleanPath === '/premium-translated-game') return 'premium';
+  return 'premium'; // Default home is premium
+};
+
+const getPathFromTab = (tab) => {
+  if (tab === 'free') return '/free-translated-game';
+  if (tab === 'admin') return '/admin';
+  return '/premium-translated-game';
+};
+
 // Line-by-line Markdown Parser
 const renderMarkdown = (content, onDownloadClick) => {
   if (!content) return null;
@@ -630,7 +646,22 @@ export default function App() {
 
 
   // --- UI STATE ---
-  const [activeTab, setActiveTab] = useState('free'); // 'online', 'local', 'admin'
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return getTabFromPathname(window.location.pathname);
+    }
+    return 'premium';
+  });
+
+  // Sync URL when browser Back/Forward is clicked
+  useEffect(() => {
+    const handlePopState = () => {
+      const targetTab = getTabFromPathname(window.location.pathname);
+      setActiveTab(targetTab);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
   const [searchQuery, setSearchQuery] = useState('');
   const [catalogPage, setCatalogPage] = useState(1);
   
@@ -1740,7 +1771,7 @@ export default function App() {
 
 
 
-  const handleTabChange = (tab) => {
+  const handleTabChange = (tab, pushHistory = true) => {
     setActiveTab(tab);
     setSearchQuery('');
     setSelectedCatalogTags([]);
@@ -1753,6 +1784,12 @@ export default function App() {
       setTempShowTicker(showTicker);
       if (isFirebaseEnabled) {
         fetchEngagementData(true);
+      }
+    }
+    if (pushHistory && typeof window !== 'undefined') {
+      const targetPath = getPathFromTab(tab);
+      if (window.location.pathname !== targetPath) {
+        window.history.pushState({ tab }, '', targetPath);
       }
     }
   };
@@ -2851,17 +2888,6 @@ export default function App() {
           {/* Navigation Tabs */}
           <nav className="flex items-center gap-1.5 sm:gap-2">
             <button
-              onClick={() => handleTabChange('free')}
-              className={`text-xs sm:text-sm px-3.5 sm:px-4 py-2.5 rounded-xl font-bold transition-all h-11 flex items-center gap-1.5 cursor-pointer ${
-                activeTab === 'free'
-                  ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40 shadow-sm shadow-blue-500/10'
-                  : 'text-slate-400 hover:text-slate-200 border border-transparent'
-              }`}
-            >
-              🎁 เกมแปลไทยฟรี
-            </button>
-
-            <button
               onClick={() => handleTabChange('premium')}
               className={`text-xs sm:text-sm px-3.5 sm:px-4 py-2.5 rounded-xl font-bold transition-all h-11 flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'premium'
@@ -2870,6 +2896,17 @@ export default function App() {
               }`}
             >
               👑 เกมแปลไทยพรีเมียม
+            </button>
+
+            <button
+              onClick={() => handleTabChange('free')}
+              className={`text-xs sm:text-sm px-3.5 sm:px-4 py-2.5 rounded-xl font-bold transition-all h-11 flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'free'
+                  ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40 shadow-sm shadow-blue-500/10'
+                  : 'text-slate-400 hover:text-slate-200 border border-transparent'
+              }`}
+            >
+              🎁 เกมแปลไทยฟรี
             </button>
 
             {subscriptionRole === 'free' && (
