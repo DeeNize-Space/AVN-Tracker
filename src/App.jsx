@@ -354,9 +354,9 @@ const renderMarkdown = (content, onDownloadClick) => {
             href={btnUrl}
             target="_blank"
             rel="noopener noreferrer"
-            onClick={() => {
+            onClick={(e) => {
               if (onDownloadClick) {
-                onDownloadClick(btnUrl, btnText, isDownload);
+                onDownloadClick(btnUrl, btnText, isDownload, e);
               }
             }}
             className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 text-white font-extrabold text-xs py-2.5 px-5 rounded-xl shadow-lg transition-all active:scale-98 cursor-pointer ${btnStyle}`}
@@ -3174,6 +3174,11 @@ export default function App() {
             } else if (currentBanner.target_game_id) {
               const targetGame = translatedGames.find(g => g.id === currentBanner.target_game_id);
               if (targetGame) {
+                if (isGuest) {
+                  setIsAuthModalOpen(true);
+                  setToastMessage('🔐 กรุณาเข้าสู่ระบบด้วย Google หรือสมัครสมาชิกก่อนเข้าดูเกม');
+                  return;
+                }
                 const isPremium = subscriptionRole === 'premium' || isAdmin;
                 if (targetGame.access_type === 'premium' && !isPremium) {
                   handleOpenUpsell();
@@ -3319,6 +3324,11 @@ export default function App() {
                     <div
                       key={game.id}
                       onClick={() => {
+                        if (isGuest) {
+                          setIsAuthModalOpen(true);
+                          setToastMessage('🔐 กรุณาเข้าสู่ระบบด้วย Google หรือสมัครสมาชิกก่อนเข้าดูบทความและดาวน์โหลดเกม');
+                          return;
+                        }
                         setSelectedTranslatedGame({
                           ...game,
                           views: (game.views || 0) + 1
@@ -3394,9 +3404,24 @@ export default function App() {
 
                         <button
                           type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isGuest) {
+                              setIsAuthModalOpen(true);
+                              setToastMessage('🔐 กรุณาเข้าสู่ระบบด้วย Google หรือสมัครสมาชิกก่อนเข้าดูบทความและดาวน์โหลดเกม');
+                              return;
+                            }
+                            setSelectedTranslatedGame({
+                              ...game,
+                              views: (game.views || 0) + 1
+                            });
+                            setIsTranslatedModalOpen(true);
+                            incrementTranslatedGameViews(game.id).catch(err => console.error("Error incrementing views:", err));
+                            setTranslatedGames(prev => prev.map(g => g.id === game.id ? { ...g, views: (g.views || 0) + 1 } : g));
+                          }}
                           className="w-full bg-slate-900/60 hover:bg-blue-600 text-slate-200 hover:text-white border border-slate-800 hover:border-blue-500 text-xs font-bold py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-2"
                         >
-                          📖 อ่านรีวิว & ดาวน์โหลด
+                          {isGuest ? '🔐 เข้าสู่ระบบเพื่ออ่าน & ดาวน์โหลด' : '📖 อ่านรีวิว & ดาวน์โหลด'}
                         </button>
                       </div>
                     </div>
@@ -3660,7 +3685,13 @@ export default function App() {
                           </div>
                         </div>
                       )}
-                      {renderMarkdown(parsed.description, (btnUrl, btnText, isDownload) => {
+                      {renderMarkdown(parsed.description, (btnUrl, btnText, isDownload, e) => {
+                        if (isGuest) {
+                          if (e) e.preventDefault();
+                          setIsAuthModalOpen(true);
+                          setToastMessage('🔐 กรุณาเข้าสู่ระบบด้วย Google หรือสมัครสมาชิกก่อนดาวน์โหลด');
+                          return;
+                        }
                         if (isDownload && selectedTranslatedGame) {
                           incrementTranslatedGameDownloads(selectedTranslatedGame.id).catch(err => console.error("Error updating download count:", err));
                           setSelectedTranslatedGame(prev => prev ? { ...prev, downloads: (prev.downloads || 0) + 1 } : null);
@@ -7163,7 +7194,7 @@ export default function App() {
                 เข้าสู่ระบบ / สมัครสมาชิก
               </h2>
               <p className="text-xs text-slate-400 mt-1">
-                กรุณาเข้าสู่ระบบด้วย Google เพื่อเปิดใช้งานคลังเกมส่วนตัวและร่วมโหวต
+                เข้าสู่ระบบด้วย Google เพื่อเข้าอ่านบทความและดาวน์โหลดเกมแปลไทย
               </p>
             </div>
 
