@@ -712,6 +712,19 @@ export default function App() {
     return 'premium';
   });
 
+  // Translated Games states
+  const [translatedGames, setTranslatedGames] = useState(() => {
+    const saved = localStorage.getItem('avn_translated_games_preview');
+    return saved ? JSON.parse(saved) : initialTranslatedGames;
+  });
+  const [selectedTranslatedGame, setSelectedTranslatedGame] = useState(null);
+  const [isTranslatedModalOpen, setIsTranslatedModalOpen] = useState(false);
+  const [isAddTranslatedOpen, setIsAddTranslatedOpen] = useState(false);
+  const [isEditTranslatedOpen, setIsEditTranslatedOpen] = useState(false);
+  const [editingTranslatedGame, setEditingTranslatedGame] = useState(null);
+  const [modalProgressShow, setModalProgressShow] = useState(false);
+  const [modalProgressBars, setModalProgressBars] = useState([]); // Array of { name, percentage }
+
   const [activeGameSlug, setActiveGameSlug] = useState(() => {
     if (typeof window !== 'undefined') {
       return getSlugFromPathname(window.location.pathname);
@@ -753,19 +766,6 @@ export default function App() {
   const [catalogTagSearch, setCatalogTagSearch] = useState('');
   const [showTagFilterCatalog, setShowTagFilterCatalog] = useState(false);
   const [catalogSort, setCatalogSort] = useState('date-desc');
-
-  // Translated Games states
-  const [translatedGames, setTranslatedGames] = useState(() => {
-    const saved = localStorage.getItem('avn_translated_games_preview');
-    return saved ? JSON.parse(saved) : initialTranslatedGames;
-  });
-  const [selectedTranslatedGame, setSelectedTranslatedGame] = useState(null);
-  const [isTranslatedModalOpen, setIsTranslatedModalOpen] = useState(false);
-  const [isAddTranslatedOpen, setIsAddTranslatedOpen] = useState(false);
-  const [isEditTranslatedOpen, setIsEditTranslatedOpen] = useState(false);
-  const [editingTranslatedGame, setEditingTranslatedGame] = useState(null);
-  const [modalProgressShow, setModalProgressShow] = useState(false);
-  const [modalProgressBars, setModalProgressBars] = useState([]); // Array of { name, percentage }
 
   // --- CAROUSEL BANNERS & VOTING SYSTEM STATES ---
   const [banners, setBanners] = useState([]);
