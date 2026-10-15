@@ -65,47 +65,65 @@ function crc16(data) {
 }
 
 const parseGameDescription = (desc) => {
-  if (!desc) return { description: '', progress_config: { show: false, bars: [] } };
-  
+  if (!desc) return { description: '', progress_config: { show: false, bars: [] }, slug: '' };
+
   // 1. Check for markdown json-progress code block
   const codeBlockMatch = desc.match(/```json-progress\s*([\s\S]*?)\s*```/);
   if (codeBlockMatch) {
     const cleanDesc = desc.replace(/```json-progress[\s\S]*?```/g, '').trim();
     try {
-      const progress_config = JSON.parse(codeBlockMatch[1].trim());
-      return { description: cleanDesc, progress_config };
+      const configObj = JSON.parse(codeBlockMatch[1].trim());
+      return {
+        description: cleanDesc,
+        progress_config: { show: configObj.show || false, bars: configObj.bars || [] },
+        slug: configObj.slug || ''
+      };
     } catch (e) {
       console.error('Failed to parse progress config from code block:', e);
     }
   }
-  
+
   // 2. Check for legacy markers
   const markerStart = '===PROGRESS_CONFIG_START===';
   const markerEnd = '===PROGRESS_CONFIG_END===';
   const startIndex = desc.indexOf(markerStart);
   const endIndex = desc.indexOf(markerEnd);
-  
+
   if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
     const cleanDesc = desc.substring(0, startIndex).trim();
     const configStr = desc.substring(startIndex + markerStart.length, endIndex).trim();
     try {
-      const progress_config = JSON.parse(configStr);
-      return { description: cleanDesc, progress_config };
+      const configObj = JSON.parse(configStr);
+      return {
+        description: cleanDesc,
+        progress_config: { show: configObj.show || false, bars: configObj.bars || [] },
+        slug: configObj.slug || ''
+      };
     } catch (e) {
       console.error('Failed to parse progress config from markers:', e);
     }
   }
-  
-  return { description: desc, progress_config: { show: false, bars: [] } };
+
+  return { description: desc, progress_config: { show: false, bars: [] }, slug: '' };
 };
 
-const serializeGameDescription = (cleanDesc, progressConfig) => {
-  if (!progressConfig || !progressConfig.show || !progressConfig.bars || progressConfig.bars.length === 0) {
-    // strip any existing config blocks from cleanDesc
-    return cleanDesc.replace(/```json-progress[\s\S]*?```/g, '').replace(/===PROGRESS_CONFIG_START===[\s\S]*?===PROGRESS_CONFIG_END===/g, '').trim();
+const serializeGameDescription = (cleanDesc, progressConfig, slug = '') => {
+  const strippedDesc = cleanDesc
+    .replace(/```json-progress[\s\S]*?```/g, '')
+    .replace(/===PROGRESS_CONFIG_START===[\s\S]*?===PROGRESS_CONFIG_END===/g, '')
+    .trim();
+
+  const configObj = {
+    show: progressConfig?.show || false,
+    bars: progressConfig?.bars || [],
+    slug: slug ? slug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '') : ''
+  };
+
+  if (!configObj.show && (!configObj.bars || configObj.bars.length === 0) && !configObj.slug) {
+    return strippedDesc;
   }
-  const strippedDesc = cleanDesc.replace(/```json-progress[\s\S]*?```/g, '').replace(/===PROGRESS_CONFIG_START===[\s\S]*?===PROGRESS_CONFIG_END===/g, '').trim();
-  return `${strippedDesc}\n\n\`\`\`json-progress\n${JSON.stringify(progressConfig, null, 2)}\n\`\`\``;
+
+  return `${strippedDesc}\n\n\`\`\`json-progress\n${JSON.stringify(configObj, null, 2)}\n\`\`\``;
 };
 
 // Generate PromptPay EMVCo string for scannable QR
@@ -298,10 +316,51 @@ const parseInlineStyles = (text) => {
 const getTabFromPathname = (pathname) => {
   if (!pathname) return 'premium';
   const cleanPath = pathname.toLowerCase().replace(/\/+$/, '');
+  if (cleanPath === '' || cleanPath === '/') return 'premium';
   if (cleanPath === '/free-translated-game') return 'free';
   if (cleanPath === '/admin') return 'admin';
   if (cleanPath === '/premium-translated-game') return 'premium';
-  return 'premium'; // Default home is premium
+  return 'game'; // Any other path is a dedicated game page (e.g. /milfycity)
+};
+
+const getSlugFromPathname = (pathname) => {
+  if (!pathname) return '';
+  const clean = pathname.toLowerCase().replace(/^\/+|\/+$/g, '');
+  if (!clean || ['free-translated-game', 'premium-translated-game', 'admin'].includes(clean)) {
+    return '';
+  }
+  return clean;
+};
+
+const getGameSlug = (game) => {
+  if (!game) return '';
+  const parsed = parseGameDescription(game.description || '');
+  if (game.slug && typeof game.slug === 'string' && game.slug.trim()) {
+    return game.slug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  }
+  if (parsed.slug && typeof parsed.slug === 'string' && parsed.slug.trim()) {
+    return parsed.slug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  }
+  const rawTitle = (game.title || '').trim().toLowerCase()
+    .replace(/\(.*?\)|\[.*?\]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+
+  if (rawTitle.startsWith('milfycity')) return 'milfycity';
+  return rawTitle || game.id || 'game';
+};
+
+const findGameBySlugOrTitle = (targetSlug, games) => {
+  if (!targetSlug || !games || games.length === 0) return null;
+  const clean = targetSlug.toLowerCase().trim().replace(/[^a-z0-9_-]/g, '');
+  return games.find(g => {
+    const gSlug = getGameSlug(g);
+    if (gSlug && gSlug.toLowerCase() === clean) return true;
+    if (g.id && g.id.toLowerCase() === clean) return true;
+    const titleClean = (g.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (titleClean === clean) return true;
+    if (titleClean.startsWith(clean) || clean.startsWith(titleClean)) return true;
+    return false;
+  }) || null;
 };
 
 const getPathFromTab = (tab) => {
@@ -653,15 +712,39 @@ export default function App() {
     return 'premium';
   });
 
+  const [activeGameSlug, setActiveGameSlug] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return getSlugFromPathname(window.location.pathname);
+    }
+    return '';
+  });
+
   // Sync URL when browser Back/Forward is clicked
   useEffect(() => {
     const handlePopState = () => {
       const targetTab = getTabFromPathname(window.location.pathname);
+      const targetSlug = getSlugFromPathname(window.location.pathname);
       setActiveTab(targetTab);
+      setActiveGameSlug(targetSlug);
+      if (targetSlug && translatedGames.length > 0) {
+        const found = findGameBySlugOrTitle(targetSlug, translatedGames);
+        if (found) setSelectedTranslatedGame(found);
+      }
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+  }, [translatedGames]);
+
+  // Sync game data when activeGameSlug is set or translatedGames loaded
+  useEffect(() => {
+    if (activeGameSlug && translatedGames.length > 0) {
+      const found = findGameBySlugOrTitle(activeGameSlug, translatedGames);
+      if (found) {
+        setSelectedTranslatedGame(found);
+      }
+    }
+  }, [activeGameSlug, translatedGames]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [catalogPage, setCatalogPage] = useState(1);
   
@@ -1771,8 +1854,30 @@ export default function App() {
 
 
 
+  const handleOpenGamePage = (game) => {
+    const slug = getGameSlug(game);
+    setActiveTab('game');
+    setActiveGameSlug(slug);
+    setSelectedTranslatedGame({
+      ...game,
+      views: (game.views || 0) + 1
+    });
+    incrementTranslatedGameViews(game.id).catch(err => console.error("Error incrementing views:", err));
+    setTranslatedGames(prev => prev.map(g => g.id === game.id ? { ...g, views: (g.views || 0) + 1 } : g));
+    if (typeof window !== 'undefined') {
+      window.history.pushState({ tab: 'game', slug }, '', `/${slug}`);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handleBackToCatalog = (preferredTab) => {
+    const target = preferredTab || (selectedTranslatedGame?.access_type === 'free' ? 'free' : 'premium');
+    handleTabChange(target);
+  };
+
   const handleTabChange = (tab, pushHistory = true) => {
     setActiveTab(tab);
+    setActiveGameSlug('');
     setSearchQuery('');
     setSelectedCatalogTags([]);
     setSelectedLibraryTags([]);
@@ -3159,7 +3264,7 @@ export default function App() {
       <main className="flex-grow p-4 md:p-6 max-w-[1400px] mx-auto w-full">
         
         {/* ANNOUNCEMENT BANNER CAROUSEL SYSTEM */}
-        {(() => {
+        {activeTab !== 'game' && (() => {
           const activeBanners = banners.filter(b => b.is_active);
           if (activeBanners.length === 0) return null;
 
@@ -3174,24 +3279,12 @@ export default function App() {
             } else if (currentBanner.target_game_id) {
               const targetGame = translatedGames.find(g => g.id === currentBanner.target_game_id);
               if (targetGame) {
-                if (isGuest) {
+                if (isGuest && targetGame.access_type === 'free') {
                   setIsAuthModalOpen(true);
                   setToastMessage('🔐 กรุณาเข้าสู่ระบบด้วย Google หรือสมัครสมาชิกก่อนเข้าดูเกม');
                   return;
                 }
-                const isPremium = subscriptionRole === 'premium' || isAdmin;
-                if (targetGame.access_type === 'premium' && !isPremium) {
-                  handleOpenUpsell();
-                  setToastMessage('👑 สมาชิก Premium เท่านั้นที่สามารถเข้าถึงเกมแปลไทยพรีเมียมนี้ได้');
-                } else {
-                  setSelectedTranslatedGame({
-                    ...targetGame,
-                    views: (targetGame.views || 0) + 1
-                  });
-                  setIsTranslatedModalOpen(true);
-                  incrementTranslatedGameViews(targetGame.id).catch(err => console.error("Error incrementing views:", err));
-                  setTranslatedGames(prev => prev.map(g => g.id === targetGame.id ? { ...g, views: (g.views || 0) + 1 } : g));
-                }
+                handleOpenGamePage(targetGame);
               }
             }
           };
@@ -3329,13 +3422,7 @@ export default function App() {
                           setToastMessage('🔐 กรุณาเข้าสู่ระบบด้วย Google หรือสมัครสมาชิกก่อนเข้าดูบทความและดาวน์โหลดเกม');
                           return;
                         }
-                        setSelectedTranslatedGame({
-                          ...game,
-                          views: (game.views || 0) + 1
-                        });
-                        setIsTranslatedModalOpen(true);
-                        incrementTranslatedGameViews(game.id).catch(err => console.error("Error incrementing views:", err));
-                        setTranslatedGames(prev => prev.map(g => g.id === game.id ? { ...g, views: (g.views || 0) + 1 } : g));
+                        handleOpenGamePage(game);
                       }}
                       className="glass-panel group hover:border-blue-500/40 rounded-2xl overflow-hidden cursor-pointer flex flex-col transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/5 hover:-translate-y-1 relative"
                     >
@@ -3411,13 +3498,7 @@ export default function App() {
                               setToastMessage('🔐 กรุณาเข้าสู่ระบบด้วย Google หรือสมัครสมาชิกก่อนเข้าดูบทความและดาวน์โหลดเกม');
                               return;
                             }
-                            setSelectedTranslatedGame({
-                              ...game,
-                              views: (game.views || 0) + 1
-                            });
-                            setIsTranslatedModalOpen(true);
-                            incrementTranslatedGameViews(game.id).catch(err => console.error("Error incrementing views:", err));
-                            setTranslatedGames(prev => prev.map(g => g.id === game.id ? { ...g, views: (g.views || 0) + 1 } : g));
+                            handleOpenGamePage(game);
                           }}
                           className="w-full bg-slate-900/60 hover:bg-blue-600 text-slate-200 hover:text-white border border-slate-800 hover:border-blue-500 text-xs font-bold py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-2"
                         >
@@ -3491,18 +3572,7 @@ export default function App() {
                     <div
                       key={game.id}
                       onClick={() => {
-                        if (isPremiumUser) {
-                          setSelectedTranslatedGame({
-                            ...game,
-                            views: (game.views || 0) + 1
-                          });
-                          setIsTranslatedModalOpen(true);
-                          incrementTranslatedGameViews(game.id).catch(err => console.error("Error incrementing views:", err));
-                          setTranslatedGames(prev => prev.map(g => g.id === game.id ? { ...g, views: (g.views || 0) + 1 } : g));
-                        } else {
-                          handleOpenUpsell();
-                          setToastMessage('👑 สมาชิก Premium เท่านั้นที่สามารถเข้าถึงเกมแปลไทยพรีเมียมได้');
-                        }
+                        handleOpenGamePage(game);
                       }}
                       className="glass-panel group border border-amber-500/30 hover:border-amber-500/60 rounded-2xl overflow-hidden cursor-pointer flex flex-col transition-all duration-300 hover:shadow-xl hover:shadow-amber-500/10 hover:-translate-y-1 relative bg-slate-950/40"
                     >
@@ -3576,13 +3646,17 @@ export default function App() {
 
                         <button
                           type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenGamePage(game);
+                          }}
                           className={`w-full text-xs font-bold py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-2 ${
                             isPremiumUser
                               ? 'bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white shadow-md shadow-amber-500/10'
                               : 'bg-slate-900/80 hover:bg-slate-800 border border-amber-500/30 text-amber-400'
                           }`}
                         >
-                          {isPremiumUser ? '👑 อ่านบทความ & ดาวน์โหลด' : '🔒 สมัคร Premium เพื่อดาวน์โหลด'}
+                          {isPremiumUser ? '👑 อ่านบทความ & ดาวน์โหลด' : '🔒 ดูรายละเอียด & ปลดล็อก'}
                         </button>
                       </div>
                     </div>
@@ -3593,128 +3667,195 @@ export default function App() {
           </div>
         )}
 
-        {/* TRANSLATED GAME DETAIL MODAL */}
-        {isTranslatedModalOpen && selectedTranslatedGame && (
-          <div className="modal-overlay fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setIsTranslatedModalOpen(false)}>
-            <div
-              className="glass-panel w-full max-w-2xl rounded-3xl border border-white/10 shadow-2xl flex flex-col overflow-hidden max-h-[90vh] animate-scale-up"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header / Cover Hero */}
-              <div className="h-44 sm:h-56 relative bg-slate-950/60 shrink-0">
-                {selectedTranslatedGame.cover_url ? (
-                  <img
-                    src={selectedTranslatedGame.cover_url}
-                    alt={selectedTranslatedGame.title}
-                    className="w-full h-full object-cover opacity-40 blur-sm animate-pulse-slow"
-                  />
-                ) : (
-                  <div className="w-full h-full bg-gradient-to-r from-blue-950 to-purple-950"></div>
-                )}
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 to-transparent"></div>
-                
+        {/* DEDICATED GAME PAGE (FULL PAGE WITH UNIQUE URL, e.g. /milfycity) */}
+        {activeTab === 'game' && (
+          selectedTranslatedGame ? (
+            <div className="flex flex-col gap-6 animate-fade-in-up max-w-4xl mx-auto w-full pb-16">
+              {/* Top Navigation & Share */}
+              <div className="flex items-center justify-between">
                 <button
                   type="button"
-                  onClick={() => setIsTranslatedModalOpen(false)}
-                  className="absolute top-4 right-4 w-9 h-9 flex items-center justify-center rounded-full bg-black/50 hover:bg-slate-900 text-slate-400 hover:text-white transition-colors cursor-pointer border border-white/5"
+                  onClick={() => handleBackToCatalog()}
+                  className="inline-flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-300 hover:text-white bg-slate-900/80 hover:bg-slate-800 border border-slate-800 px-4 py-2.5 rounded-2xl transition-all shadow-md cursor-pointer group"
                 >
-                  ✕
+                  <span className="group-hover:-translate-x-1 transition-transform font-bold">←</span>
+                  <span>กลับสู่หน้ารวมเกม</span>
                 </button>
 
-                <div className="absolute bottom-4 left-6 right-6 flex items-end gap-4 sm:gap-5">
-                  <div className="w-20 sm:w-24 aspect-[4/5] rounded-xl overflow-hidden shadow-2xl border border-white/10 shrink-0 bg-slate-900 hidden sm:block">
-                    <img src={selectedTranslatedGame.cover_url} alt="" className="w-full h-full object-cover" />
-                  </div>
-                  <div className="flex-grow pb-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
-                        selectedTranslatedGame.access_type === 'premium'
-                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                          : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                      }`}>
-                        {selectedTranslatedGame.access_type === 'premium' ? '👑 พรีเมียม' : '🎁 ฟรี'} • {selectedTranslatedGame.version}
-                      </span>
-                      <span className="text-[10px] sm:text-xs text-slate-400 font-mono">
-                        👁️ {selectedTranslatedGame.views || 0} views • 📥 {selectedTranslatedGame.downloads || 0} downloads
-                      </span>
-                    </div>
-                    <h2 className="text-lg sm:text-2xl font-black text-slate-100 leading-tight">
-                      {selectedTranslatedGame.title}
-                    </h2>
-                  </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (navigator.clipboard) {
+                        navigator.clipboard.writeText(window.location.href);
+                        setToastMessage('📋 คัดลอกลิงก์หน้านี้เรียบร้อยแล้ว!');
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-slate-200 bg-slate-900/60 hover:bg-slate-800 border border-slate-800/80 px-3.5 py-2 rounded-xl transition-colors cursor-pointer"
+                    title="คัดลอกลิงก์หน้านี้เพื่อแชร์"
+                  >
+                    🔗 คัดลอกลิงก์
+                  </button>
                 </div>
               </div>
 
-              {/* Body Content */}
-              <div className="p-6 overflow-y-auto flex flex-col gap-4 text-slate-300 scrollbar-thin text-xs sm:text-sm">
-                {(() => {
-                  const parsed = parseGameDescription(selectedTranslatedGame.description || '');
-                  return (
-                    <>
-                      {parsed.progress_config.show && parsed.progress_config.bars && parsed.progress_config.bars.length > 0 && (
-                        <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4.5 mb-2 shadow-inner">
-                          <div className="flex items-center justify-between mb-3.5">
-                            <h3 className="text-xs font-black text-slate-200 flex items-center gap-1.5 uppercase tracking-wider">
-                              📊 ความคืบหน้าโครงการแปลภาษาไทย
-                            </h3>
-                            {(() => {
-                              const total = parsed.progress_config.bars.reduce((sum, b) => sum + (b.percent || 0), 0);
-                              const avg = Math.round(total / parsed.progress_config.bars.length);
-                              return (
-                                <span className="text-xs font-black text-blue-400 font-mono bg-blue-950/50 border border-blue-500/20 px-2.5 py-0.5 rounded-full">
-                                  ภาพรวม: {avg}%
-                                </span>
-                              );
-                            })()}
-                          </div>
-                          <div className="flex flex-col gap-3">
-                            {parsed.progress_config.bars.map((bar, idx) => (
-                              <div key={idx} className="space-y-1">
-                                <div className="flex justify-between text-[11px] font-bold text-slate-300">
-                                  <span>{bar.label || 'ความคืบหน้า'}</span>
-                                  <span className="font-mono text-blue-400">{bar.percent || 0}%</span>
-                                </div>
-                                <div className="w-full bg-slate-950 h-2.5 rounded-full overflow-hidden border border-slate-900">
-                                  <div
-                                    className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"
-                                    style={{ width: `${bar.percent || 0}%` }}
-                                  ></div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {renderMarkdown(parsed.description, (btnUrl, btnText, isDownload, e) => {
-                        if (isGuest) {
-                          if (e) e.preventDefault();
-                          setIsAuthModalOpen(true);
-                          setToastMessage('🔐 กรุณาเข้าสู่ระบบด้วย Google หรือสมัครสมาชิกก่อนดาวน์โหลด');
-                          return;
-                        }
-                        if (isDownload && selectedTranslatedGame) {
-                          incrementTranslatedGameDownloads(selectedTranslatedGame.id).catch(err => console.error("Error updating download count:", err));
-                          setSelectedTranslatedGame(prev => prev ? { ...prev, downloads: (prev.downloads || 0) + 1 } : null);
-                          setTranslatedGames(prev => prev.map(g => g.id === selectedTranslatedGame.id ? { ...g, downloads: (g.downloads || 0) + 1 } : g));
-                        }
-                      })}
-                    </>
-                  );
-                })()}
-              </div>
+              {/* Main Game Card */}
+              <div className="glass-panel rounded-3xl border border-white/10 shadow-2xl overflow-hidden flex flex-col">
+                {/* Header / Cover Hero */}
+                <div className="h-56 sm:h-72 relative bg-slate-950/60 shrink-0 overflow-hidden">
+                  {selectedTranslatedGame.cover_url ? (
+                    <img
+                      src={selectedTranslatedGame.cover_url}
+                      alt={selectedTranslatedGame.title}
+                      className="w-full h-full object-cover opacity-35 filter blur-[3px] scale-105"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-r from-blue-950 to-purple-950"></div>
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/70 to-transparent"></div>
 
-              {/* Footer */}
-              <div className="px-6 py-4 bg-slate-950/40 border-t border-slate-900 flex justify-end shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setIsTranslatedModalOpen(false)}
-                  className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-350 text-xs font-bold h-10 px-5 rounded-xl transition-colors cursor-pointer"
-                >
-                  ปิดหน้านี้
-                </button>
+                  <div className="absolute bottom-5 left-6 right-6 flex items-end gap-5">
+                    <div className="w-24 sm:w-32 aspect-[4/5] rounded-2xl overflow-hidden shadow-2xl border border-white/15 shrink-0 bg-slate-900 hidden sm:block">
+                      {selectedTranslatedGame.cover_url ? (
+                        <img src={selectedTranslatedGame.cover_url} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center font-black text-slate-400">VN</div>
+                      )}
+                    </div>
+
+                    <div className="flex-grow pb-1">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <span className={`text-[10px] sm:text-xs font-black uppercase tracking-wider px-3 py-1 rounded-full shadow ${
+                          selectedTranslatedGame.access_type === 'premium'
+                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                            : 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                        }`}>
+                          {selectedTranslatedGame.access_type === 'premium' ? '👑 พรีเมียม' : '🎁 ฟรี'}
+                        </span>
+                        {selectedTranslatedGame.version && (
+                          <span className="bg-slate-900/80 text-slate-300 border border-slate-700/60 text-[10px] sm:text-xs font-bold px-3 py-1 rounded-full font-mono">
+                            {selectedTranslatedGame.version}
+                          </span>
+                        )}
+                        <span className="text-[10px] sm:text-xs text-slate-400 font-mono bg-black/40 backdrop-blur px-2.5 py-1 rounded-full">
+                          👁️ {selectedTranslatedGame.views || 0} views • 📥 {selectedTranslatedGame.downloads || 0} downloads
+                        </span>
+                      </div>
+                      <h1 className="text-xl sm:text-3xl font-black text-slate-100 leading-tight drop-shadow-md">
+                        {selectedTranslatedGame.title}
+                      </h1>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Body Content */}
+                <div className="p-6 sm:p-8 flex flex-col gap-5 text-slate-300 text-xs sm:text-sm">
+                  {(() => {
+                    const parsed = parseGameDescription(selectedTranslatedGame.description || '');
+                    return (
+                      <>
+                        {parsed.progress_config.show && parsed.progress_config.bars && parsed.progress_config.bars.length > 0 && (
+                          <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 mb-2 shadow-inner">
+                            <div className="flex items-center justify-between mb-3.5">
+                              <h3 className="text-xs sm:text-sm font-black text-slate-200 flex items-center gap-2 uppercase tracking-wider">
+                                📊 ความคืบหน้าโครงการแปลภาษาไทย
+                              </h3>
+                              {(() => {
+                                const total = parsed.progress_config.bars.reduce((sum, b) => sum + (b.percent || 0), 0);
+                                const avg = Math.round(total / parsed.progress_config.bars.length);
+                                return (
+                                  <span className="text-xs font-black text-blue-400 font-mono bg-blue-950/60 border border-blue-500/30 px-3 py-1 rounded-full">
+                                    ภาพรวม: {avg}%
+                                  </span>
+                                );
+                              })()}
+                            </div>
+                            <div className="flex flex-col gap-3.5">
+                              {parsed.progress_config.bars.map((bar, idx) => (
+                                <div key={idx} className="space-y-1.5">
+                                  <div className="flex justify-between text-xs font-bold text-slate-300">
+                                    <span>{bar.label || 'ความคืบหน้า'}</span>
+                                    <span className="font-mono text-blue-400 font-black">{bar.percent || 0}%</span>
+                                  </div>
+                                  <div className="w-full bg-slate-950 h-2.5 rounded-full overflow-hidden border border-slate-900">
+                                    <div
+                                      className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"
+                                      style={{ width: `${bar.percent || 0}%` }}
+                                    ></div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Premium Locked Prompt Banner if user is not premium */}
+                        {selectedTranslatedGame.access_type === 'premium' && subscriptionRole !== 'premium' && !isAdmin && (
+                          <div className="p-6 rounded-3xl bg-gradient-to-r from-amber-950/50 via-slate-900/90 to-amber-950/50 border border-amber-500/40 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl shadow-amber-500/5 my-2">
+                            <div className="flex items-center gap-4 text-center sm:text-left">
+                              <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-2xl shrink-0">
+                                👑
+                              </div>
+                              <div>
+                                <h3 className="text-sm font-black text-amber-300">บทความและลิงก์ดาวน์โหลดนี้สำหรับสมาชิก Premium</h3>
+                                <p className="text-xs text-slate-400 mt-0.5">
+                                  สมัครสมาชิก Premium เพียง 69 บ./เดือน เพื่อปลดล็อกดาวน์โหลดเกมแปลไทยทุกเกมได้ทันที
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handleOpenUpsell}
+                              className="px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-black text-xs shadow-lg shadow-amber-500/25 transition-all active:scale-95 cursor-pointer shrink-0"
+                            >
+                              ⭐ สมัครสมาชิก Premium
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Markdown Content */}
+                        <div className="leading-relaxed space-y-4">
+                          {renderMarkdown(parsed.description, (btnUrl, btnText, isDownload, e) => {
+                            if (selectedTranslatedGame.access_type === 'premium' && subscriptionRole !== 'premium' && !isAdmin) {
+                              if (e) e.preventDefault();
+                              handleOpenUpsell();
+                              setToastMessage('👑 สมาชิก Premium เท่านั้นที่สามารถดาวน์โหลดเกมนี้ได้');
+                              return;
+                            }
+                            if (selectedTranslatedGame.access_type === 'free' && isGuest) {
+                              if (e) e.preventDefault();
+                              setIsAuthModalOpen(true);
+                              setToastMessage('🔐 กรุณาเข้าสู่ระบบด้วย Google หรือสมัครสมาชิกก่อนดาวน์โหลด');
+                              return;
+                            }
+                            if (isDownload && selectedTranslatedGame) {
+                              incrementTranslatedGameDownloads(selectedTranslatedGame.id).catch(err => console.error("Error updating download count:", err));
+                              setSelectedTranslatedGame(prev => prev ? { ...prev, downloads: (prev.downloads || 0) + 1 } : null);
+                              setTranslatedGames(prev => prev.map(g => g.id === selectedTranslatedGame.id ? { ...g, downloads: (g.downloads || 0) + 1 } : g));
+                            }
+                          })}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            /* Loading / Not Found State */
+            <div className="py-20 text-center glass-panel rounded-3xl border border-white/5 max-w-xl mx-auto my-8">
+              <span className="text-4xl block mb-3">🔍</span>
+              <h3 className="text-sm font-bold text-slate-300">กำลังค้นหาข้อมูลเกม...</h3>
+              <p className="text-xs text-slate-500 mt-1">หากรอนานเกินไป แสดงว่าไม่พบบทความเกมตาม URL นี้</p>
+              <button
+                type="button"
+                onClick={() => handleBackToCatalog()}
+                className="mt-6 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl cursor-pointer"
+              >
+                ← กลับสู่หน้ารวมเกม
+              </button>
+            </div>
+          )
         )}
 
         {/* ADMIN TAB */}
@@ -4695,7 +4836,18 @@ export default function App() {
                           <td className="py-2.5 font-bold text-slate-200">
                             <div className="flex flex-col gap-0.5">
                               <span className="text-slate-100">{game.title}</span>
-                              <span className="text-[10px] text-blue-400 font-mono">{game.version}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-blue-400 font-mono">{game.version}</span>
+                                <a
+                                  href={`/${getGameSlug(game)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[9px] text-slate-500 hover:text-blue-400 font-mono underline"
+                                  title="เปิดดูหน้าเว็บเพจของเกมนี้"
+                                >
+                                  /{getGameSlug(game)} ↗
+                                </a>
+                              </div>
                             </div>
                           </td>
                           <td className="py-2.5">
@@ -6135,10 +6287,12 @@ export default function App() {
                 e.preventDefault();
                 const formData = new FormData(e.target);
                 const rawDesc = formData.get('description') || '';
-                const description = serializeGameDescription(rawDesc, { show: modalProgressShow, bars: modalProgressBars });
+                const slug = formData.get('slug') || '';
+                const description = serializeGameDescription(rawDesc, { show: modalProgressShow, bars: modalProgressBars }, slug);
                 const newGame = {
                   id: 'translated-' + Date.now(),
                   title: formData.get('title') || 'Untitled',
+                  slug: slug ? slug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '') : '',
                   cover_url: formData.get('cover_url') || '',
                   version: formData.get('version') || 'v1.0 แปลไทย',
                   access_type: formData.get('access_type') || 'premium',
@@ -6170,6 +6324,21 @@ export default function App() {
                   className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
                   placeholder="เช่น Eternum (แปลไทย)"
                 />
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400 font-bold block mb-1">
+                  URL ประจำเกม (Slug) <span className="text-[10px] text-slate-500 font-normal">เช่น milfycity (จะเข้าดูได้ที่ /milfycity - เว้นว่างได้ ระบบจะสร้างจากชื่อเกมให้อัตโนมัติ)</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-500 font-mono hidden sm:inline">https://avn-game-tracker.vercel.app/</span>
+                  <input
+                    name="slug"
+                    type="text"
+                    className="glass-input flex-1 h-11 px-4 text-sm rounded-xl text-slate-200 font-mono"
+                    placeholder="เช่น milfycity"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -6433,10 +6602,12 @@ export default function App() {
                 e.preventDefault();
                 const formData = new FormData(e.target);
                 const rawDesc = formData.get('description') || '';
-                const description = serializeGameDescription(rawDesc, { show: modalProgressShow, bars: modalProgressBars });
+                const slug = formData.get('slug') || '';
+                const description = serializeGameDescription(rawDesc, { show: modalProgressShow, bars: modalProgressBars }, slug);
                 const updatedGame = {
                   ...editingTranslatedGame,
                   title: formData.get('title') || 'Untitled',
+                  slug: slug ? slug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '') : (editingTranslatedGame.slug || ''),
                   cover_url: formData.get('cover_url') || '',
                   version: formData.get('version') || 'v1.0 แปลไทย',
                   access_type: formData.get('access_type') || 'premium',
@@ -6469,6 +6640,22 @@ export default function App() {
                   className="glass-input w-full h-11 px-4 text-sm rounded-xl text-slate-200"
                   placeholder="เช่น Eternum (แปลไทย)"
                 />
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400 font-bold block mb-1">
+                  URL ประจำเกม (Slug) <span className="text-[10px] text-slate-500 font-normal">เช่น milfycity (จะเข้าดูได้ที่ /{editingTranslatedGame ? (getGameSlug(editingTranslatedGame) || 'milfycity') : 'milfycity'})</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-500 font-mono hidden sm:inline">https://avn-game-tracker.vercel.app/</span>
+                  <input
+                    name="slug"
+                    type="text"
+                    defaultValue={editingTranslatedGame ? (editingTranslatedGame.slug || parseGameDescription(editingTranslatedGame.description || '').slug || '') : ''}
+                    className="glass-input flex-1 h-11 px-4 text-sm rounded-xl text-slate-200 font-mono"
+                    placeholder="เช่น milfycity"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

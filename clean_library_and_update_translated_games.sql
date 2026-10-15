@@ -7,6 +7,7 @@
 ALTER TABLE translated_games ADD COLUMN IF NOT EXISTS downloads INTEGER DEFAULT 0;
 ALTER TABLE translated_games ADD COLUMN IF NOT EXISTS is_published BOOLEAN DEFAULT true;
 ALTER TABLE translated_games ADD COLUMN IF NOT EXISTS access_type TEXT DEFAULT 'premium';
+ALTER TABLE translated_games ADD COLUMN IF NOT EXISTS slug TEXT;
 
 -- 2. ย้ายเกมแปลไทยเดิมทั้งหมดในตารางไปเป็นสถานะ "พรีเมียม (Premium)" ทั้งหมด
 UPDATE translated_games 
